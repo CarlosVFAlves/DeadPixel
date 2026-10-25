@@ -20,8 +20,8 @@
   let dropQueued = false;
 
   function resize() {
-    const vv = window.visualViewport;
-    const cw = Math.round(vv ? vv.width : window.innerWidth), ch = Math.round(vv ? vv.height : window.innerHeight);
+    const host = canvas.parentElement.getBoundingClientRect();
+    const cw = Math.max(200, Math.round(host.width)), ch = Math.max(200, Math.round(host.height));
     scale = Math.max(2, Math.round(Math.min(cw, ch) / 170));
     W = Math.ceil(cw / scale); H = Math.ceil(ch / scale);
     canvas.width = W; canvas.height = H;
@@ -30,7 +30,7 @@
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => setTimeout(resize, 80));
-  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas.parentElement);
 
   function toLocal(e) {
     const r = canvas.getBoundingClientRect();
