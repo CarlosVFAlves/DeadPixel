@@ -1,0 +1,111 @@
+// Áudio 100% sintetizado (sem arquivos)
+(function (root) {
+  'use strict';
+  const DP = root.DP = root.DP || {};
+
+  let ctx = null, master = null, noiseBuf = null;
+  let muted = false;
+
+  function init() {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    const AC = root.AudioContext || root.webkitAudioContext;
+    if (!AC) return;
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = muted ? 0 : 0.7;
+    master.connect(ctx.destination);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  function out(pan) {
+    if (!ctx.createStereoPanner || !pan) return master;
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan));
+    p.connect(master);
+    return p;
+  }
+
+  function tone(freq, dur, type, vol, slideTo, pan, delay) {
+    if (!ctx || muted) return;
+    const t0 = ctx.currentTime + (delay || 0);
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(out(pan));
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+
+  function noise(dur, vol, freq, type, q, pan, delay, freqTo) {
+    if (!ctx || muted) return;
+    const t0 = ctx.currentTime + (delay || 0);
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = type || 'lowpass';
+    f.frequency.setValueAtTime(freq || 800, t0);
+    if (freqTo) f.frequency.exponentialRampToValueAtTime(freqTo, t0 + dur);
+    f.Q.value = q || 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    s.connect(f); f.connect(g); g.connect(out(pan));
+    s.start(t0); s.stop(t0 + dur + 0.05);
+  }
+
+  const sfx = {
+    // pallet batendo no chão
+    slam(pan) {
+      tone(95, 0.28, 'sine', 0.9, 38, pan);
+      noise(0.22, 0.9, 1400, 'lowpass', 0.7, pan);
+      noise(0.09, 0.5, 3200, 'highpass', 0.7, pan);
+    },
+    // pallet acertando o assassino
+    stun(pan) {
+      tone(190, 0.35, 'square', 0.35, 60, pan);
+      noise(0.3, 0.8, 2400, 'bandpass', 3, pan);
+      tone(1250, 0.5, 'triangle', 0.18, 700, pan, 0.03);
+      tone(1870, 0.45, 'triangle', 0.1, 1100, pan, 0.03);
+    },
+    miss(pan) { noise(0.18, 0.28, 900, 'bandpass', 1.5, pan, 0.05); },
+    // pallet de pé sendo puxado (rangido de madeira)
+    creak(pan) { tone(160, 0.18, 'sawtooth', 0.12, 110, pan); noise(0.12, 0.25, 600, 'bandpass', 4, pan); },
+    windup(pan) { tone(110, 0.18, 'sawtooth', 0.14, 220, pan); },
+    lunge(pan) { noise(0.22, 0.5, 600, 'bandpass', 1.2, pan, 0, 3000); },
+    hit(pan) {
+      tone(80, 0.25, 'sine', 0.9, 40, pan);
+      noise(0.16, 0.8, 1800, 'lowpass', 0.8, pan);
+      tone(420, 0.22, 'sawtooth', 0.25, 120, pan, 0.02);
+    },
+    breakHit(pan) { noise(0.1, 0.45, 1200, 'lowpass', 0.8, pan); tone(120, 0.1, 'square', 0.18, 70, pan); },
+    breakDone(pan) {
+      noise(0.45, 0.9, 1800, 'lowpass', 0.8, pan, 0, 200);
+      tone(70, 0.3, 'sine', 0.6, 35, pan);
+    },
+    vault(pan) { noise(0.2, 0.3, 700, 'bandpass', 1.2, pan, 0, 2200); },
+    respawn() { tone(520, 0.12, 'triangle', 0.12, 760); },
+    death() {
+      tone(55, 1.4, 'sine', 0.9, 30);
+      noise(1.0, 0.6, 700, 'lowpass', 0.8, 0, 0.05, 80);
+      for (let i = 0; i < 3; i++) tone(520 + i * 170, 0.9, 'sawtooth', 0.22, 190 + i * 60, 0, 0.08);
+    },
+    click() { tone(660, 0.05, 'square', 0.1, 440); },
+    // batida de coração (raio de terror)
+    heart(vol) {
+      if (!ctx || muted) return;
+      tone(58, 0.16, 'sine', vol, 40);
+      tone(52, 0.18, 'sine', vol * 0.7, 36, 0, 0.19);
+    }
+  };
+
+  DP.audio = {
+    init,
+    sfx,
+    setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.7; },
+    toggleMute() { this.setMuted(!muted); return muted; },
+    get muted() { return muted; }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
