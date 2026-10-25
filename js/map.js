@@ -5,7 +5,7 @@
   const DP = root.DP = root.DP || {};
 
   const W = 48, H = 32;
-  const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2;
+  const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2, T_GEN = 3, T_GATE = 4;
 
   function buildMap() {
     const t = new Uint8Array(W * H);
@@ -62,13 +62,21 @@
     block(16, 28, 3, 1, T_CRATE);
     block(44, 24, 2, 2, T_CRATE);
 
+    // geradores (sólidos): um em cada casa e 2 ao ar livre; são precisos 5 de 7
+    const gens = [[7, 10], [40, 9], [12, 25], [39, 25], [22, 17], [24, 2], [2, 22]].map((g) => ({ tx: g[0], ty: g[1] }));
+    for (const g of gens) set(g.tx, g.ty, T_GEN);
+
+    // portões de saída: um buraco na parede da borda (oeste e leste)
+    const gates = [{ tx: 0, ty: 16, side: 'W' }, { tx: W - 1, ty: 16, side: 'E' }];
+    for (const g of gates) set(g.tx, g.ty, T_GATE);
+
     return {
-      W, H, t, indoor, pallets,
+      W, H, t, indoor, pallets, gens, gates, NEED: 5,
       spawnSurvivor: { x: 24.5, y: 8.5 },
       spawnKiller: { x: 24.5, y: 26.5 }
     };
   }
 
   DP.buildMap = buildMap;
-  DP.T = { FLOOR: T_FLOOR, WALL: T_WALL, CRATE: T_CRATE };
+  DP.T = { FLOOR: T_FLOOR, WALL: T_WALL, CRATE: T_CRATE, GEN: T_GEN, GATE: T_GATE };
 })(typeof window !== 'undefined' ? window : globalThis);

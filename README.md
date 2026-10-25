@@ -1,9 +1,10 @@
-# Dead Pixel — Protótipo 1: o Pallet
+# Dead Pixel — Protótipo 2: Geradores e Fuga
 
 Jogo 2D em pixel art (HTML + canvas, **sem dependências**, gráficos e áudio gerados por código), pensado para **celular e PC**.
 Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
 
-Esta primeira versão tem **um sobrevivente** (você), **um assassino** (IA) e **uma única mecânica**: derrubar o pallet no assassino.
+Agora há um **objetivo**: conserte **5 de 7 geradores**, abra um dos **2 portões de saída** e escape — sem deixar o assassino te pegar.
+O **pallet** continua sendo a sua principal defesa (veja abaixo).
 
 Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celular).
 
@@ -12,12 +13,21 @@ Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celula
 | Celular | Teclado | Ação |
 |---|---|---|
 | Arrastar na tela (joystick flutuante) | WASD / setas | andar |
-| **DERRUBAR** (botão redondo) | E / Espaço / Enter | derrubar o pallet ao alcance |
+| **AGIR** (segurar) | **E** (segurar) | consertar gerador / abrir portão |
+| **PALLET** | **Espaço** (ou E sem gerador por perto) | derrubar o pallet ao alcance |
+| tocar na tela com outro dedo | **Espaço** | acertar o skill check |
 | II | P / Esc | pausar |
 | — | R | reiniciar |
 | — | M | liga/desliga som |
 
 Modos: **JOGAR** (2 acertos e você cai; os pallets não voltam) e **TREINO** (não morre e os pallets voltam a ficar de pé depois de ~8 s, para repetir a mecânica à vontade).
+
+## Geradores, skill check e portões
+
+- **Gerador:** fique encostado e **segure AGIR/E** (parado). ~15 s para terminar. Mexer o personagem cancela. Progresso fica salvo.
+- **Skill check:** de tempos em tempos aparece um anel com um ponteiro girando. Aperte **Espaço** (ou toque na tela com outro dedo) com o ponteiro na zona branca (**vermelha = perfeito**, ganha mais progresso). Errar: **−10%** do gerador, explosão e o assassino vem investigar.
+- **Assassino não é onisciente:** ele **vê** com linha de visão (até 13 tiles), **ouve** (reparo 9 tiles, andar 3,5, pular 5) e **rastreia** por 2,5 s depois de te perder. Sem te perceber ele **patrulha os geradores** e **chuta (−15%)** os que têm progresso. Gerador concluído faz barulho e ele vem ver.
+- **5 geradores prontos →** os **portões** (bordas oeste e leste do mapa) acendem. Segure AGIR ~4 s no portão para escapar.
 
 ## A mecânica do pallet
 
@@ -38,16 +48,17 @@ O assassino ataca com um bote (arma erguida 0,16 s → bote de 0,3 s): dá para 
 | `index.html` | página e canvas |
 | `js/font.js` | fonte bitmap 5×7 com acentos |
 | `js/audio.js` | sons sintetizados (queda do pallet, atordoamento, golpe, batida de coração) |
-| `js/map.js` | arena fixa: 5 casas, 2 muros com vão, 12 pallets |
+| `js/map.js` | arena fixa: 5 casas, 2 muros com vão, 12 pallets, 7 geradores, 2 portões |
 | `js/game.js` | **regras**: sobrevivente, IA do assassino, pallet (sem DOM, testável no Node) |
 | `js/render.js` | pixel art por código, zona de impacto, HUD |
 | `js/main.js` | laço, telas, entrada por toque/teclado |
-| `tests/sim.js` | `node tests/sim.js` — mapa conectado, atordoar/errar/pular/quebrar, fuzz de 40 partidas |
+| `tests/sim.js` | `node tests/sim.js` — mapa, pallet, geradores, skill check, portões, percepção do assassino, fuzz |
+| `tools/build-single.py` | gera um HTML único com todo o JS (para publicar como artefato) |
 
 ## Ajustes (`CFG` em `js/game.js`)
 
-`RUN` / `K_SPEED` (velocidades), `FALL_T` (tempo de queda), `ZONE_LEN` / `ZONE_W` (tamanho da zona de impacto), `STUN`, `BREAK_T`, `BREAK_COST` (quanto a IA prefere dar a volta a quebrar), `RESPECT` (chance de hesitar), `ATTACK_RANGE`, `RECOVER_*`.
+`RUN` / `K_SPEED` (velocidades), `REPAIR_T` (tempo do gerador), `SKILL_*` (skill check), `SIGHT` / `NOISE_*` / `TRACK` (percepção do assassino), `FALL_T` (tempo de queda), `ZONE_LEN` / `ZONE_W` (tamanho da zona de impacto), `STUN`, `BREAK_T`, `BREAK_COST` (quanto a IA prefere dar a volta a quebrar), `RESPECT` (chance de hesitar), `ATTACK_RANGE`, `RECOVER_*`.
 
 ## Próximos passos (ideias)
 
-Mais sobreviventes (multiplayer), geradores/objetivo, janelas, ganchos/ressuscitar, vários assassinos com poderes, mapas procedurais, névoa de guerra e raio de terror como no protótipo *Retail Nightmare*.
+Mais sobreviventes (multiplayer), janelas, ganchos/ressuscitar, vários assassinos com poderes, mapas procedurais, névoa de guerra e raio de terror como no protótipo *Retail Nightmare*.

@@ -22,13 +22,14 @@
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS, r = hash(x, y);
-        if (indoor[i] && t[i] === 0) {
+        const fl = t[i] === 0 || t[i] === 3;
+        if (indoor[i] && fl) {
           // piso de tábuas
           px(c, (x + y) & 1 ? '#3a2f29' : '#40342c', X, Y, TS, TS);
           for (let l = 0; l < TS; l += 4) px(c, 'rgba(0,0,0,.28)', X, Y + l, TS, 1);
           if (r < 0.5) px(c, 'rgba(255,255,255,.04)', X + ((r * 40) | 0) % 12, Y + 1, 3, 3);
           px(c, 'rgba(0,0,0,.25)', X + ((hash(x, y, 3) * 14) | 0), Y + ((hash(x, y, 4) * 3) | 0) * 4, 1, 4);
-        } else if (t[i] === 0) {
+        } else if (fl) {
           // chão de terra/grama escura
           px(c, r < 0.5 ? '#1f2a22' : '#222e25', X, Y, TS, TS);
           for (let n = 0; n < 5; n++) {
@@ -42,7 +43,7 @@
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS;
-        if (t[i] === 1) {
+        if (t[i] === 1 || t[i] === 4) {
           px(c, '#4b4559', X, Y, TS, TS);
           for (let l = 0; l < TS; l += 4) px(c, '#3b3647', X, Y + l + 3, TS, 1);
           for (let l = 0; l < TS; l += 4) {
@@ -253,6 +254,48 @@
     }
   }
 
+  // ---------- gerador e portão ----------
+  function drawGenGlow(ctx, o, tm) {
+    if (!o.done) return;
+    const g = ctx.createRadialGradient(o.cx * TS, o.cy * TS, 2, o.cx * TS, o.cy * TS, 30);
+    g.addColorStop(0, 'rgba(125,255,160,' + (0.22 + 0.04 * Math.sin(tm * 3)) + ')'); g.addColorStop(1, 'rgba(125,255,160,0)');
+    ctx.fillStyle = g; ctx.fillRect(o.cx * TS - 30, o.cy * TS - 30, 60, 60);
+  }
+  function drawGen(ctx, o, game, tm) {
+    const X = o.tx * TS, Y = o.ty * TS;
+    const working = game.s.acting && game.s.acting.obj === o;
+    const sh = working ? (Math.floor(tm * 30) % 2) : 0;
+    px(ctx, 'rgba(0,0,0,.4)', X + 1, Y + 12, 15, 4);
+    px(ctx, '#23262d', X + 1 + sh, Y + 3, 14, 11);
+    px(ctx, '#3d424d', X + 2 + sh, Y + 4, 12, 9);
+    px(ctx, '#5f6573', X + 2 + sh, Y + 3, 12, 2);
+    px(ctx, '#d9822b', X + 2 + sh, Y + 12, 12, 1);
+    px(ctx, '#0b0c10', X + 3 + sh, Y + 6, 10, 4);
+    const w = Math.round(o.progress * 8);
+    px(ctx, o.done ? '#7dffa0' : '#ffb347', X + 4 + sh, Y + 7, w, 2);
+    px(ctx, o.done ? '#7dffa0' : (Math.floor(tm * 2) % 2 ? '#ff4d4d' : '#6a2020'), X + 12 + sh, Y + 4, 2, 1);
+    // ventoinha
+    px(ctx, '#15171b', X + 5 + sh, Y + 10, 6, 2);
+    if (working) for (let i = 0; i < 3; i++) px(ctx, '#ffe27a', X + 2 + ((Math.random() * 13) | 0), Y + 2 + ((Math.random() * 6) | 0) - 2, 1, 1);
+    if (!o.done && o.progress > 0) {
+      px(ctx, '#000', X + 1, Y - 4, 14, 3);
+      px(ctx, '#ffb347', X + 2, Y - 3, Math.round(o.progress * 12), 1);
+    }
+  }
+  function drawGate(ctx, o, tm) {
+    const X = o.tx * TS, Y = o.ty * TS;
+    const col = o.open ? '#7dffa0' : '#8a3030';
+    px(ctx, '#1a1820', X, Y, TS, TS);
+    for (let i = 2; i < TS; i += 4) px(ctx, o.open ? 'rgba(125,255,160,.55)' : '#59525f', X + 3, Y + i, 10, 1);
+    px(ctx, col, X + 3, Y + 1, 10, 2);
+    if (o.open) {
+      const g = ctx.createRadialGradient(o.cx * TS, o.cy * TS, 2, o.cx * TS, o.cy * TS, 34);
+      g.addColorStop(0, 'rgba(125,255,160,' + (0.3 + 0.12 * Math.sin(tm * 5)) + ')'); g.addColorStop(1, 'rgba(125,255,160,0)');
+      ctx.fillStyle = g; ctx.fillRect(o.cx * TS - 34, o.cy * TS - 34, 68, 68);
+    }
+    if (o.progress > 0 && o.progress < 1) { px(ctx, '#000', X + 1, Y - 4, 14, 3); px(ctx, '#7dffa0', X + 2, Y - 3, Math.round(o.progress * 12), 1); }
+  }
+
   // ---------- zona de impacto (ajuda visual) ----------
   function drawZone(ctx, game, tm) {
     const p = game.near;
@@ -331,11 +374,14 @@
         drawPalletFlat(ctx, p, q * q);
       }
     }
+    for (const o of game.gens) drawGenGlow(ctx, o, tm);
+    for (const o of game.gates) drawGate(ctx, o, tm);
     drawZone(ctx, game, tm);
 
     // pallets de pé + personagens, ordenados por y
     const list = [];
     for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.near === p ? tm : 0) });
+    for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
     list.push({ y: s.y, f: () => drawSurvivor(ctx, s, game, tm) });
     list.push({ y: game.k.y, f: () => drawKiller(ctx, game.k, game, tm) });
     list.sort((a, b) => a.y - b.y);
@@ -348,11 +394,12 @@
     }
     ctx.globalAlpha = 1;
 
-    // dica "E" sobre o pallet ao alcance
-    if (game.near && !game.over) {
-      const p = game.near;
+    // dicas sobre o que dá para fazer perto
+    if (!game.over) {
       const bob = Math.round(Math.sin(tm * 6));
-      text(ctx, 'E', p.cx * TS, p.cy * TS - 16 + bob, '#ffd23f', { align: 'c' });
+      if (game.near) text(ctx, 'ESPAÇO', game.near.cx * TS, game.near.cy * TS - 16 + bob, '#ffd23f', { align: 'c' });
+      const it = game.interact;
+      if (it && !game.s.acting) text(ctx, it.type === 'gen' ? 'SEGURE E' : 'SEGURE E: ABRIR', it.obj.cx * TS, it.obj.cy * TS - (it.type === 'gen' ? 14 : 16) + bob, '#7dffa0', { align: 'c' });
     }
     // textos flutuantes
     for (const pu of game.popups) {
@@ -375,19 +422,46 @@
     const s = game.s;
     text(ctx, 'VIDA', 4, 4, '#cfcfd8');
     for (let i = 0; i < 2; i++) text(ctx, '♥', 32 + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
-    text(ctx, 'PALLETS ' + game.standing() + '/' + game.pallets.length, 4, 14, '#e9c07a');
-    text(ctx, 'ATORDOADO ' + game.stats.stuns + 'X', 4, 24, '#ffd23f');
+    const gd = game.gensDone >= game.need;
+    text(ctx, 'GERADORES ' + game.gensDone + '/' + game.need, 4, 14, gd ? '#7dffa0' : '#ffb347');
+    text(ctx, 'PALLETS ' + game.standing() + '/' + game.pallets.length, 4, 24, '#e9c07a');
+    text(ctx, 'ATORDOADO ' + game.stats.stuns + 'X', 4, 34, '#ffd23f');
     const tt = Math.floor(game.time);
     text(ctx, Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0'), W - 4, 4, '#fff', { align: 'r' });
     if (game.training) text(ctx, 'TREINO', W - 4, 14, '#7ad0ff', { align: 'r' });
 
     if (game.k.state === 'intro') {
       const left = Math.ceil(game.cfg.INTRO - game.k.t);
-      text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, Math.round(H * 0.2), '#ff5c5c', { align: 'c' });
-      text(ctx, 'ACHE UM PALLET', W / 2, Math.round(H * 0.2) + 10, '#e9c07a', { align: 'c' });
+      text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, Math.max(46, Math.round(H * 0.2)), '#ff5c5c', { align: 'c' });
+      DP.font.wrap('CONSERTE ' + game.need + ' GERADORES E ESCAPE PELO PORTÃO', Math.floor((W - 8) / 6)).forEach((l, i) =>
+        text(ctx, l, W / 2, Math.max(46, Math.round(H * 0.2)) + 10 + i * 9, '#ffb347', { align: 'c' }));
+    } else if (gd && game.time % 6 < 3 && !game.over) {
+      DP.font.wrap('PORTÕES ABERTOS! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
+        text(ctx, l, W / 2, Math.max(46, Math.round(H * 0.2)) + i * 9, '#7dffa0', { align: 'c' }));
     } else if (game.k.hesitate) {
-      text(ctx, 'ELE HESITA...', W / 2, Math.round(H * 0.2), '#ff9d5c', { align: 'c' });
+      text(ctx, 'ELE HESITA...', W / 2, Math.max(46, Math.round(H * 0.2)), '#ff9d5c', { align: 'c' });
     }
+  }
+
+  // skill check no centro da tela
+  function drawSkill(ctx, game, W, H, tm) {
+    const sk = game.s.skill;
+    if (!sk) return;
+    const C = game.cfg;
+    const cx = Math.round(W / 2), cy = Math.round(H / 2) - 46, r = 15;
+    ctx.fillStyle = 'rgba(8,8,12,.72)'; ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.fill();
+    const A = (a) => a - Math.PI / 2;
+    ctx.lineWidth = 4; ctx.strokeStyle = '#4a4a55';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#e8e6ef';
+    ctx.beginPath(); ctx.arc(cx, cy, r, A(sk.tz - C.SKILL_ZONE), A(sk.tz + C.SKILL_ZONE)); ctx.stroke();
+    ctx.strokeStyle = '#ff4d4d';
+    ctx.beginPath(); ctx.arc(cx, cy, r, A(sk.tz - C.SKILL_GREAT), A(sk.tz + C.SKILL_GREAT)); ctx.stroke();
+    const a = Math.max(0, sk.t - C.SKILL_DELAY) * C.SKILL_SPEED;
+    const wait = sk.t < C.SKILL_DELAY;
+    ctx.lineWidth = 2; ctx.strokeStyle = wait ? '#8a8a99' : '#ffd23f';
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(A(a)) * (r + 2), cy + Math.sin(A(a)) * (r + 2)); ctx.stroke();
+    text(ctx, 'AGORA!', cx, cy + r + 9, '#ffd23f', { align: 'c' });
   }
 
   function drawButton(ctx, b, tm, pressed) {
@@ -429,9 +503,9 @@
     ctx.translate(cx, Math.round(H * 0.16)); ctx.scale(sc, sc);
     text(ctx, title, 0, 0, '#e23a3a', { align: 'c' });
     ctx.restore();
-    text(ctx, 'PROTÓTIPO 1: O PALLET', cx, Math.round(H * 0.16) + 7 * sc + 6, '#e9c07a', { align: 'c' });
-    if (best) text(ctx, 'RECORDE ' + Math.floor(best / 60) + ':' + String(Math.floor(best % 60)).padStart(2, '0'), cx, Math.round(H * 0.36), '#8a8a99', { align: 'c' });
-    const lines = DP.font.wrap('FUJA DO ASSASSINO. DERRUBE O PALLET QUANDO ELE ESTIVER NA ZONA AMARELA PARA ATORDOÁ-LO.', Math.floor((W - 16) / 6));
+    text(ctx, 'PROTÓTIPO 2: GERADORES', cx, Math.round(H * 0.16) + 7 * sc + 6, '#e9c07a', { align: 'c' });
+    if (best) text(ctx, best, cx, Math.round(H * 0.36), '#8a8a99', { align: 'c' });
+    const lines = DP.font.wrap('CONSERTE 5 GERADORES, ABRA O PORTÃO E ESCAPE. DERRUBE O PALLET NO ASSASSINO PARA GANHAR TEMPO.', Math.floor((W - 16) / 6));
     lines.forEach((l, i) => text(ctx, l, cx, Math.round(H * 0.82) + i * 9, '#a9a9b5', { align: 'c' }));
   }
 
@@ -441,17 +515,18 @@
     if (game.overT < 0.8) return;
     const cx = Math.round(W / 2);
     const y0 = Math.round(H * 0.16);
-    text(ctx, 'VOCÊ MORREU', cx, y0, '#e23a3a', { align: 'c' });
+    const esc = game.result === 'escaped';
+    text(ctx, esc ? 'VOCÊ ESCAPOU!' : 'VOCÊ MORREU', cx, y0, esc ? '#7dffa0' : '#e23a3a', { align: 'c' });
     const tt = Math.floor(game.time);
     const rows = [
-      ['SOBREVIVEU', Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0')],
+      [esc ? 'TEMPO DE FUGA' : 'SOBREVIVEU', Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0')],
+      ['GERADORES', game.gensDone + '/' + game.need],
       ['ATORDOAMENTOS', String(game.stats.stuns)],
       ['PALLETS DERRUBADOS', String(game.stats.drops)],
-      ['QUASE ACERTOS', String(game.stats.misses)],
-      ['PALLETS QUEBRADOS', String(game.stats.breaks)]
+      ['SKILL CHECKS', game.stats.skillOk + ' OK / ' + game.stats.skillFail + ' ERROS']
     ];
     rows.forEach((r, i) => {
-      const y = y0 + 16 + i * 10;
+      const y = y0 + 15 + i * 10;
       text(ctx, r[0], Math.max(8, cx - 62), y, '#a9a9b5');
       text(ctx, r[1], Math.min(W - 8, cx + 62), y, '#fff', { align: 'r' });
     });
@@ -460,5 +535,5 @@
 
   function reset() { R.staticCv = null; }
 
-  DP.render = { drawWorld, drawHUD, drawButton, drawJoystick, drawMenu, drawOver, overlay, reset, text };
+  DP.render = { drawWorld, drawHUD, drawSkill, drawButton, drawJoystick, drawMenu, drawOver, overlay, reset, text };
 })(typeof window !== 'undefined' ? window : globalThis);

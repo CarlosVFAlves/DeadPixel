@@ -92,6 +92,13 @@
       noise(1.0, 0.6, 700, 'lowpass', 0.8, 0, 0.05, 80);
       for (let i = 0; i < 3; i++) tone(520 + i * 170, 0.9, 'sawtooth', 0.22, 190 + i * 60, 0, 0.08);
     },
+    repair(pan) { noise(0.05, 0.3, 2600, 'bandpass', 5, pan); tone(240 + Math.random() * 60, 0.06, 'square', 0.07, 180, pan); },
+    skill() { tone(980, 0.09, 'square', 0.16, 980); tone(980, 0.09, 'square', 0.16, 980, 0, 0.14); },
+    skillok() { tone(660, 0.08, 'triangle', 0.22, 660); tone(990, 0.14, 'triangle', 0.22, 990, 0, 0.08); },
+    bang(pan) { noise(0.35, 0.9, 1800, 'lowpass', 0.8, pan, 0, 150); tone(90, 0.3, 'square', 0.35, 40, pan); },
+    genDone(pan) { for (let i = 0; i < 4; i++) tone(330 * Math.pow(1.26, i), 0.16, 'square', 0.14, 0, pan, i * 0.09); noise(0.3, 0.3, 4000, 'highpass', 0.7, pan); },
+    gates() { for (let i = 0; i < 3; i++) tone(220 * (i + 2), 0.5, 'sawtooth', 0.12, 220 * (i + 2) * 1.5, 0, i * 0.12); },
+    escape() { for (let i = 0; i < 5; i++) tone(392 * Math.pow(1.19, i), 0.25, 'triangle', 0.2, 0, 0, i * 0.11); },
     click() { tone(660, 0.05, 'square', 0.1, 440); },
     // batida de coração (raio de terror)
     heart(vol) {

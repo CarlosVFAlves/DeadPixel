@@ -10,14 +10,21 @@
   let state = 'menu';          // menu | play | pause | over
   let game = null;
   let training = false;
-  let best = 0, newBest = false;
-  try { best = parseFloat(localStorage.getItem('dp_best') || '0') || 0; } catch (e) {}
+  let best = 0, fastest = 0, newBest = false;
+  try { best = parseFloat(localStorage.getItem('dp_best') || '0') || 0; fastest = parseFloat(localStorage.getItem('dp_esc') || '0') || 0; } catch (e) {}
+  const fmt = (v) => Math.floor(v / 60) + ':' + String(Math.floor(v % 60)).padStart(2, '0');
+  function bestText() {
+    const a = [];
+    if (best) a.push('SOBREVIVEU ' + fmt(best));
+    if (fastest) a.push('FUGA ' + fmt(fastest));
+    return a.join('  ');
+  }
 
   // ---------- entrada ----------
   const keys = {};
   const joy = { id: null, active: false, bx: 0, by: 0, dx: 0, dy: 0 };
   const held = new Map();        // pointerId -> botão pressionado
-  let dropQueued = false;
+  let dropQueued = false, actQueued = false, pressQueued = false;
 
   function resize() {
     const host = canvas.parentElement.getBoundingClientRect();
@@ -46,8 +53,9 @@
       list.push({ id: 'play', label: 'JOGAR', x: cx - bw / 2, y: by, w: bw, h: 17, color: '#ffd23f' });
       list.push({ id: 'train', label: 'TREINO (NÃO MORRE)', x: cx - bw / 2, y: by + 23, w: bw, h: 17, color: '#7ad0ff' });
     } else if (state === 'play') {
-      const r = Math.max(22, Math.min(30, Math.round(Math.min(W, H) * 0.16)));
-      list.push({ id: 'drop', label: 'DERRUBAR', round: true, x: W - 2 * r - 10, y: H - 2 * r - 12, w: 2 * r, h: 2 * r, active: !!(game && game.near) });
+      const r = Math.max(22, Math.min(30, Math.round(Math.min(W, H) * 0.16))), r2 = Math.round(r * 0.8);
+      list.push({ id: 'act', label: 'AGIR', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: !!(game && game.interact) });
+      list.push({ id: 'drop', label: 'PALLET', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.near) });
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
     } else if (state === 'pause') {
       const bw = Math.min(150, W - 24), by = Math.round(H * 0.4);
@@ -75,6 +83,7 @@
       case 'play': start(false); break;
       case 'train': start(true); break;
       case 'drop': dropQueued = true; break;
+      case 'act': actQueued = true; break;
       case 'pause': if (state === 'play') state = 'pause'; break;
       case 'resume': if (state === 'pause') state = 'play'; break;
       case 'restart': start(training); break;
@@ -92,10 +101,17 @@
     window.__dp.game = game;
   }
 
+  // garante que o teclado chegue ao jogo (importante dentro de iframe/artefato)
+  canvas.tabIndex = 0;
+  canvas.style.outline = 'none';
+  function focusGame() { try { window.focus(); canvas.focus({ preventScroll: true }); } catch (x) {} }
+  window.addEventListener('pointerdown', focusGame);
+
   canvas.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
+    focusGame();
     DP.audio.init();
     const p = toLocal(e);
+    if (state === 'play' && game && game.s.skill) pressQueued = true;
     const b = hit(buttons(), p);
     if (b) { held.set(e.pointerId, b.id); act(b.id); try { canvas.setPointerCapture(e.pointerId); } catch (x) {} return; }
     if (state === 'play' && joy.id === null) {
@@ -121,26 +137,34 @@
   canvas.addEventListener('pointercancel', release);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+  // aceita e.code (posição física) e cai para e.key quando o navegador não informa
+  const FALLBACK = { w: 'KeyW', a: 'KeyA', s: 'KeyS', d: 'KeyD', e: 'KeyE', p: 'KeyP', r: 'KeyR', m: 'KeyM', t: 'KeyT', ' ': 'Space', Enter: 'Enter', Escape: 'Escape', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight' };
+  const codeOf = (e) => (e.code && e.code !== 'Unidentified') ? e.code : (FALLBACK[e.key] || FALLBACK[(e.key || '').toLowerCase()] || '');
+  const BLOCK = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+
   window.addEventListener('keydown', (e) => {
-    if (e.repeat) { if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault(); return; }
-    keys[e.code] = true;
+    const code = codeOf(e);
+    if (!code) return;
+    if (BLOCK.includes(code)) e.preventDefault();
+    if (e.repeat) return;
+    keys[code] = true;
     DP.audio.init();
-    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (state === 'play') {
-      if (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter') dropQueued = true;
-      if (e.code === 'KeyP' || e.code === 'Escape') state = 'pause';
+      if (code === 'KeyE') { actQueued = true; pressQueued = true; }
+      if (code === 'Space' || code === 'Enter') { dropQueued = true; pressQueued = true; }
+      if (code === 'KeyP' || code === 'Escape') state = 'pause';
     } else if (state === 'pause') {
-      if (e.code === 'KeyP' || e.code === 'Escape' || e.code === 'Enter') state = 'play';
+      if (code === 'KeyP' || code === 'Escape' || code === 'Enter') state = 'play';
     } else if (state === 'menu') {
-      if (e.code === 'Enter' || e.code === 'Space') start(false);
-      if (e.code === 'KeyT') start(true);
+      if (code === 'Enter' || code === 'Space') start(false);
+      if (code === 'KeyT') start(true);
     } else if (state === 'over') {
-      if (e.code === 'KeyR' || e.code === 'Enter') start(training);
+      if (code === 'KeyR' || code === 'Enter') start(training);
     }
-    if (e.code === 'KeyR' && state === 'play') start(training);
-    if (e.code === 'KeyM') DP.audio.toggleMute();
+    if (code === 'KeyR' && state === 'play') start(training);
+    if (code === 'KeyM') DP.audio.toggleMute();
   });
-  window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+  window.addEventListener('keyup', (e) => { const c = codeOf(e); if (c) keys[c] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
   document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') state = 'pause'; });
 
@@ -160,8 +184,10 @@
         ax += jx; ay += jy;
       }
     }
-    const drop = dropQueued; dropQueued = false;
-    return { ax, ay, drop };
+    const act = !!keys.KeyE || [...held.values()].includes('act');
+    const out = { ax, ay, drop: dropQueued, act, actPress: actQueued, press: pressQueued };
+    dropQueued = actQueued = pressQueued = false;
+    return out;
   }
 
   // ---------- laço ----------
@@ -175,7 +201,7 @@
     if (state === 'play' && game) {
       const inp = readInput();
       const steps = Math.ceil(dt / (1 / 60));
-      for (let i = 0; i < steps; i++) { game.update(dt / steps, i === 0 ? inp : { ax: inp.ax, ay: inp.ay }); }
+      for (let i = 0; i < steps; i++) { game.update(dt / steps, i === 0 ? inp : { ax: inp.ax, ay: inp.ay, act: inp.act }); }
 
       // batimento do coração (raio de terror)
       if (!game.over && game.k.state !== 'intro') {
@@ -187,25 +213,31 @@
       }
       if (game.over && state === 'play' && game.overT > 1.6) {
         state = 'over';
-        if (!training && game.time > best) {
-          best = game.time; newBest = true;
-          try { localStorage.setItem('dp_best', String(best)); } catch (e) {}
+        if (!training) {
+          if (game.result === 'escaped' && (!fastest || game.time < fastest)) {
+            fastest = game.time; newBest = true;
+            try { localStorage.setItem('dp_esc', String(fastest)); } catch (e) {}
+          } else if (game.result === 'dead' && game.time > best) {
+            best = game.time; newBest = true;
+            try { localStorage.setItem('dp_best', String(best)); } catch (e) {}
+          }
         }
       }
     }
 
     // ---- desenho ----
     if (state === 'menu') {
-      DP.render.drawMenu(ctx, W, H, tm, best);
+      DP.render.drawMenu(ctx, W, H, tm, bestText());
     } else if (game) {
       DP.render.drawWorld(ctx, game, W, H, tm);
       DP.render.drawHUD(ctx, game, W, H, tm);
+      DP.render.drawSkill(ctx, game, W, H, tm);
       if (state === 'over') DP.render.drawOver(ctx, game, W, H, tm, best, newBest);
       else if (game.over) DP.render.overlay(ctx, W, H, Math.min(0.6, game.overT * 0.5));
       if (state === 'pause') {
         DP.render.overlay(ctx, W, H, 0.7);
         text(ctx, 'PAUSADO', Math.round(W / 2), Math.round(H * 0.2), '#fff', { align: 'c' });
-        const tips = DP.font.wrap('E / ESPAÇO: DERRUBAR PALLET. WASD OU SETAS: MOVER. M: SOM.', Math.floor((W - 16) / 6));
+        const tips = DP.font.wrap('WASD/SETAS: MOVER. SEGURE E: CONSERTAR GERADOR. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: SOM.', Math.floor((W - 16) / 6));
         tips.forEach((l, i) => text(ctx, l, Math.round(W / 2), Math.round(H * 0.2) + 14 + i * 9, '#a9a9b5', { align: 'c' }));
       }
     }
@@ -218,7 +250,7 @@
     requestAnimationFrame(frame);
   }
 
-  window.__dp = { get game() { return game; }, set game(v) { game = v; }, start, get state() { return state; }, set state(v) { state = v; }, keys };
+  window.__dp = { buttons, get game() { return game; }, set game(v) { game = v; }, start, get state() { return state; }, set state(v) { state = v; }, keys };
   resize();
   requestAnimationFrame(frame);
 })();

@@ -32,6 +32,25 @@
     RESPECT: 0.55,       // chance do assassino "respeitar" um pallet de pé (hesitar)
     HESITATE: [0.8, 1.5],
     INTRO: 3,
+
+    // objetivo: geradores + portões
+    REPAIR_T: 15,        // segundos segurando AGIR para terminar um gerador
+    GATE_T: 4,           // segundos para abrir o portão
+    GEN_RANGE: 1.45, GATE_RANGE: 1.6,
+    SKILL_EVERY: [3.5, 7],   // intervalo entre skill checks (s)
+    SKILL_DELAY: 0.45,       // tempo até o ponteiro começar a girar
+    SKILL_SPEED: 5.2,        // rad/s do ponteiro
+    SKILL_ZONE: 0.34,        // meia largura da zona de acerto (rad)
+    SKILL_GREAT: 0.12,       // meia largura da zona perfeita
+    SKILL_FAIL: 0.10,        // progresso perdido ao errar
+    KICK: 0.15,              // progresso que o assassino destrói ao chutar um gerador
+
+    // percepção do assassino
+    SIGHT: 13,           // enxerga com linha de visão até aqui (tiles)
+    TRACK: 2.5,          // segue o rastro por mais tempo depois de perder você
+    SEARCH_WAIT: 2.5,
+    PATROL_SPEED: 0.88,  // multiplicador de velocidade enquanto patrulha/procura
+    NOISE_MOVE: 3.5, NOISE_REPAIR: 9, NOISE_GATE: 8, NOISE_VAULT: 5,
     RESPAWN: 8           // só no TREINO: pallets voltam a ficar de pé
   };
 
@@ -48,18 +67,20 @@
     const g = {
       cfg: CFG, map, training,
       time: 0, over: false, overT: 0,
-      stats: { stuns: 0, drops: 0, misses: 0, hits: 0, breaks: 0, vaults: 0 },
+      stats: { stuns: 0, drops: 0, misses: 0, hits: 0, breaks: 0, vaults: 0, gens: 0, kicks: 0, skillOk: 0, skillFail: 0 },
       pallets: [], popups: [], fx: [],
       shake: 0, hitstop: 0, flash: 0,
-      near: null, los: false, dist: 99,
+      near: null, los: false, dist: 99, interact: null, result: null, gensDone: 0, need: 0, gens: [], gates: [],
       s: {
         x: map.spawnSurvivor.x, y: map.spawnSurvivor.y, face: Math.PI / 2,
-        hp: 2, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0
+        hp: 2, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
+        noise: 0, acting: null, skill: null, skillCD: 4, tick: 0
       },
       k: {
         x: map.spawnKiller.x, y: map.spawnKiller.y, face: -Math.PI / 2,
         state: 'intro', t: 0, dur: 0, ldx: 0, ldy: 0, hitDone: false, pal: null,
-        moving: false, walk: 0, hesitate: false
+        moving: false, walk: 0, hesitate: false,
+        aware: 'patrol', lost: 0, last: null, wait: 0, goal: null
       }
     };
 
@@ -74,6 +95,9 @@
       palAt[p.ty * W + p.tx] = o;
     }
     g.palAt = palAt;
+    g.need = map.NEED;
+    g.gens = map.gens.map((o) => ({ tx: o.tx, ty: o.ty, cx: o.tx + 0.5, cy: o.ty + 0.5, progress: 0, done: false, visited: -99 }));
+    g.gates = map.gates.map((o) => ({ tx: o.tx, ty: o.ty, cx: o.tx + 0.5, cy: o.ty + 0.5, side: o.side, progress: 0, open: false, visited: -99 }));
 
     const s = g.s, k = g.k;
     const field = new Float32Array(W * H);
@@ -119,7 +143,7 @@
       return true;
     }
 
-    // ---------- campo de caminho do assassino (Dijkstra a partir do sobrevivente) ----------
+    // ---------- campo de caminho do assassino (Dijkstra a partir do objetivo dele) ----------
     function extra(i) {
       const p = palAt[i];
       if (!p) return 0;
@@ -128,9 +152,9 @@
     function blocked(tx, ty) { return tx < 0 || ty < 0 || tx >= W || ty >= H || t[ty * W + tx] !== 0; }
     const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
-    function computeField() {
+    function computeField(gx, gy) {
       field.fill(1e9);
-      const sx = clamp(Math.floor(s.x), 0, W - 1), sy = clamp(Math.floor(s.y), 0, H - 1);
+      const sx = clamp(Math.floor(gx), 0, W - 1), sy = clamp(Math.floor(gy), 0, H - 1);
       const heapI = [], heapK = [];
       const push = (i, key) => {
         let n = heapI.length; heapI.push(i); heapK.push(key);
@@ -240,7 +264,7 @@
       const kd = Math.hypot(k.x - p.cx, k.y - p.cy);
       const stunned = inZone(p, k) && k.state !== 'intro';
       if (stunned) {
-        k.state = 'stun'; k.t = 0; k.pal = null;
+        k.state = 'stun'; k.t = 0; k.pal = null; k.aware = 'hunt'; k.lost = 0;
         g.stats.stuns++;
         g.hitstop = 0.1; g.shake = 7; g.flash = 0.25;
         sfx('stun', pan(k.x));
@@ -273,15 +297,97 @@
       g.shake = 6; g.flash = 0.3;
       sfx('hit', pan(s.x));
       popup('-1', s.x, s.y - 1.4, '#ff4d4d');
+      k.aware = 'hunt'; k.lost = 0;
       if (training) return;
       s.hp--;
       if (s.hp <= 0) {
-        g.over = true; g.overT = 0;
+        g.over = true; g.overT = 0; g.result = 'dead';
         sfx('death');
       }
     }
 
+    // ---------- geradores, skill check, portões ----------
+    function alert(x, y) {
+      if (k.state === 'intro') return;
+      k.last = { x, y };
+      if (k.aware !== 'hunt') { k.aware = 'search'; k.wait = 0; }
+    }
+    function findInteract() {
+      let best = null, bd = 1e9;
+      for (const o of g.gens) {
+        if (o.done) continue;
+        const d = Math.hypot(s.x - o.cx, s.y - o.cy);
+        if (d < CFG.GEN_RANGE && d < bd) { bd = d; best = { type: 'gen', obj: o }; }
+      }
+      for (const o of g.gates) {
+        if (!o.open) continue;
+        const d = Math.hypot(s.x - o.cx, s.y - o.cy);
+        if (d < CFG.GATE_RANGE && d < bd) { bd = d; best = { type: 'gate', obj: o }; }
+      }
+      return best;
+    }
+    function startSkill() {
+      s.skill = { t: 0, tz: 1.5 + rnd() * 3.6 };
+      sfx('skill');
+    }
+    function endSkill(result) {
+      const o = s.acting && s.acting.obj;
+      if (result === 'fail' || result === 'miss') {
+        g.stats.skillFail++;
+        if (o) o.progress = Math.max(0, o.progress - CFG.SKILL_FAIL);
+        g.shake = 5; g.flash = 0.12;
+        sfx('bang', pan(s.x));
+        popup('FALHOU!', s.x, s.y - 1.5, '#ff4d4d');
+        alert(s.x, s.y);
+      } else {
+        g.stats.skillOk++;
+        const great = result === 'great';
+        if (o) o.progress = Math.min(1, o.progress + (great ? 0.05 : 0.025));
+        sfx('skillok');
+        popup(great ? 'PERFEITO!' : 'BOM', s.x, s.y - 1.5, great ? '#7dffa0' : '#cfe8ff');
+      }
+      s.skill = null;
+      s.skillCD = CFG.SKILL_EVERY[0] + rnd() * (CFG.SKILL_EVERY[1] - CFG.SKILL_EVERY[0]);
+    }
+    function skillAngle() { return Math.max(0, s.skill.t - CFG.SKILL_DELAY) * CFG.SKILL_SPEED; }
+    function pressSkill() {
+      if (!s.skill || s.skill.t < CFG.SKILL_DELAY) return;
+      const diff = Math.abs(skillAngle() - s.skill.tz);
+      endSkill(diff < CFG.SKILL_GREAT ? 'great' : diff < CFG.SKILL_ZONE ? 'good' : 'fail');
+    }
+    function finishGen(o) {
+      o.done = true; o.progress = 1;
+      g.gensDone++; g.stats.gens++;
+      sfx('genDone', pan(o.cx));
+      popup('GERADOR PRONTO!', o.cx, o.cy - 1.4, '#7dffa0');
+      alert(o.cx, o.cy);               // a explosão de luz denuncia o gerador
+      if (g.gensDone >= g.need) {
+        for (const gt of g.gates) gt.open = true;
+        popup('PORTÕES ENERGIZADOS!', s.x, s.y - 2.2, '#ffd23f');
+        sfx('gates');
+      }
+    }
+    function escape() {
+      g.over = true; g.overT = 0; g.result = 'escaped';
+      sfx('escape');
+    }
+    function act(dt) {
+      const tg = s.acting, o = tg.obj;
+      if (tg.type === 'gen') {
+        s.noise = CFG.NOISE_REPAIR;
+        o.progress = Math.min(1, o.progress + dt / CFG.REPAIR_T);
+        s.tick -= dt; if (s.tick <= 0) { s.tick = 0.55; sfx('repair', pan(o.cx)); }
+        if (o.progress >= 1) finishGen(o);
+      } else {
+        s.noise = CFG.NOISE_GATE;
+        o.progress = Math.min(1, o.progress + dt / CFG.GATE_T);
+        s.tick -= dt; if (s.tick <= 0) { s.tick = 0.4; sfx('repair', pan(o.cx)); }
+        if (o.progress >= 1) escape();
+      }
+    }
+
     function updateSurvivor(dt, inp) {
+      s.noise = 0; s.acting = null;
       s.invuln = Math.max(0, s.invuln - dt);
       s.burst = Math.max(0, s.burst - dt);
       s.vaultCD = Math.max(0, s.vaultCD - dt);
@@ -290,7 +396,7 @@
         v.t += dt;
         const p = Math.min(1, v.t / CFG.VAULT_T);
         s.x = v.x0 + (v.x1 - v.x0) * p; s.y = v.y0 + (v.y1 - v.y0) * p;
-        s.moving = true; s.walk += dt * 14;
+        s.moving = true; s.walk += dt * 14; s.noise = CFG.NOISE_VAULT;
         if (p >= 1) { s.vault = null; s.vaultCD = 0.15; }
         return;
       }
@@ -298,7 +404,14 @@
       const len = Math.hypot(ax, ay);
       if (len > 1) { ax /= len; ay /= len; }
       s.moving = len > 0.12;
+      if (inp.act && !s.moving && g.interact) {
+        s.acting = g.interact; s.walk = 0;
+        s.face = Math.atan2(g.interact.obj.cy - s.y, g.interact.obj.cx - s.x);
+        act(dt);
+        return;
+      }
       if (s.moving) {
+        s.noise = CFG.NOISE_MOVE;
         const sp = CFG.RUN * (s.burst > 0 ? CFG.BURST : 1);
         moveBy(s, ax * sp * dt, ay * sp * dt, CFG.R_S);
         s.face = Math.atan2(ay, ax);
@@ -333,7 +446,7 @@
       g.dist = d;
       k.moving = false;
 
-      if (k.state === 'intro') { k.t += dt; if (k.t >= CFG.INTRO) { k.state = 'chase'; k.t = 0; } return; }
+      if (k.state === 'intro') { k.t += dt; if (k.t >= CFG.INTRO) { k.state = 'chase'; k.t = 0; k.aware = 'patrol'; } return; }
       if (k.state === 'stun') { k.t += dt; if (k.t >= CFG.STUN) { k.state = 'chase'; k.t = 0; } return; }
       if (k.state === 'recover') { k.t += dt; if (k.t >= k.dur) { k.state = 'chase'; k.t = 0; } return; }
       if (k.state === 'windup') {
@@ -365,11 +478,19 @@
         return;
       }
 
-      // ---- chase ----
+      // ---- percepção: vê (linha de visão), ouve (ruído) ou rastreia ----
       const los = hasLOS(k, s);
       g.los = los;
+      const sees = los && d < CFG.SIGHT;
+      const hears = d < s.noise;
+      if (sees || hears) { k.aware = 'hunt'; k.lost = 0; k.last = { x: s.x, y: s.y }; }
+      else if (k.aware === 'hunt') {
+        k.lost += dt;
+        if (k.lost > CFG.TRACK) { k.aware = 'search'; k.wait = 0; }
+      }
+      const hunting = k.aware === 'hunt';
 
-      if (los && d < CFG.ATTACK_RANGE && !s.vault) {
+      if (hunting && los && d < CFG.ATTACK_RANGE && !s.vault) {
         const n = Math.hypot(dx, dy) || 1;
         k.ldx = dx / n; k.ldy = dy / n; k.face = Math.atan2(dy, dx);
         k.state = 'windup'; k.t = 0;
@@ -377,14 +498,41 @@
         return;
       }
 
-      const ti = clamp(Math.floor(s.y), 0, H - 1) * W + clamp(Math.floor(s.x), 0, W - 1);
+      // ---- objetivo de movimento ----
+      let gx, gy, speed = CFG.K_SPEED;
+      if (hunting) { gx = s.x; gy = s.y; }
+      else if (k.aware === 'search') {
+        if (!k.last) k.last = { x: s.x, y: s.y };
+        gx = k.last.x; gy = k.last.y; speed *= CFG.PATROL_SPEED;
+        if (Math.hypot(k.x - gx, k.y - gy) < 1.4) {
+          k.wait += dt;
+          if (k.wait > CFG.SEARCH_WAIT) { k.aware = 'patrol'; k.goal = null; }
+        }
+      } else {
+        speed *= CFG.PATROL_SPEED;
+        if (!k.goal) k.goal = pickGoal();
+        if (!k.goal) { k.aware = 'hunt'; k.lost = 0; return; }
+        const o = k.goal;
+        gx = o.cx; gy = o.cy;
+        if (Math.hypot(k.x - gx, k.y - gy) < 1.7) {
+          o.visited = g.time; k.goal = null;
+          if (o.progress > 0 && !o.done && o.tx !== undefined && g.gens.includes(o)) {
+            o.progress = Math.max(0, o.progress - CFG.KICK); g.stats.kicks++;
+            sfx('bang', pan(k.x)); g.shake = Math.max(g.shake, 2);
+            popup('REGREDIU', o.cx, o.cy - 1.2, '#ff7a59');
+          }
+          k.state = 'recover'; k.t = 0; k.dur = 1.2;
+          return;
+        }
+      }
+
+      const ti = clamp(Math.floor(gy), 0, H - 1) * W + clamp(Math.floor(gx), 0, W - 1);
       fieldT -= dt;
-      if (fieldT <= 0 || ti !== fieldTile) { computeField(); fieldT = 0.15; fieldTile = ti; }
+      if (fieldT <= 0 || ti !== fieldTile) { computeField(gx, gy); fieldT = 0.15; fieldTile = ti; }
 
       // mind game: às vezes o assassino "respeita" um pallet de pé entre vocês
-      let speed = CFG.K_SPEED;
       k.hesitate = false;
-      for (const p of g.pallets) {
+      if (hunting) for (const p of g.pallets) {
         if (p.state !== 'up') continue;
         const dk = Math.hypot(k.x - p.cx, k.y - p.cy), ds = Math.hypot(s.x - p.cx, s.y - p.cy);
         if (dk > 4.2) { p.respect = undefined; p.hes = 0; continue; }
@@ -399,7 +547,7 @@
       }
 
       let tx, ty;
-      if (los) { tx = s.x; ty = s.y; }
+      if (hunting && los) { tx = s.x; ty = s.y; }
       else {
         const n = bestNeighbor();
         if (!n) return;
@@ -414,6 +562,19 @@
           k.face = Math.atan2(my, mx); k.moving = true; k.walk += dt * 11 * (speed / CFG.K_SPEED);
         }
       }
+    }
+
+    // próximo gerador (ou portão) a patrulhar: prefere os que já têm progresso e os que não visitou há pouco
+    function pickGoal() {
+      const list = g.gensDone >= g.need ? g.gates : g.gens.filter((o) => !o.done);
+      if (!list.length) return null;
+      const w = list.map((o) => {
+        const d = Math.hypot(k.x - o.cx, k.y - o.cy);
+        return (o.progress > 0 ? 3 : 1) * (g.time - o.visited > 25 ? 1 : 0.1) / (1 + d / 25);
+      });
+      let r = rnd() * w.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < list.length; i++) { r -= w[i]; if (r <= 0) return list[i]; }
+      return list[list.length - 1];
     }
 
     // ---------- loop ----------
@@ -431,8 +592,20 @@
         return;
       }
 
-      if (inp.drop) tryDrop();
+      g.interact = findInteract();
+      if (s.skill && (inp.press || inp.drop || inp.actPress)) pressSkill();
+      else if (inp.drop || (inp.actPress && !g.interact)) tryDrop();
       updateSurvivor(dt, inp);
+
+      // skill checks só acontecem enquanto conserta um gerador
+      if (s.acting && s.acting.type === 'gen') {
+        if (!s.skill) { s.skillCD -= dt; if (s.skillCD <= 0) startSkill(); }
+        else {
+          s.skill.t += dt;
+          if (skillAngle() > s.skill.tz + CFG.SKILL_ZONE + 0.1) endSkill('miss');
+        }
+      } else s.skill = null;
+      if (g.over) return;
 
       for (const p of g.pallets) {
         p.t += dt;
@@ -457,6 +630,7 @@
       g.fx = g.fx.filter((f) => f.t < f.life);
     };
 
+    g.alert = alert;
     g.standing = () => g.pallets.filter((p) => p.state === 'up').length;
     g.inZone = inZone;
     g.solid = solid;

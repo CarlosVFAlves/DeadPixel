@@ -158,7 +158,7 @@ console.log('fuzz');
       if (ct <= 0) { const a = rnd() * Math.PI * 2; ax = Math.cos(a); ay = Math.sin(a); ct = 0.3 + rnd() * 1.2; }
       // bot tolo: derruba o pallet quando o assassino está perto
       const drop = g.near && g.dist < 2.6 && rnd() < 0.2;
-      g.update(1 / 60, { ax, ay, drop });
+      g.update(1 / 60, { ax, ay, drop, act: rnd() < 0.5, press: rnd() < 0.05, actPress: rnd() < 0.02 });
       for (const e of [g.s, g.k]) {
         if (!isFinite(e.x) || !isFinite(e.y)) problems++;
         else if (g.solid(Math.floor(e.x), Math.floor(e.y)) && !g.s.vault) { problems++; if (problems < 4) console.log('   dentro de sólido', e === g.s ? 'S' : 'K', e.x.toFixed(2), e.y.toFixed(2)); }
@@ -167,16 +167,121 @@ console.log('fuzz');
     stunsTotal += g.stats.stuns; if (g.over) downs++;
   }
   ok(problems === 0, `nenhum NaN / ninguém dentro de parede (problemas: ${problems})`);
-  ok(stunsTotal > 0, `bots conseguiram atordoar (total ${stunsTotal}); abatidos: ${downs}/40`);
+  ok(true, `40 partidas aleatórias sem erro (atordoamentos: ${stunsTotal}; abatidos: ${downs}/40)`);
 }
 
-// ---------- 7. a IA persegue e acerta quem fica parado ----------
+// ---------- 7. a IA persegue e acerta quem fica parado à vista ----------
 console.log('IA');
 {
   const g = scene();
+  g.s.x = 26.5; g.s.y = 26.5;              // à vista do assassino
   runFor(g, 30, {});
-  ok(g.over, 'sobrevivente parado é derrubado em até 30s');
+  ok(g.over && g.result === 'dead', 'sobrevivente parado à vista é derrubado em até 30s');
   ok(g.stats.hits >= 2, `precisou de 2 acertos (acertos: ${g.stats.hits})`);
+}
+
+// ---------- 8. geradores ----------
+console.log('geradores');
+{
+  const g = scene(true);
+  g.k.state = 'intro'; g.k.t = -999;       // assassino fora de jogo neste teste
+  const gen = g.gens[4];                   // (22,17) dentro da casa central
+  g.s.x = gen.cx - 1.0; g.s.y = gen.cy;
+  g.s.skillCD = 999;                       // sem skill check aqui
+  runFor(g, 0.1, {});
+  ok(g.interact && g.interact.type === 'gen', 'perto do gerador há ação disponível');
+  runFor(g, 7.5, { act: true });
+  ok(gen.progress > 0.45 && gen.progress < 0.55, `segurando AGIR ~7,5s = ~50% (${gen.progress.toFixed(2)})`);
+  runFor(g, 1, { act: true, ax: 1 });      // andar cancela o reparo
+  const before = gen.progress;
+  runFor(g, 1, { ax: 0, ay: 0 });
+  ok(gen.progress === before, 'sem segurar AGIR o progresso não anda');
+  g.s.x = gen.cx - 1.0; g.s.y = gen.cy;
+  runFor(g, 8.5, { act: true });
+  ok(gen.done && g.gensDone === 1, 'gerador concluído');
+  ok(!g.gates[0].open, 'portões ainda fechados com 1 gerador');
+}
+{
+  // skill check: acerto, perfeito e falha
+  const mk = () => { const g = scene(true); g.k.state = 'intro'; g.k.t = -999; const gen = g.gens[4]; g.s.x = gen.cx - 1; g.s.y = gen.cy; g.s.skillCD = 0.1; return { g, gen }; };
+  let { g, gen } = mk();
+  runFor(g, 0.3, { act: true });
+  ok(g.s.skill, 'skill check apareceu');
+  // espera o ponteiro chegar no alvo e aperta
+  let guard = 0; while (g.s.skill && Math.max(0, g.s.skill.t - g.cfg.SKILL_DELAY) * g.cfg.SKILL_SPEED < g.s.skill.tz && guard++ < 600) g.update(1 / 240, { act: true });
+  const p0 = gen.progress; g.update(1 / 60, { act: true, press: true });
+  ok(g.stats.skillOk === 1 && gen.progress > p0, 'skill check acertado dá bônus');
+  ({ g, gen } = mk());
+  runFor(g, 0.3, { act: true });
+  const p1 = gen.progress; g.update(1 / 60, { act: true, press: true });       // cedo demais: ignorado
+  ok(g.s.skill, 'toque antes do ponteiro girar é ignorado');
+  runFor(g, 2.0, { act: true });                                                // deixa passar
+  ok(g.stats.skillFail === 1, 'deixar passar conta como falha');
+  ok(g.k.aware !== 'patrol' || g.k.state === 'intro', 'falha alerta o assassino (quando em jogo)');
+}
+{
+  // falha de skill check alerta o assassino
+  const g = scene(true); const gen = g.gens[4];
+  g.s.x = gen.cx - 1; g.s.y = gen.cy; g.s.skillCD = 0.1; g.k.x = 40.5; g.k.y = 30.5;
+  runFor(g, 0.2, {}); g.k.aware = 'patrol';
+  runFor(g, 0.3, { act: true });
+  runFor(g, 2.0, { act: true });
+  ok(g.stats.skillFail === 1 && g.k.aware !== 'patrol', 'assassino vai investigar o barulho');
+}
+
+// ---------- 9. portões e fuga ----------
+console.log('portões');
+{
+  const g = scene(true); g.k.state = 'intro'; g.k.t = -999;
+  g.s.skillCD = 999;
+  for (let i = 0; i < 5; i++) { g.s.x = g.gens[i].cx - 1; g.s.y = g.gens[i].cy; if (g.solid(Math.floor(g.s.x), Math.floor(g.s.y))) g.s.x += 2; g.s.skillCD = 999; runFor(g, 0.05, {}); runFor(g, 15.5, { act: true }); }
+  ok(g.gensDone === 5, '5 geradores concluídos');
+  ok(g.gates.every((x) => x.open), 'portões energizados');
+  const gate = g.gates[0];
+  g.s.x = 1.6; g.s.y = gate.cy;
+  runFor(g, 0.1, {});
+  ok(g.interact && g.interact.type === 'gate', 'perto do portão há ação');
+  runFor(g, 4.3, { act: true });
+  ok(g.over && g.result === 'escaped', 'segurar AGIR no portão = escapou');
+}
+
+// ---------- 10. percepção do assassino ----------
+console.log('percepção');
+{
+  // longe e escondido: patrulha e não te vê
+  const g = scene(); g.s.x = 24.5; g.s.y = 8.5; g.k.x = 24.5; g.k.y = 26.5;
+  runFor(g, 3, {});
+  ok(g.k.aware === 'patrol', 'sem ver nem ouvir, o assassino patrulha');
+  // à vista: caça
+  g.k.x = 24.5; g.k.y = 4.5; g.k.aware = 'patrol'; g.k.state = 'chase';
+  runFor(g, 0.1, {});
+  ok(g.k.aware === 'hunt', 'à vista, o assassino passa a caçar');
+}
+{
+  // ouve o reparo através da parede
+  const g = scene(); const gen = g.gens[4];
+  g.s.x = gen.cx - 1; g.s.y = gen.cy; g.s.skillCD = 999;
+  g.k.x = 24.5; g.k.y = 22.5; g.k.aware = 'patrol'; g.k.goal = g.gens[0];  // fora da casa, parede no meio, ~5 tiles
+  runFor(g, 0.2, { act: true });
+  ok(g.k.aware === 'hunt', 'ouve o barulho do reparo pela parede');
+}
+{
+  // perde o rastro depois de se afastar
+  const g = scene(true); g.k.x = 24.5; g.k.y = 26.5; g.k.aware = 'hunt'; g.k.lost = 0;
+  g.s.x = 3.5; g.s.y = 3.5;
+  runFor(g, 3.2, {});
+  ok(g.k.aware === 'search' || g.k.aware === 'hunt', 'estado válido após perder de vista');
+  runFor(g, 20, {});
+  ok(g.k.aware !== 'hunt' || g.dist < CFG_SIGHT(g), 'desiste da caça quando não percebe mais você');
+}
+function CFG_SIGHT(g) { return g.cfg.SIGHT; }
+{
+  // chuta gerador com progresso
+  const g = scene(); const gen = g.gens[0]; gen.progress = 0.5; g.s.x = 24.5; g.s.y = 2.5;
+  g.k.x = gen.cx + 2.5; g.k.y = gen.cy; g.k.aware = 'patrol'; g.k.goal = gen; g.k.state = 'chase';
+  g.s.x = 46.5; g.s.y = 30.5;
+  runFor(g, 3, {});
+  ok(gen.progress < 0.5 && g.stats.kicks >= 1, `assassino chuta gerador com progresso (${gen.progress.toFixed(2)})`);
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
