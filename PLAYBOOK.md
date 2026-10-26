@@ -303,3 +303,18 @@ Pontos a decidir: a equipe **escolhe** uma rota ou cumpre várias? **Assentos li
 | Janela (abrir) | 0,8 s | 0,8 s | sem mudança |
 
 Meta de duração: **8–12 min** por partida (sem interferência do assassino a rota mais rápida fica em ~5–6 min). Valores iniciais, a calibrar com `__dp.report()`.
+
+## 11. Plano até uma "boa versão" (autonomia concedida: seguir etapa por etapa, documentando aqui)
+
+**Definição de "boa versão" (v0.1):** mapa grande (144×96) com acampamento, floresta, lago e estrada; visão curta; **detector + stealth**; **três rotas de fuga**: Polícia, Carro e Barco (itens, peças, instalação, partida); bots que jogam todas as rotas com os mesmos sentidos de uma pessoa; tempos de reparo maiores; dificuldade; telemetria; lobby; testes automáticos de tudo. "Matar o assassino" fica **fora** da v0.1 (muda o gênero; protótipo à parte).
+
+| Etapa | Entrega | Como valido |
+|---|---|---|
+| 7 | Sistema de **itens** (genérico) + **rádio detector** + **stealth do assassino** (mapa atual) | testes de faixas/bateria, stealth (velocidade, ruído, visão, energia), bots usando o rádio |
+| 8 | **Mapa grande** (gerador por semente: acampamento, floresta, lago, estrada) + navegação otimizada + **mapa de campo** (tecla M) | conectividade em várias sementes, tempo de cálculo por chamada, captura de tela |
+| 9 | **Polícia** (energia → telefone → chegada) | testes do fluxo e do tempo; bots chamam a polícia |
+| 10 | **Carro** e **Barco** (peças sorteadas, instalar, ligar, embarcar, partir; sabotagem do assassino) | testes de cada passo; bots exploram, pegam peças e instalam |
+| 11 | Ajuste fino: tempos (fusível 45 s etc.), dificuldade, equilíbrio com bots justos, telemetria, textos e lobby | partidas simuladas por papel/dificuldade, metas de duração (8–12 min) |
+| 12 | Consolidação: README, playbook, artefato final, lista de pendências | suíte completa verde |
+
+**Regras de trabalho:** cada etapa fecha com testes verdes, captura de tela conferida, commit e entrada no playbook (decisões, impasses e números). O artefato é republicado ao fim de cada etapa grande.
