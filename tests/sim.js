@@ -684,5 +684,112 @@ function fairKillerInput(g, st, i) {
   console.log('   assassino justo vs equipe:', JSON.stringify(res), 'abatidos', kills, 'escaparam', esc, 'tempo médio', (tTot / N).toFixed(0) + 's', 'aproveitamento', Math.round(100 * hits / Math.max(1, lunges)) + '%');
 }
 
+// ---------- 21. itens, rádio detector e stealth (etapa 7) ----------
+console.log('rádio e stealth');
+{
+  const g = scene(true); g.k.state = 'intro'; g.k.t = -999; g.s.skillCD = 999;
+  ok(g.items.filter((i) => i.kind === 'radio').length === 2, 'dois rádios espalhados pelo mapa no início');
+  const r = g.items[0]; r.x = r.cx = 30.5; r.y = r.cy = 3.5;
+  g.s.x = 30.5 - 0.9; g.s.y = 3.5;
+  g.update(1 / 60, {});
+  ok(g.interact && g.interact.type === 'item', 'perto do rádio há ação de pegar');
+  runFor(g, 0.2, { act: true });
+  ok(!g.s.tool, 'pegar leva um instante (segurar)');
+  runFor(g, 0.5, { act: true });
+  ok(g.s.tool === r && r.holder === g.s, 'segurando AGIR, pega o rádio');
+  // faixas do detector
+  g.s.x = 30.5; g.s.y = 3.5; g.s.tool.on = false;
+  g.update(1 / 60, { radio: true });
+  ok(g.s.tool.on, 'tecla Q liga o rádio');
+  const band = (d) => { g.k.x = 30.5 + d; g.k.y = 12; g.s.x = 30.5; g.s.y = 12; g.k.state = 'intro'; g.update(1 / 60, {}); return g.s.det; };
+  ok(band(30) === 0 && band(20) === 1 && band(12) === 2 && band(5) === 3, 'faixas: fora do alcance (0), longe (1), perto (2), muito perto (3)');
+  const b0 = g.s.tool.batt; runFor(g, 2, {});
+  ok(Math.abs((b0 - g.s.tool.batt) - 2) < 0.1, 'a pilha gasta 1 por segundo ligado');
+  g.s.tool.batt = 0.5; runFor(g, 1, {});
+  ok(g.s.tool.batt === 0 && !g.s.tool.on && g.s.det === 0, 'sem pilha o rádio desliga sozinho');
+  g.update(1 / 60, { radio: true });
+  ok(!g.s.tool.on, 'e não liga sem pilha');
+}
+{
+  // com o rádio desligado não há aviso nenhum
+  const g = scene(true); g.k.state = 'intro'; g.k.t = -999;
+  g.items[0].holder = g.s; g.s.tool = g.items[0]; g.s.tool.on = false;
+  g.k.x = g.s.x + 3; g.k.y = g.s.y; g.update(1 / 60, {});
+  ok(g.s.det === 0, 'rádio desligado não detecta');
+}
+{
+  // stealth do assassino-jogador
+  const g = killerScene(true); g.s.x = 3; g.s.y = 3; g.s.skillCD = 999;
+  const C = DP.CFG, x0 = g.k.x = 30.5; g.k.y = 28.5;
+  g.s.ai.fetch = null;
+  runFor(g, 1, { ax: 1, ay: 0, stealth: true });
+  const dx = g.k.x - x0;
+  ok(g.k.stealth && Math.abs(dx - C.K_SPEED_P * C.STEALTH_SPEED) < 0.35, `espreita: anda a ${Math.round(100 * C.STEALTH_SPEED)}% da velocidade (${dx.toFixed(2)} tiles/s)`);
+  ok(g.k.energy < 1, 'espreitar gasta energia');
+  // só é visto de perto
+  const obs = { x: g.k.x - 6, y: g.k.y, face: 0 };
+  ok(g.k.stealth && !g.canSeeKiller(obs), 'em espreita, a 6 tiles (de frente, na lanterna) NÃO é visto');
+  runFor(g, 0.1, { stealth: false });
+  ok(!g.k.stealth && g.canSeeKiller(obs), 'sem espreita, o mesmo observador o vê');
+  const near = { x: g.k.x - 3, y: g.k.y, face: 0 };
+  runFor(g, 0.05, { stealth: true });
+  ok(g.canSeeKiller(near), 'em espreita, a 3 tiles já é visto');
+  // parado também vale e faz muito menos barulho
+  runFor(g, 0.2, { stealth: true });
+  ok(g.k.stealth && !g.k.moving, 'parado, a espreita também vale (esconder-se)');
+  // atacar quebra a espreita e custa energia
+  const e0 = g.k.energy; g.update(1 / 60, { drop: true, stealth: true });
+  ok(!g.k.stealth && g.k.energy < e0, 'atacar quebra a espreita e custa energia');
+}
+{
+  // energia acaba e depois recarrega
+  const g = killerScene(true); g.s.x = 3; g.s.y = 3; g.k.x = 30.5; g.k.y = 28.5;
+  runFor(g, 15, { stealth: true });
+  ok(!g.k.stealth && g.k.energy < 0.2, 'depois de ~10 s a energia acaba e a espreita para');
+  runFor(g, 3, { stealth: true });
+  ok(!g.k.stealth, 'e não volta enquanto a energia estiver baixa (histerese)');
+  runFor(g, 25, {});
+  ok(g.k.energy > 0.95, 'recarrega em ~20 s');
+}
+{
+  // espreita reduz o alcance do rádio (mede no primeiro quadro, antes de o bot se mexer ou virar)
+  const measure = (stealth) => {
+    const g = DP.createGame({ rng: seeded(11), role: 'killer', bots: 0, training: true });
+    g.s.skillCD = 999; g.s.tool = g.items[0]; g.items[0].holder = g.s; g.s.tool.on = true; g.s.tool.batt = 100;
+    g.k.state = 'chase';
+    for (let i = 0; i < 3; i++) { g.s.x = 30.5; g.s.y = 12.5; g.s.face = Math.PI / 2; g.k.x = 37.5; g.k.y = 12.5; g.update(1 / 60, { stealth }); if (i === 0) g.s.det = g.s.det; }
+    g.s.x = 30.5; g.s.y = 12.5; g.s.face = Math.PI / 2; g.k.x = 37.5; g.k.y = 12.5;
+    return { det: g.s.det, st: g.k.stealth };
+  };
+  const m0 = measure(false), m1 = measure(true);
+  ok(m0.det === 3 && m1.st && m1.det === 0, `rádio a 7 tiles: faixa ${m0.det} (muito perto) sem espreita, ${m1.det} com espreita`);
+}
+{
+  // assassino-IA: espreita só procurando, nunca caçando
+  const g = DP.createGame({ rng: seeded(12), bots: 0, training: true });
+  g.k.state = 'chase'; g.k.aware = 'patrol'; g.s.x = 3; g.s.y = 3; g.s.skillCD = 999;
+  let sneaked = 0, hunted = 0, bad = 0;
+  for (let i = 0; i < 60 * 12; i++) { g.update(1 / 60, {}); if (g.k.stealth) { sneaked++; if (g.k.aware === 'hunt') bad++; } if (g.k.aware === 'hunt') hunted++; }
+  ok(sneaked > 60 && bad === 0, `assassino-IA espreita enquanto patrulha (${sneaked} quadros) e nunca enquanto caça`);
+}
+{
+  // bot pega rádio que viu e usa; congela quando o rádio diz "muito perto" sem ver ninguém
+  const g = DP.createGame({ rng: seeded(13), role: 'killer', bots: 0, training: true });
+  const r = g.items[0]; r.x = r.cx = 30.5; r.y = r.cy = 6.5;
+  g.s.x = 27.5; g.s.y = 6.5; g.s.face = 0; g.s.skillCD = 999;
+  g.k.x = 40.5; g.k.y = 28.5;
+  runFor(g, 4, {});
+  ok(g.s.tool === r, 'o bot vê o rádio, vai até ele e pega');
+  runFor(g, 1, {});
+  ok(g.s.tool.on, 'e liga o rádio para trabalhar');
+  // assassino atrás de parede a <9 tiles com o rádio ligado: o bot fica quieto
+  const g2 = DP.createGame({ rng: seeded(14), role: 'killer', bots: 0, training: true });
+  g2.s.x = 8.5; g2.s.y = 6.5; g2.s.skillCD = 999; g2.s.tool = g2.items[0]; g2.items[0].holder = g2.s; g2.s.tool.on = true; g2.s.tool.batt = 100;
+  g2.k.x = 8.5; g2.k.y = 1.5; g2.k.state = 'chase';
+  let moved = 0; const sx = g2.s.x, sy = g2.s.y;
+  for (let i = 0; i < 60; i++) { g2.update(1 / 60, {}); moved = Math.max(moved, Math.hypot(g2.s.x - sx, g2.s.y - sy)); }
+  ok(g2.s.det === 3 && g2.s.ai.wary > 0 && moved < 0.8, `rádio "muito perto" sem ver ninguém: o bot congela (andou ${moved.toFixed(2)} tiles)`);
+}
+
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
 process.exit(fails ? 1 : 0);

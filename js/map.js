@@ -82,6 +82,9 @@
 
     return {
       W, H, t, indoor, pallets, gens, door, windows, NEED: 5,
+      // onde itens (rádios) podem aparecer: dentro das casas e ao ar livre
+      itemSpots: [[13.5, 10.5], [33.5, 9.5], [13.5, 21.5], [39.5, 21.5], [26.5, 18.5], [30.5, 3.5], [3.5, 28.5], [44.5, 19.5]].map((q) => ({ x: q[0], y: q[1] })),
+      radios: 2,
       spawnSurvivors: [{ x: 24.5, y: 8.5 }, { x: 17.5, y: 10.5 }, { x: 29.5, y: 14.5 }, { x: 10.5, y: 13.5 }],
       spawnKiller: { x: 24.5, y: 26.5 }
     };

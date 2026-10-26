@@ -28,6 +28,7 @@ Princípios herdados do protótipo anterior:
 | 4 | **Janelas e equipe** | 10 janelas animadas (abrir / pular / passar com calma / atravessar quebrando / assassino quebra), **4 sobreviventes** (você + 3 bots, ou 4 bots), **8 geradores**, **porta principal**, fim de partida por equipe. Reescrita do `game.js` para multi-sobrevivente. |
 | 4.1 | **Playtest 1** | Primeira rodada com uma pessoa jogando: ajuste do assassino-jogador, anti "barata tonta" dos bots, telemetria. Ver seção 4. |
 | 6 | **Visão e paridade** | Névoa de guerra (raio + cone de lanterna + memória), bots e assassino-IA com os mesmos sentidos de uma pessoa (sem trapaças), seletor de dificuldade, tabela de tempos `ROUTES`, interruptor de visão no treino. |
+| 7 | **Itens, rádio e stealth** | Sistema genérico de itens no chão (segurar E para pegar), **rádio detector** (pilha de 120 s, 3 faixas de proximidade, sem direção), **stealth do assassino** (Shift / botão ESPR., barra de energia, mais lento e silencioso, invisível ao rádio), bots que usam o rádio. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
 Marcos de qualidade: **126 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
@@ -318,3 +319,19 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 | 12 | Consolidação: README, playbook, artefato final, lista de pendências | suíte completa verde |
 
 **Regras de trabalho:** cada etapa fecha com testes verdes, captura de tela conferida, commit e entrada no playbook (decisões, impasses e números). O artefato é republicado ao fim de cada etapa grande.
+
+### 11.1 Etapa 7 entregue: itens, rádio detector e stealth
+
+**Regras (valores em `CFG`):**
+| Peça | Regra |
+|---|---|
+| Item no chão | segurar **E** perto (`ITEM_RANGE` 1,25 tiles) por `PICK_T` 0,5 s; 1 ferramenta por sobrevivente; E sem alvo solta o item |
+| Rádio | liga/desliga com **Q** (ou botão RÁDIO); pilha `RADIO_BATT` 120 s só gasta ligado; faixas: longe < 24, perto < 15, muito perto < 9 tiles; bipes mais rápidos quanto mais perto; sem direção |
+| Stealth (assassino) | Shift ou botão ESPR.: velocidade ×0,6, ruído ×0,25, só é visto a 3,5 tiles, rádio alcança só ×0,25 (de 24 para 6 tiles); gasta energia 0,10/s e recarrega 0,05/s; histerese para não piscar no zero |
+| Assassino-IA | só espreita ao patrulhar/procurar; ao caçar, corre |
+| Bot | liga o rádio quando não está consertando perto do mapa já "limpo"; busca rádios que viu; congela e fica "cauteloso" 2,5 s quando a faixa 3 toca sem ver o assassino |
+
+**Impasses**
+39. **Rádio "não pegava" no teste de navegador** (`tool false`). Eram dois erros do *teste*, não do jogo: o item estava a 2 tiles (alcance 1,25) e, depois, o assassino-IA em patrulha estava em stealth, o que encolhe o alcance do rádio de 24 para 6 tiles (o mecanismo funcionando como desenhado). Lição: `game.s` aponta para o *último sobrevivente processado*; para o jogador usar `g.survivors.find(x => x.human)`.
+40. **Espreita piscando** com energia 0 (liga/desliga a cada quadro). Solução: histerese (`k.sneakPrev ? 0.02 : STEALTH_MIN`).
+41. **Teste de bot "vendo" o assassino por virar o rosto** quando desligou o rádio. Solução: medir nos primeiros quadros com posições/rosto fixos e assassino a 7 tiles.

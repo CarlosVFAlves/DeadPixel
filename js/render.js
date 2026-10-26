@@ -380,6 +380,23 @@
     if (d.progress > 0 && !open) { px(ctx, '#000', X + 2, Y + TS + 13, Wd - 4, 3); px(ctx, '#7dffa0', X + 3, Y + TS + 14, Math.round((Wd - 6) * d.progress), 1); }
   }
 
+  // ---------- itens ----------
+  function drawItem(ctx, it, tm) {
+    const x = Math.round(it.x * TS), y = Math.round(it.y * TS);
+    const pulse = 0.5 + 0.5 * Math.sin(tm * 4 + it.id);
+    px(ctx, 'rgba(0,0,0,.4)', x - 5, y + 2, 10, 3);
+    ctx.fillStyle = 'rgba(155,211,240,' + (0.10 + 0.10 * pulse) + ')';
+    ctx.beginPath(); ctx.arc(x, y - 1, 8, 0, Math.PI * 2); ctx.fill();
+    if (it.kind === 'radio') {
+      px(ctx, '#2a2e36', x - 4, y - 5, 8, 7); px(ctx, '#4a505c', x - 4, y - 5, 8, 1);
+      px(ctx, '#0d0d13', x - 3, y - 4, 4, 3); px(ctx, '#c9a46a', x + 2, y - 4, 1, 1); px(ctx, '#c9a46a', x + 2, y - 2, 1, 1);
+      px(ctx, '#9aa0ac', x + 2, y - 9, 1, 4);                                    // antena
+      px(ctx, pulse > 0.5 ? '#7dffa0' : '#2a6a40', x - 2, y - 3, 1, 1);          // LED
+    } else {
+      px(ctx, '#7a5530', x - 3, y - 4, 6, 6); px(ctx, '#c9a46a', x - 3, y - 4, 6, 1); px(ctx, '#e9c07a', x - 1, y - 2, 2, 2);
+    }
+  }
+
   // ---------- zona de impacto (ajuda visual) ----------
   function drawZone(ctx, game, tm, vis) {
     for (const nz of game.nearList) if (!vis || vis(nz.sv.x, nz.sv.y)) drawOneZone(ctx, game, tm, nz.pal, nz.sv);
@@ -539,8 +556,9 @@
     const list = [];
     for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.nearList.some((n) => n.pal === p) ? tm : 0) });
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
+    for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
     for (const v of game.survivors) if (!v.dead && !v.escaped && (v === pl || vis(v.x, v.y))) list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) });
-    if (game.k === pl || vis(game.k.x, game.k.y)) list.push({ y: game.k.y, f: () => drawKiller(ctx, game.k, game, tm) });
+    if (game.k === pl || full || game.canSeeKiller(pl)) list.push({ y: game.k.y, f: () => { ctx.globalAlpha = game.k.stealth ? 0.55 : 1; drawKiller(ctx, game.k, game, tm); ctx.globalAlpha = 1; } });
     list.sort((a, b) => a.y - b.y);
     for (const o of list) o.f();
 
@@ -558,7 +576,7 @@
       if (game.near && game.role === 'survivor') text(ctx, 'ESPAÇO', game.near.cx * TS, game.near.cy * TS - 16 + bob, '#ffd23f', { align: 'c' });
       const it = game.pInteract;
       if (it && !(game.role === 'survivor' && game.s.acting)) {
-        const label = { gen: 'SEGURE E', door: 'SEGURE E: ABRIR PORTA', window: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', smash: 'E: QUEBRAR JANELA', kick: 'E: CHUTAR' }[it.type];
+        const label = { gen: 'SEGURE E', item: 'SEGURE E: PEGAR', door: 'SEGURE E: ABRIR PORTA', window: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', smash: 'E: QUEBRAR JANELA', kick: 'E: CHUTAR' }[it.type];
         const bad = it.type === 'break' || it.type === 'kick' || it.type === 'smash';
         text(ctx, label, it.obj.cx * TS, it.obj.cy * TS - (it.type === 'gen' ? 14 : 18) + bob, bad ? '#ff9d5c' : '#7dffa0', { align: 'c' });
       }
@@ -605,6 +623,18 @@
       for (let i = 0; i < 2; i++) text(ctx, '♥', 32 + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
     }
     drawTeam(ctx, game, W);
+    if (!ka && s.tool) {                                                       // rádio: 3 faixas de proximidade + pilha
+      const on = s.tool.on, col = ['#4d4d59', '#7dffa0', '#ffd23f', '#ff4d4d'][on ? s.det : 0];
+      text(ctx, 'RÁDIO', 4, 44, on ? '#cfe8ff' : '#6f6f7c');
+      for (let i = 0; i < 3; i++) px(ctx, on && s.det > i ? col : '#2a2a33', 36 + i * 7, 44, 5, 6);
+      px(ctx, '#2a2a33', 60, 45, 24, 4); px(ctx, s.tool.batt > 20 ? '#7ad0ff' : '#ff9d5c', 61, 46, Math.round(22 * s.tool.batt / game.cfg.RADIO_BATT), 2);
+      if (on && s.det === 3 && Math.floor(tm * 6) % 2) { ctx.fillStyle = 'rgba(255,60,60,.16)'; ctx.fillRect(0, 0, W, H); }
+    }
+    if (ka) {                                                                  // energia da espreita
+      const k = game.k;
+      text(ctx, 'ESPREITA', 4, 44, k.stealth ? '#9bd3f0' : '#8a8a99');
+      px(ctx, '#2a2a33', 52, 45, 30, 4); px(ctx, k.stealth ? '#9bd3f0' : (k.energy < 0.15 ? '#ff9d5c' : '#5d7a8a'), 53, 46, Math.round(28 * k.energy), 2);
+    }
     const gd = game.door.powered;
     text(ctx, 'GERADORES ' + game.gensDone + '/' + game.need, 4, 14, gd ? '#7dffa0' : '#ffb347');
     text(ctx, 'PALLETS ' + game.standing() + '/' + game.pallets.length, 4, 24, '#e9c07a');

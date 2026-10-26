@@ -37,7 +37,7 @@
   const keys = {};
   const joy = { id: null, active: false, bx: 0, by: 0, dx: 0, dy: 0 };
   const held = new Map();        // pointerId -> botão pressionado
-  let dropQueued = false, actQueued = false, pressQueued = false;
+  let dropQueued = false, actQueued = false, pressQueued = false, radioQueued = false;
 
   function resize() {
     const host = canvas.parentElement.getBoundingClientRect();
@@ -69,9 +69,11 @@
         const close = !!(game && !game.over && game.dist < 2.4 && game.k.state === 'chase');
         list.push({ id: 'drop', label: 'ATACAR', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: close, hot: '#ff5c5c' });
         list.push({ id: 'act', label: 'AGIR', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.kInteract), hot: '#ff9d5c' });
+        list.push({ id: 'stealth', label: 'ESPR.', round: true, x: W - 2 * r - 8 - 4 * r2 - 12, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.k.stealth), hot: '#9bd3f0' });
       } else {
         list.push({ id: 'act', label: 'AGIR', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: !!(game && game.interact) });
         list.push({ id: 'drop', label: 'PALLET', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.near) });
+        if (game && game.s.tool) { const r3 = Math.round(r * 0.62); list.push({ id: 'radio', label: 'RÁDIO', round: true, x: W - 2 * r - 8 - 2 * r2 - 6 - 2 * r3 - 5, y: H - 2 * r3 - 10, w: 2 * r3, h: 2 * r3, active: !!game.s.tool.on, hot: '#9bd3f0' }); }
       }
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
       if (game && game.training) list.push({ id: 'vision', label: 'VER TUDO', x: W - 22 - 4 - 52, y: 24, w: 52, h: 13, color: game.fullVision ? '#7dffa0' : '#7ad0ff', sel: !!game.fullVision });
@@ -109,6 +111,7 @@
       case 'start': start(lobbyTraining); break;
       case 'drop': dropQueued = true; break;
       case 'act': actQueued = true; break;
+      case 'radio': radioQueued = true; break;
       case 'pause': if (state === 'play') state = 'pause'; break;
       case 'resume': if (state === 'pause') state = 'play'; break;
       case 'restart': start(training); break;
@@ -181,6 +184,7 @@
       if (code === 'Space' || code === 'Enter') { dropQueued = true; pressQueued = true; }
       if (code === 'KeyP' || code === 'Escape') state = 'pause';
       if (code === 'KeyV' && game && game.training) game.fullVision = !game.fullVision;
+      if (code === 'KeyQ') radioQueued = true;
     } else if (state === 'pause') {
       if (code === 'KeyP' || code === 'Escape' || code === 'Enter') state = 'play';
     } else if (state === 'menu') {
@@ -226,8 +230,9 @@
     // andar (devagar e quieto): Shift, ou arrastar o joystick só um pouquinho
     let walk = !!(keys.ShiftLeft || keys.ShiftRight);
     if (joy.active) { const l = Math.hypot(joy.dx, joy.dy); if (l > 0.18 && l < 0.55 && !keys.KeyW && !keys.KeyA && !keys.KeyS && !keys.KeyD) walk = true; }
-    const out = { ax, ay, drop: dropQueued, act, actPress: actQueued, press: pressQueued, walk };
-    dropQueued = actQueued = pressQueued = false;
+    const stealth = role === 'killer' && !!(keys.ShiftLeft || keys.ShiftRight || [...held.values()].includes('stealth'));
+    const out = { ax, ay, drop: dropQueued, act, actPress: actQueued, press: pressQueued, walk, radio: radioQueued, stealth };
+    dropQueued = actQueued = pressQueued = radioQueued = false;
     return out;
   }
 
@@ -271,7 +276,7 @@
   function lobbyUI() { return { role, difficulty, training: lobbyTraining, coins, hist, best: bestText(), toast: toast ? toast.text : null }; }
 
   // ---------- laço ----------
-  let last = performance.now(), beatT = 0;
+  let last = performance.now(), beatT = 0, radioT = 0;
 
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -283,6 +288,11 @@
       const steps = Math.ceil(dt / (1 / 60));
       for (let i = 0; i < steps; i++) { game.update(dt / steps, i === 0 ? inp : { ax: inp.ax, ay: inp.ay, act: inp.act }); }
 
+      // bipe do rádio: mais rápido quanto mais perto
+      if (!game.over && game.role === 'survivor' && game.s.det > 0) {
+        radioT -= dt;
+        if (radioT <= 0) { DP.audio.sfx.beep(game.s.det); radioT = [0, 1.3, 0.65, 0.28][game.s.det]; }
+      } else radioT = 0;
       // batimento do coração (raio de terror)
       if (!game.over && game.k.state !== 'intro') {
         const near = 1 - Math.min(1, game.dist / 14);
@@ -311,7 +321,7 @@
       if (state === 'pause') {
         DP.render.overlay(ctx, W, H, 0.7);
         text(ctx, 'PAUSADO', Math.round(W / 2), Math.round(H * 0.2), '#fff', { align: 'c' });
-        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU JANELA, CHUTAR GERADOR (MEXER CANCELA). M: SOM.' : 'WASD/SETAS: MOVER. SHIFT: ANDAR (QUIETO). SEGURE E: CONSERTAR / ABRIR JANELA. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: SOM.', Math.floor((W - 16) / 6));
+        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. SHIFT (SEGURAR): ESPREITA. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU JANELA, CHUTAR GERADOR. M: SOM.' : 'WASD/SETAS: MOVER. SHIFT: ANDAR (QUIETO). Q: RÁDIO. SEGURE E: CONSERTAR / ABRIR JANELA / PEGAR. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: SOM.', Math.floor((W - 16) / 6));
         tips.forEach((l, i) => text(ctx, l, Math.round(W / 2), Math.round(H * 0.2) + 14 + i * 9, '#a9a9b5', { align: 'c' }));
       }
     }

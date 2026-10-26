@@ -43,9 +43,10 @@ Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celula
 | Celular | Teclado | Ação |
 |---|---|---|
 | Arrastar na tela (joystick flutuante; **arraste pouco = andar**) | WASD / setas · **Shift = andar** (devagar e quieto) | mover |
-| **AGIR** (segurar) | **E** (segurar) | consertar gerador / abrir janela / abrir a porta principal |
+| **AGIR** (segurar) | **E** (segurar) | consertar gerador / abrir janela / abrir a porta principal / **pegar item** (rádio) no chão |
 | **PALLET** | **Espaço** (ou E sem gerador por perto) | derrubar o pallet ao alcance |
 | tocar na tela com outro dedo | **Espaço** | acertar o skill check |
+| **RÁDIO** (aparece ao pegar) | **Q** | liga/desliga o rádio detector (3 faixas de proximidade do assassino; ele não aparece se estiver em espreita de longe) |
 | II | P / Esc | pausar |
 | — | R | reiniciar |
 | — | M | liga/desliga som |
@@ -81,6 +82,7 @@ No treino as janelas e os pallets voltam sozinhos depois de ~12 s.
 |---|---|---|
 | joystick | WASD / setas | andar (4,55 tiles/s; os sobreviventes correm ~4,4). Empurre contra janela aberta/quebrada para passar |
 | **ATACAR** | **Espaço** | golpe com bote (ergue 0,16 s, avança ~2,5 tiles). Tem um pouco de mira assistida |
+| **ESPR.** (segurar) | **Shift** | **espreitar**: mais lento, quase silencioso, só visto de perto e quase invisível ao rádio; gasta energia |
 | **AGIR** | **E** | **quebrar** pallet caído (~2 s) ou **janela** (~1 s), ou **chutar** gerador com progresso (−15%). Mexer cancela |
 
 - **Você ganha** se **menos da metade** (0 ou 1) dos 4 escapar. Cada sobrevivente cai com 2 acertos.

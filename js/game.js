@@ -78,6 +78,13 @@
     HEAR_ERR: 2.2,       // erro (tiles) na posição de algo que só se OUVE
     KN_MOVE: 6, KN_ACT: 9,   // alcance em que se ouve o assassino: andando / golpe e quebra
 
+    // itens, rádio detector (sobrevivente) e stealth (assassino)
+    ITEM_RANGE: 1.25, PICK_T: 0.5,
+    RADIO_BATT: 120,                   // segundos de pilha
+    DET_R: 24, DET_NEAR: 15, DET_VERY: 9,   // faixas do detector (tiles): longe / perto / muito perto
+    STEALTH_SPEED: 0.6, STEALTH_NOISE: 0.25, STEALTH_SEE: 3.5,   // espreita: devagar, 25% do barulho e do alcance do rádio, só visto a 3,5 tiles
+    STEALTH_DRAIN: 0.1, STEALTH_REGEN: 0.05, STEALTH_MIN: 0.15,  // energia: ~10 s ligada, ~20 s para recarregar
+
     // IA do sobrevivente
     AI_FLEE: 14,         // começa a fugir dentro desta distância
     AI_SKILL_ERR: 0.40,  // erro (rad) no skill check: ~85% de acerto
@@ -125,7 +132,7 @@
     };
 
     function makeAI() {
-      return { mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, zoneT: 0, planAge: 0, dx: 0, dy: 0, K: null, est: null, hearT: 0 };
+      return { mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, zoneT: 0, planAge: 0, dx: 0, dy: 0, K: null, est: null, hearT: 0, fetch: null, wary: 0 };
     }
     const nSurv = 1 + bots;
     for (let i = 0; i < nSurv; i++) {
@@ -135,7 +142,7 @@
         id: i, x: sp.x, y: sp.y, face: Math.PI / 2,
         hp: 2, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
         noise: 0, acting: null, skill: null, skillCD: 4 + i * 1.7, tick: 0,
-        dead: false, escaped: false, near: null, interact: null, human,
+        dead: false, escaped: false, near: null, interact: null, human, item: null, tool: null, pickP: 0, pickFor: null, det: 0,
         ai: human ? null : makeAI(), usedWin: 0
       });
     }
@@ -146,7 +153,7 @@
         x: map.spawnKiller.x, y: map.spawnKiller.y, face: -Math.PI / 2,
         state: role === 'killer' ? 'chase' : 'intro', t: 0, dur: 0, trip: 0, tripCD: 0, tripDir: 0, ph: 0, vx: 0, vy: 0, ldx: 0, ldy: 0, hitDone: false, pal: null, brkKind: 'pallet', brk: 0,
         moving: false, walk: 0, hesitate: false, vault: null,
-        aware: 'patrol', lost: 0, last: null, lastV: null, wait: 0, goal: null, target: null, seenNow: false, genMem: {}, hearT: 0
+        aware: 'patrol', lost: 0, last: null, lastV: null, wait: 0, goal: null, target: null, seenNow: false, genMem: {}, hearT: 0, stealth: false, sneakPrev: false, energy: 1
       };
     }
 
@@ -173,6 +180,14 @@
     }
     g.winAt = winAt;
     g.gens = map.gens.map((o) => ({ tx: o.tx, ty: o.ty, cx: o.tx + 0.5, cy: o.ty + 0.5, progress: 0, done: false, visited: -99, w: 0 }));
+    // itens soltos no mapa (rádios). Cada item: { kind, x, y, cx, cy, holder, batt, on }
+    g.items = [];
+    function spawnItem(kind, x, y) { const it = { id: g.items.length, kind, x, y, cx: x, cy: y, holder: null, batt: kind === 'radio' ? CFG.RADIO_BATT : 0, on: false }; g.items.push(it); return it; }
+    if (map.itemSpots && map.radios) {
+      const spots = map.itemSpots.slice();
+      for (let i = 0; i < map.radios && spots.length; i++) { const j = (rnd() * spots.length) | 0; const p0 = spots.splice(j, 1)[0]; spawnItem('radio', p0.x, p0.y); }
+    }
+    g.spawnItem = spawnItem;
     g.door = { tx: map.door.tx, ty: map.door.ty, w: map.door.w, cx: map.door.tx + map.door.w / 2, cy: 0.5, progress: 0, powered: false, opened: false, t: 99, visited: -99 };
 
     const k = g.k;
@@ -517,7 +532,25 @@
         const d = Math.hypot(s.x - w.cx, s.y - w.cy);
         if (d < CFG.WIN_RANGE && d < bd) { bd = d; best = { type: 'window', obj: w }; }
       }
+      for (const it of g.items) {
+        if (it.holder || (it.kind === 'radio' && s.tool)) continue;
+        const d = Math.hypot(s.x - it.x, s.y - it.y);
+        if (d < CFG.ITEM_RANGE && d < bd) { bd = d; best = { type: 'item', obj: it }; }
+      }
       return best;
+    }
+    function dropItem(sv, it) {
+      if (!it) return;
+      it.holder = null; it.x = it.cx = sv.x; it.y = it.cy = sv.y;
+      if (sv.tool === it) { sv.tool = null; it.on = false; }
+      if (sv.item === it) sv.item = null;
+    }
+    function pickUp(it) {
+      if (it.kind === 'radio') { if (s.tool) return; s.tool = it; }
+      else { if (s.item) dropItem(s, s.item); s.item = it; }
+      it.holder = s;
+      sfx('pick', pan(s.x));
+      if (s.human) popup(it.kind === 'radio' ? 'RÁDIO! (Q LIGA/DESLIGA)' : 'PEGOU', s.x, s.y - 1.5, '#9bd3f0');
     }
     function startSkill() { s.skill = { t: 0, tz: 1.5 + rnd() * 3.6 }; if (s.human) sfx('skill'); }
     function endSkill(result) {
@@ -571,6 +604,11 @@
         o.progress = Math.min(1, o.progress + dt / routeT('door'));
         if (s.tick <= 0) { s.tick = 0.4; sfx('repair', pan(o.cx)); }
         if (o.progress >= 1) { o.opened = true; o.t = 0; sfx('doorOpen'); popup('PORTA ABERTA!', o.cx, 3, '#7dffa0'); }
+      } else if (tg.type === 'item') {
+        s.noise = 1;
+        if (s.pickFor !== o) { s.pickFor = o; s.pickP = 0; }
+        s.pickP += dt / CFG.PICK_T;
+        if (s.pickP >= 1) { s.pickP = 0; s.pickFor = null; pickUp(o); }
       } else {                                     // janela: abre sem barulho
         s.noise = 0.8;
         o.prog += dt / CFG.WIN_OPEN_T;
@@ -733,14 +771,18 @@
       let ax = inp.ax || 0, ay = inp.ay || 0;
       const len = Math.hypot(ax, ay);
       if (len > 1) { ax /= len; ay /= len; }
+      // espreita (segurar): vale andando ou parado (se esconder), e gasta energia
+      const sneak = !inp.drop && !!inp.stealth && (k.energy > (k.sneakPrev ? 0.02 : CFG.STEALTH_MIN));
+      if (sneak) { k.stealth = true; k.energy = Math.max(0, k.energy - (CFG.STEALTH_DRAIN + CFG.STEALTH_REGEN) * dt); }
       if (len > 0.12) {
         const ox = k.x, oy = k.y;
-        moveBy(k, ax * CFG.K_SPEED_P * dt, ay * CFG.K_SPEED_P * dt, CFG.R_K);
+        moveBy(k, ax * CFG.K_SPEED_P * (sneak ? CFG.STEALTH_SPEED : 1) * dt, ay * CFG.K_SPEED_P * (sneak ? CFG.STEALTH_SPEED : 1) * dt, CFG.R_K);
         k.face = Math.atan2(ay, ax);
         if (Math.hypot(k.x - ox, k.y - oy) > 0.0005) { k.moving = true; k.walk += dt * 11; }
         if (tryKillerVault(ax, ay, len)) return;
       }
-      if (inp.drop) {                                  // ATACAR (com um pouco de mira assistida)
+      if (inp.drop) {                                  // ATACAR (com um pouco de mira assistida); sair da espreita custa energia
+        if (k.sneakPrev) k.energy = Math.max(0, k.energy - 0.15);
         let lx = Math.cos(k.face), ly = Math.sin(k.face);
         if (s && d < CFG.AIM_RANGE && hasLOS(k, s) && Math.abs(angDiff(Math.atan2(dy, dx), k.face)) < CFG.AIM_CONE) { lx = dx / (d || 1); ly = dy / (d || 1); }
         k.ldx = lx; k.ldy = ly; k.face = Math.atan2(ly, lx);
@@ -790,6 +832,8 @@
     function updateKiller(dt, inp) {
       unstick(k, CFG.R_K);
       k.moving = false;
+      k.sneakPrev = k.stealth; k.stealth = false;                       // o stealth é recalculado a cada quadro
+      k.energy = Math.min(1, k.energy + CFG.STEALTH_REGEN * dt);
       // quem o assassino está olhando agora: o alvo atual, senão o mais próximo
       let tgt = (k.target && alive(k.target)) ? k.target : nearestAlive(k);
       if (tgt) use(tgt);
@@ -918,6 +962,9 @@
 
       // ---- objetivo de movimento ----
       let gx, gy, speed = CFG.K_SPEED * diff.kp;
+      if (!hunting && (k.aware === 'search' || k.aware === 'patrol') && k.energy > (k.sneakPrev ? 0.02 : 0.5)) {   // espreita enquanto procura
+        k.stealth = true; k.energy = Math.max(0, k.energy - (CFG.STEALTH_DRAIN + CFG.STEALTH_REGEN) * dt); speed *= CFG.STEALTH_SPEED;
+      }
       if (hunting) {
         if (seen) { gx = s.x; gy = s.y; }
         else {                                            // perdeu de vista: segue para onde a pessoa ia
@@ -1109,11 +1156,11 @@
     function killerNoise() {
       if (k.state === 'lunge' || k.state === 'windup' || k.state === 'break') return CFG.KN_ACT;
       if (k.state === 'stun' || k.state === 'recover' || k.state === 'intro') return 2;
-      return k.moving ? CFG.KN_MOVE : 2;
+      return (k.moving ? CFG.KN_MOVE : 2) * (k.stealth ? CFG.STEALTH_NOISE : 1);
     }
     function perceiveKiller(dt) {
       const bm = botSkill(), d = Math.hypot(k.x - s.x, k.y - s.y);
-      if (canSee(s.x, s.y, s.face, false, k.x, k.y, bm)) {
+      if (canSee(s.x, s.y, s.face, false, k.x, k.y, bm) && (!k.stealth || d <= CFG.STEALTH_SEE)) {
         ai.K = { x: k.x, y: k.y, vx: k.vx, vy: k.vy, state: k.state, live: true };
         ai.lk = { x: k.x, y: k.y }; ai.aware = 4;
       } else if (d < killerNoise() * bm) {
@@ -1131,8 +1178,15 @@
 
     function aiSurvivor(dt) { return smoothOut(aiSurvivorRaw(dt), dt); }
     function aiSurvivorRaw(dt) {
-      const out = { ax: 0, ay: 0, act: false, drop: false, press: false, actPress: false, walk: false };
+      const out = { ax: 0, ay: 0, act: false, drop: false, press: false, actPress: false, walk: false, radio: false };
       const K = perceiveKiller(dt);
+      // rádio: liga para trabalhar, desliga quando foge ou não precisa (economiza pilha)
+      if (s.tool && s.tool.batt > 0) {
+        const want = !ai.fetch && (ai.aware <= 0 || (K && !K.live)) && !s.vault;
+        out.radio = want !== s.tool.on;
+      }
+      // "muito perto" no rádio sem ver o assassino: congela e fica quieto por um instante
+      if (s.det === 3 && !(K && K.live)) ai.wary = 2.5; else ai.wary = Math.max(0, ai.wary - dt);
       const kdx = K ? K.x - s.x : 0, kdy = K ? K.y - s.y : 0, kd = K ? Math.hypot(kdx, kdy) : 99;
 
       // skill check: o "jogador" aperta com um pequeno erro
@@ -1194,7 +1248,17 @@
         winPass = k0;
         return out;
       }
-      if (ai.mode === 'exit') tg = g.door;
+      // um rádio à vista? vai pegar (só quem ainda não tem)
+      if (!s.tool && !ai.fetch) {
+        for (const it of g.items) {
+          if (it.kind !== 'radio' || it.holder) continue;
+          if (canSee(s.x, s.y, s.face, false, it.x, it.y, botSkill())) { ai.fetch = it; ai.fieldT = 0; break; }
+        }
+      }
+      if (ai.fetch && (ai.fetch.holder || s.tool)) ai.fetch = null;
+      if (ai.wary > 0 && !fleeing) { out.walk = true; winPass = k0; return out; }          // quieto: não trabalha nem anda
+      if (ai.fetch) tg = ai.fetch;
+      else if (ai.mode === 'exit') tg = g.door;
       else {
         if (!ai.target || !g.gens.includes(ai.target) || ai.target.done) {
           dijkstra(fS, s.x, s.y, true);
@@ -1245,8 +1309,17 @@
         sv.interact = findInteract();
         const sin = sv.human ? inp : aiSurvivor(dt);
         if (s.skill && (sin.press || sin.drop || sin.actPress)) pressSkill();
-        else if (sin.drop || (sin.actPress && !sv.interact)) tryDrop();
+        else if (sin.drop || (sin.actPress && !sv.interact)) { if (!(sin.drop || findDroppable()) && s.item) dropItem(s, s.item); else tryDrop(); }
         updateSurvivor(dt, sin);
+
+        // rádio: liga/desliga, gasta pilha e mede a proximidade do assassino (3 faixas, sem direção)
+        if (sin.radio && s.tool && s.tool.batt > 0) { s.tool.on = !s.tool.on; sfx('click'); }
+        if (s.tool && s.tool.on) { s.tool.batt -= dt; if (s.tool.batt <= 0) { s.tool.batt = 0; s.tool.on = false; if (s.human) popup('RÁDIO SEM PILHA', s.x, s.y - 1.5, '#ff9d5c'); } }
+        s.det = 0;
+        if (s.tool && s.tool.on) {
+          const dd = Math.hypot(k.x - s.x, k.y - s.y), m = k.stealth ? CFG.STEALTH_NOISE : 1;
+          if (dd < CFG.DET_R * m) s.det = dd < CFG.DET_VERY * m ? 3 : dd < CFG.DET_NEAR * m ? 2 : 1;
+        }
 
         // skill checks só acontecem enquanto conserta um gerador
         if (alive(sv) && s.acting && s.acting.type === 'gen') {
@@ -1314,6 +1387,8 @@
     g.alert = alert;
     g.alive = alive;
     g.canSee = (obs, tx, ty) => canSee(obs.x, obs.y, obs.face, obs === k, tx, ty, 1);
+    // assassino em stealth só é visto bem de perto
+    g.canSeeKiller = (obs) => canSee(obs.x, obs.y, obs.face, false, k.x, k.y, 1) && (!k.stealth || Math.hypot(k.x - obs.x, k.y - obs.y) <= CFG.STEALTH_SEE);
     g.castRay = castRay;
     g.routeTime = routeT;
     g.standing = () => g.pallets.filter((p) => p.state === 'up').length;

@@ -110,6 +110,9 @@
     winOpen(pan) { noise(0.28, 0.22, 900, 'bandpass', 3, pan, 0, 2200); tone(180, 0.2, 'sawtooth', 0.06, 260, pan); },
     cut(pan) { tone(880, 0.16, 'sawtooth', 0.2, 300, pan); noise(0.12, 0.35, 2800, 'bandpass', 2, pan); },
     doorOpen() { noise(0.7, 0.4, 500, 'lowpass', 1.2, 0, 0, 120); tone(70, 0.6, 'sawtooth', 0.14, 45); for (let i = 0; i < 3; i++) tone(330 * Math.pow(1.26, i), 0.3, 'triangle', 0.14, 0, 0, 0.2 + i * 0.1); },
+    pick(pan) { tone(520, 0.07, 'square', 0.12, 780, pan); tone(780, 0.09, 'square', 0.1, 1040, pan, 0.06); },
+    // bipe do rádio: faixa 1 (longe) grave e lento, 3 (muito perto) agudo e rápido
+    beep(band) { tone(band === 3 ? 1560 : band === 2 ? 1170 : 780, 0.07, 'square', band === 3 ? 0.2 : 0.13, 0); },
     click() { tone(660, 0.05, 'square', 0.1, 440); },
     // batida de coração (raio de terror)
     heart(vol) {
