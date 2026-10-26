@@ -3,6 +3,7 @@
   'use strict';
   const DP = root.DP = root.DP || {};
   const TS = 16;
+  DP.style = DP.style || { hd: /[?&]hd\b/.test((typeof location !== 'undefined' && location.search) || '') };      // ?hd na URL liga a edição de luz
   const text = (...a) => DP.font.text(...a);
 
   function hash(x, y, s) {
@@ -48,6 +49,23 @@
           }
           if (gk === 0 && r > 0.93) { px(c, '#3d5a3a', X + 5, Y + 9, 1, 3); px(c, '#3d5a3a', X + 7, Y + 8, 1, 4); px(c, '#3d5a3a', X + 9, Y + 10, 1, 2); }
         }
+      }
+    }
+    if (HD()) {                                           // edição HD: manchas grandes de musgo/terra e mais textura no chão, sem mudar o mapa
+      for (let by = 0; by < H; by += 2) for (let bx = 0; bx < W; bx += 2) {
+        const i = by * W + bx, hv = hash(bx, by, 77);
+        if (indoor[i] || (t[i] !== 0 && t[i] !== 6)) continue;
+        const X = bx * TS + hash(bx, by, 78) * 16, Y = by * TS + hash(bx, by, 79) * 16, rr = 14 + hv * 22;
+        const gr = c.createRadialGradient(X, Y, 1, X, Y, rr);
+        const col = hv < 0.4 ? '34,70,40' : hv < 0.7 ? '60,46,30' : '12,20,16';
+        gr.addColorStop(0, 'rgba(' + col + ',0.20)'); gr.addColorStop(1, 'rgba(' + col + ',0)');
+        c.fillStyle = gr; c.fillRect(X - rr, Y - rr, rr * 2, rr * 2);
+      }
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (t[i] !== 0 || indoor[i]) continue;
+        for (let n = 0; n < 3; n++) { const hx = hash(x, y, 90 + n); if (hx < 0.5) px(c, hx < 0.25 ? 'rgba(255,255,255,.035)' : 'rgba(0,0,0,.10)', x * TS + ((hash(x, y, 93 + n) * 15) | 0), y * TS + ((hash(x, y, 96 + n) * 15) | 0), 1 + (hx < 0.1 ? 1 : 0), 1); }
+        if (hash(x, y, 120) < 0.05) { px(c, 'rgba(0,0,0,.22)', x * TS + 3, y * TS + 5, 7, 1); px(c, 'rgba(0,0,0,.22)', x * TS + 8, y * TS + 6, 1, 4); }   // rachaduras/gravetos
       }
     }
     // água
@@ -665,6 +683,52 @@
   }
 
   // ---------- névoa de guerra: raio ambiente + cone da lanterna, com linha de vista; o que já foi visto fica "na memória" ----------
+  // ---------- edição "HD" (luz): só liga com DP.style.hd; não altera nenhuma regra ----------
+  const HD = () => !!(DP.style && DP.style.hd);
+  function noiseTile() {
+    if (R.noise) return R.noise;
+    const c = document.createElement('canvas'); c.width = c.height = 96;
+    const g = c.getContext('2d'), im = g.createImageData(96, 96);
+    for (let i = 0; i < 96 * 96; i++) { const v = (Math.random() * 255) | 0; im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255; }
+    g.putImageData(im, 0, 0); R.noise = c; return c;
+  }
+  // luz quente da lanterna (só dentro do que a névoa deixa ver) + brilho frio ambiente + poeira no cone
+  function hdLight(ctx, game, W, H, ox, oy, face, V, amb, cone) {
+    if (!R.lightCv || R.lightCv.width !== W || R.lightCv.height !== H) { R.lightCv = document.createElement('canvas'); R.lightCv.width = W; R.lightCv.height = H; R.lightCtx = R.lightCv.getContext('2d'); }
+    const L = R.lightCtx, tm = R.tmHD || 0, flick = 0.94 + 0.04 * Math.sin(tm * 21) + 0.02 * Math.sin(tm * 7.3);
+    L.globalCompositeOperation = 'source-over'; L.clearRect(0, 0, W, H);
+    // ambiente: pequena luz fria ao redor de quem joga
+    L.beginPath(); for (let i = 0; i < amb.length; i += 2) { if (i) L.lineTo(amb[i], amb[i + 1]); else L.moveTo(amb[i], amb[i + 1]); } L.closePath();
+    const ag = L.createRadialGradient(ox, oy, 2, ox, oy, V.r * TS);
+    ag.addColorStop(0, 'rgba(215,200,170,' + (0.20 * flick) + ')'); ag.addColorStop(0.6, 'rgba(160,160,170,' + (0.07 * flick) + ')'); ag.addColorStop(1, 'rgba(110,130,180,0)');
+    L.fillStyle = ag; L.fill();
+    // cone: luz quente com núcleo mais forte e borda macia
+    L.beginPath(); L.moveTo(ox, oy); for (let i = 0; i < cone.length; i += 2) L.lineTo(cone[i], cone[i + 1]); L.closePath();
+    const dx = Math.cos(face), dy = Math.sin(face), len = V.cone * TS;
+    const cg = L.createLinearGradient(ox, oy, ox + dx * len, oy + dy * len);
+    cg.addColorStop(0, 'rgba(255,226,170,' + (0.50 * flick) + ')'); cg.addColorStop(0.35, 'rgba(255,205,130,' + (0.34 * flick) + ')'); cg.addColorStop(1, 'rgba(255,170,90,0)');
+    L.fillStyle = cg; L.fill();
+    // poeira no feixe
+    L.fillStyle = 'rgba(255,240,200,.55)';
+    for (let i = 0; i < 26; i++) {
+      const t0 = (i * 0.37 + tm * (0.05 + (i % 5) * 0.012)) % 1, off = Math.sin(i * 12.9898) * V.half * 0.9;
+      const d = (0.15 + t0 * 0.8) * len, a = face + off + Math.sin(tm * 0.7 + i) * 0.04;
+      const x = ox + Math.cos(a) * d, y = oy + Math.sin(a) * d + Math.sin(tm * 0.9 + i * 2) * 3;
+      L.globalAlpha = 0.35 + 0.35 * Math.sin(tm * 1.7 + i); L.fillRect(Math.round(x), Math.round(y), 1, 1);
+    }
+    L.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(R.lightCv, 0, 0); ctx.globalCompositeOperation = 'source-over';
+  }
+  // correção de cor (sombras azuladas) + granulado de filme: por cima de tudo, antes do HUD
+  function hdGrade(ctx, W, H, tm) {
+    ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = 'rgb(228,230,242)'; ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = 0.11;
+    const n = noiseTile(), seed = Math.floor(tm * 18);
+    const ox = (seed * 37) % 96, oy = (seed * 59) % 96;
+    for (let y = -oy; y < H; y += 96) for (let x = -ox; x < W; x += 96) ctx.drawImage(n, x, y);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+
   function drawFog(ctx, game, W, H, cx, cy) {
     const mw = game.map.W, mh = game.map.H;
     if (!R.seen || R.seen.length !== mw * mh) R.seen = new Uint8Array(mw * mh);
@@ -692,11 +756,12 @@
       return out;
     };
     // círculo ambiente
-    const N = 140;
+    const N = 140, ambPts = [], conePts = [];
     f.beginPath();
     for (let i = 0; i < N; i++) {
       const a = i / N * Math.PI * 2, l = reach(a, V.r) * TS;
       const px_ = ox + Math.cos(a) * l, py_ = oy + Math.sin(a) * l;
+      ambPts.push(px_, py_);
       if (i) f.lineTo(px_, py_); else f.moveTo(px_, py_);
     }
     f.closePath();
@@ -709,6 +774,7 @@
     for (let i = 0; i <= M; i++) {
       const a = face - V.half + (i / M) * 2 * V.half, l = reach(a, V.cone) * TS;
       f.lineTo(ox + Math.cos(a) * l, oy + Math.sin(a) * l);
+      conePts.push(ox + Math.cos(a) * l, oy + Math.sin(a) * l);
     }
     f.closePath();
     const lg = f.createLinearGradient(ox, oy, ox + Math.cos(face) * V.cone * TS, oy + Math.sin(face) * V.cone * TS);
@@ -716,6 +782,7 @@
     f.fillStyle = lg; f.fill();
     f.globalCompositeOperation = 'source-over';
     ctx.drawImage(R.fog, 0, 0);
+    if (HD()) hdLight(ctx, game, W, H, ox, oy, face, V, ambPts, conePts);
   }
 
   function drawWorld(ctx, game, W, H, tm) {
@@ -794,11 +861,13 @@
     }
     ctx.globalAlpha = 1;
     ctx.restore();
+    R.tmHD = tm;
     if (!full) drawFog(ctx, game, W, H, cx, cy);
 
     // perigo = proximidade do assassino (raio de terror) — só para quem joga de sobrevivente
     const danger = game.role === 'killer' || game.k.state === 'intro' ? 0 : Math.max(0, 1 - game.dist / 11);
     vignette(ctx, W, H, danger, tm);
+    if (HD()) hdGrade(ctx, W, H, tm);
     if (game.role === 'killer' && !game.over) drawNoiseArrows(ctx, game, W, H, cx, cy, tm);
     if (game.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.5, game.flash * 1.5) + ')'; ctx.fillRect(0, 0, W, H); }
     return danger;

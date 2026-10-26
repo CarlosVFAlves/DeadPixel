@@ -54,6 +54,10 @@ O **pallet** continua sendo a principal defesa (veja abaixo); as **janelas** sã
 
 Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celular).
 
+## Edição "Luz" (HD, opcional)
+
+`python3 tools/build-single.py saida.html --hd` gera uma variante com lanterna quente, correção de cor, granulado e mais textura no chão (ou abra `index.html?hd`). A jogabilidade é idêntica; é um experimento de estilo (ver Playbook 10.10 e 11.9).
+
 ## Controles
 
 Dentro do jogo: menu → **COMO JOGAR** (ou tecla `H`; também no menu de pausa). Os botões na tela mostram a tecla correspondente quando você usa teclado, e o botão AGIR escreve a ação do momento. **Skill check:** `Espaço` (ou `E`) no PC, toque na tela no celular.

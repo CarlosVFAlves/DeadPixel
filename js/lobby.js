@@ -107,7 +107,7 @@
     text(ctx, 'DEAD PIXEL', 0, 0, '#e23a3a', { align: 'c' });
     ctx.restore();
     const subY = Math.round(H * 0.07) + 7 * sc + 5;
-    text(ctx, 'PROTÓTIPO 10: ACAMPAMENTO', cx, subY, '#e9c07a', { align: 'c' });
+    text(ctx, DP.style && DP.style.label ? 'ACAMPAMENTO · ' + DP.style.label : 'PROTÓTIPO 10: ACAMPAMENTO', cx, subY, '#e9c07a', { align: 'c' });
     // prévia: o personagem principal e o assassino apagado, à espreita
     const ps = H >= 300 ? 3 : H >= 230 ? 2 : 1;
     const feet = Math.min(Math.round(H * 0.5) - 10, subY + 14 + 22 * ps);

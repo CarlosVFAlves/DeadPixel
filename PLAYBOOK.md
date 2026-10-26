@@ -36,6 +36,7 @@ Princípios herdados do protótipo anterior:
 | 12 | **Consolidação (v0.1)** | Mapa de campo também para o assassino, viatura da polícia, tela de fim com a rota usada, dicas de pausa, README/Playbook revisados, lista de pendências. |
 | 12.1 | **Playtest 2** | Feedback do assassino no mapa grande: minimapa, visão maior, bots mais lentos, stealth menos lento, árvores sem "grudar", **armários** para se esconder, assassino-jogador nasce perto. |
 | 12.2 | **Playtest 2b** | Botões claros (tecla em cada botão, legenda da ação, dica do skill check), tela COMO JOGAR, marcador "você" no minimapa deixa de ser vermelho, correção da saída do armário, armário redesenhado. |
+| 12.3 | **Edição Luz (HD)** | Variante opcional (`python3 tools/build-single.py saida.html --hd` ou `?hd` na URL): caminho 1 da 10.10 (mesma grade de 16 px, mais luz). A versão padrão não muda. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
 Marcos de qualidade: **243 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
@@ -505,6 +506,16 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 
 **Impasse 60:** a ajuda estourava em telas estreitas (nove linhas por item). Solução: monta blocos de texto e **pagina pelo espaço disponível** (de 2 a 5 páginas conforme a tela), com teste em 7 tamanhos.
 **Impasse 61:** a dica de teclado só faz sentido para quem usa teclado: `DP.ui.keys` começa ligado em telas sem toque e liga/desliga conforme a última entrada (tecla ou toque).
+
+### 11.9 Edição "Luz" (HD): experimento visual separado
+
+Pedido: uma versão **sem mexer na atual**, para ver o estilo da imagem de referência. Implementado o **caminho 1** da seção 10.10 como variante ligada por opção (`DP.style.hd`), então o artefato "normal" continua exatamente como estava.
+- **Lanterna quente:** o cone ganha luz âmbar com núcleo mais forte e borda macia, desenhada com o mesmo polígono da névoa (só ilumina o que a visão deixa ver: não vaza por paredes), com leve tremulação; ao redor, um brilho ambiente neutro pequeno.
+- **Poeira** flutuando dentro do feixe.
+- **Correção de cor** (sombras levemente azuladas) e **granulado de filme** animado por cima de tudo, antes do HUD.
+- **Chão com mais textura:** manchas grandes de musgo/terra/sombra e pequenas rachaduras/gravetos (gerados uma vez, no mapa estático).
+- Nada disso altera regras, colisão, IA ou testes. Custo: uma camada de luz e uma de granulado por quadro.
+- Ajuste feito durante o desenvolvimento: a primeira correção de cor azulava demais o piso de madeira e deixava tudo cinza; ficou mais neutra (multiplicação 228/230/242 e granulado a 11%).
 
 ### 10.10 Referência de estilo: "de quantos bits é isso?" (para discussão, nada implementado)
 
