@@ -6,7 +6,7 @@
   const DP = root.DP = root.DP || {};
 
   const W = 144, H = 96;
-  const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2, T_GEN = 3, T_GATE = 4, T_WIN = 5, T_TREE = 6, T_WATER = 7;
+  const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2, T_GEN = 3, T_GATE = 4, T_WIN = 5, T_TREE = 6, T_WATER = 7, T_VEH = 8;
   const G_GRASS = 0, G_DIRT = 1, G_SAND = 2, G_PLANK = 3, G_GRAVEL = 4;
   const PLAZA = { x: 71, y: 47 };
 
@@ -234,6 +234,16 @@
     t[idx(phone.tx, phone.ty)] = T_GEN;
     pois.push({ kind: 'phone', x: phone.tx + 0.5, y: phone.ty + 0.5, r: 5 });
 
+    // ---------- veículos: carro no estacionamento (de frente para o portão) e barco na ponta do cais ----------
+    const CAR = { x: 74, y: 8, w: 2, h: 3 };
+    for (let yy = 0; yy < CAR.h; yy++) for (let xx = 0; xx < CAR.w; xx++) { t[idx(CAR.x + xx, CAR.y + yy)] = T_VEH; ground[idx(CAR.x + xx, CAR.y + yy)] = G_GRAVEL; }
+    const vehicles = [
+      { kind: 'car', cx: CAR.x + CAR.w / 2, cy: CAR.y + CAR.h / 2, w: CAR.w, h: CAR.h, tx: CAR.x, ty: CAR.y, range: 2.8, stand: { x: CAR.x + CAR.w / 2, y: CAR.y + CAR.h + 0.7 } },
+      { kind: 'boat', cx: dockX + 11.5, cy: dockY + 1, w: 3, h: 2, tx: dockX + 10, ty: dockY, range: 3.2, stand: { x: dockX + 9.5, y: dockY + 1 } }
+    ];
+    pois.push({ kind: 'car', x: vehicles[0].cx, y: vehicles[0].cy, r: 4 });
+    pois.push({ kind: 'boat', x: vehicles[1].cx, y: vehicles[1].cy, r: 4 });
+
     // ---------- pontos de partida ----------
     const sp = [[-6, -3], [6, -3], [-5, 4], [5, 4]].map((o) => ({ x: PLAZA.x + o[0] + 0.5, y: PLAZA.y + o[1] + 0.5 }));
     const kc = pick([[20, 84], [26, 88]]);
@@ -295,7 +305,7 @@
       }
       return null;
     }
-    for (const s of specs) { const p = freeNear(s.x + (s.m.w >> 1) + 2, s.y + s.m.h - 3); if (p) itemSpots.push(p); }
+    for (const s of specs) { const p = freeNear(s.x + (s.m.w >> 1) + 2, s.y + s.m.h - 3); if (p) itemSpots.push({ x: p.x, y: p.y, inside: true }); }
     for (let tries = 0; tries < 400 && itemSpots.length < 30; tries++) {
       const x = ri(6, W - 8), y = ri(6, H - 8);
       if (!seen[idx(x, y)] || t[idx(x, y)] !== T_FLOOR || indoor[idx(x, y)]) continue;
@@ -312,7 +322,7 @@
     explore.forEach((e, i) => { e.id = i; });
 
     return {
-      kind: 'camp', W, H, t, ground, indoor, pallets, gens, phone, door, windows, NEED: 5,
+      kind: 'camp', W, H, t, ground, indoor, pallets, gens, phone, vehicles, door, windows, NEED: 5,
       itemSpots, radios: 4, pois, explore, lake: LAKE, dock: { x: dockX, y: dockY, endX: dockEnd.x, endY: dockEnd.y },
       cabins: specs.map((s) => ({ x: s.x, y: s.y, w: s.m.w, h: s.m.h, id: s.n })),
       spawnSurvivors: sp, spawnKiller
@@ -320,5 +330,5 @@
   }
 
   DP.buildCamp = buildCamp;
-  DP.CAMP = { W, H, T_TREE, T_WATER, G_GRASS, G_DIRT, G_SAND, G_PLANK, G_GRAVEL };
+  DP.CAMP = { W, H, T_TREE, T_WATER, T_VEH, G_GRASS, G_DIRT, G_SAND, G_PLANK, G_GRAVEL };
 })(typeof window !== 'undefined' ? window : globalThis);

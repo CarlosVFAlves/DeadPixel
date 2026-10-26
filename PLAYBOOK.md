@@ -31,6 +31,7 @@ Princípios herdados do protótipo anterior:
 | 7 | **Itens, rádio e stealth** | Sistema genérico de itens no chão (segurar E para pegar), **rádio detector** (pilha de 120 s, 3 faixas de proximidade, sem direção), **stealth do assassino** (Shift / botão ESPR., barra de energia, mais lento e silencioso, invisível ao rádio), bots que usam o rádio. |
 | 8 | **Mapa grande** | `js/camp.js`: acampamento 144×96 gerado por semente (floresta, lago + cais, cabanas, estrada, portão), conectividade garantida; navegação otimizada (fila em arrays tipados, busca limitada); equipe **descobre** geradores e bots **exploram**; **mapa de campo** (M); seta para a saída. |
 | 9 | **Polícia** | Telefone ao lado da estrada (liberado pela energia: 5 de 8 geradores), segurar AGIR 30 s liga, polícia chega em 150 s e **abre o portão por 120 s**; sem sair a tempo, ela vai embora e é preciso ligar de novo. Assassino chuta o telefone e vigia telefone/portão; bots ligam, esperam perto do estacionamento e correm quando abre. |
+| 10 | **Carro e Barco** | 6 peças espalhadas (bateria, chave e combustível do carro; hélice, chave e combustível do barco), carregar 1 peça, instalar segurando AGIR (carro 35 s/peça, barco 40 s/peça), ligar o motor (10 s) ou empurrar o barco (15 s), embarcar (2 lugares) e partir; assassino **sabota** (tira a última peça); bots se dividem entre polícia, carro e barco. Correção de um bug antigo: o campo de destino dos bots era compartilhado. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
 Marcos de qualidade: **126 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
@@ -385,3 +386,32 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 46. **Bots chegavam ao portão e não escapavam.** A estrada parava na linha 2 (a borda de floresta de 2 tiles impedia o desenho da linha 1), e a regra de saída exige `y < 1,7`. Solução: o gerador de mapa abre explicitamente a linha 1 sob o portão. O teste "3/3 equipes de bots escapam" pegou o problema.
 47. **Teste não chegava ao gerador** (a posição "1 tile à esquerda" caía numa árvore/caixote). Solução: o teste escolhe o primeiro vizinho livre.
 48. **HUD:** a linha "POLÍCIA EM…" ficou na altura das mensagens centrais; as mensagens desceram (`y ≥ 60`) e rádio/espreita foram para a linha de baixo quando há telefone.
+\n
+### 11.4 Etapa 10 entregue: carro e barco
+
+**Regras**
+| Passo | Carro (estacionamento, de frente para o portão) | Barco (ponta do cais) |
+|---|---|---|
+| Peças | bateria, chave, combustível | hélice, chave, combustível |
+| Onde ficam | 70% nas cabanas, o resto ao ar livre, ≥ 14 tiles dos pontos de início; uma por lugar | idem |
+| Carregar | 1 peça por pessoa (a mão fica ocupada: não pega outra, nem o rádio atrapalha); ícone da peça ao lado da cabeça; E sem alvo solta | idem |
+| Instalar | segurar AGIR com a peça certa: `ROUTES.carPart` 35 s por peça (×0,8 por pessoa extra) | `boatPart` 40 s |
+| Ligar | com as 3 peças, segurar AGIR: `carStart` 10 s (barulho 16) | `boatStart` 15 s (empurrar) |
+| Embarcar | motor ligado: segurar AGIR 0,9 s; **2 lugares**; entrar = escapar; parte 10 s depois do 1º passageiro (ou 1,2 s se lotar) | idem |
+| Saída | o carro anda pela estrada e sai pelo portão (que se abre só para ele); o barco atravessa o lago | |
+| Sabotar (assassino) | E: segurar `SABOTAGE_T` 2,5 s perto do veículo (com peças, pronto, ou ligado e vazio): a última peça sai e cai no chão; quem estiver a bordo impede | idem |
+
+- Implementação: tile `T_VEH` (8) só para o carro (sólido enquanto parado; libera ao partir); `g.vehicles[]` com `parts`, `wp` (progresso por peça), `order` (para saber a última), `state` (`build → ready → started → leaving → gone`), `stand` (ponto de acesso: o centro do barco é água, o bot precisa de um ponto em terra).
+- `vehicleTick` roda mesmo com a partida encerrada (o carro continua andando na tela de fim).
+- Bots: cada um recebe uma **rota** (`police, car, boat, police` pelo id): bot do carro/barco explora procurando peças (desiste após ~5 min sem progresso e vira "polícia"); qualquer bot que **veja** uma peça de que o veículo precisa a pega e leva; veículo pronto: os dois mais próximos (ou o dono da rota) ligam; veículo ligado: quem estiver a < 70 tiles embarca.
+- Assassino-IA: veículos entram na patrulha (peso baixo se não houver nada a sabotar) e ele sabota ao chegar. *Assimetria:* ele "sabe" se o veículo tem algo a sabotar.
+
+**Medidas (assassino parado, 4 bots, fusível 20 s, 8 sementes):** todos escapam em **318–471 s**; antes da correção do campo compartilhado, 2 de 8 partidas passavam de 15 min ou travavam.
+
+**Impasses**
+49. **Bug antigo: o campo de destino (`fT`) era compartilhado por todos os bots.** Cada bot recalculava o seu a cada 0,4 s, mas entre recálculos usava o que o último bot a calcular deixou. Na arena (todos indo ao mesmo gerador) isso passava despercebido; no mapa grande, com destinos diferentes, os bots oscilavam sem sair do lugar (a direção virava +1/−1 a cada tile). Achado com um gancho de depuração temporário (`g.dbg`) imprimindo destino e saída por quadro. Solução: `ai.fT` por bot.
+50. **Bots não conseguiam entregar peças ao barco.** O ponto de destino era o centro do barco, que é água (sólida); a busca nunca expandia para o cais. Solução: `stand` por veículo (carro: logo abaixo; barco: ponta do cais) e o bot usa `tg.stand`.
+51. **Bots com peça inútil presos para sempre.** Uma peça cujo veículo já a tem (ou já partiu) agora é largada (`dropItem`) em `vehicleGoal`.
+52. **Teste do assassino-IA quebrou por mudança legítima:** com veículos na patrulha ele demora mais a achar um jogador parado; o teste passou de 4 para 7 minutos e o de "só polícia" virou "qualquer rota".
+
+**Pendências desta etapa:** HUD de vez em quando sobrepõe mensagens de introdução em telas baixas (ver etapa 11); texto "LEVANDO:" pode ser longo no celular; barco e carro sem skill check; sem som de passos na água.

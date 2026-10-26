@@ -70,7 +70,8 @@
     KICK: 0.15,              // progresso que o assassino destrói ao chutar um gerador
 
     // tempos base (s) das tarefas de rota; multiplicados pela dificuldade (ver createGame)
-    ROUTES: { fuse: 20, door: 3, phone: 30, policeEta: 150, policeWindow: 120 },
+    ROUTES: { fuse: 20, door: 3, phone: 30, policeEta: 150, policeWindow: 120, carPart: 35, carStart: 10, boatPart: 40, boatStart: 15, leaveWait: 10 },
+    SABOTAGE_T: 2.5,         // assassino: tempo para sabotar um veículo (tira a última peça)
 
     // visão — a MESMA para pessoas e bots (paridade de informação): raio ambiente + cone de lanterna, com linha de vista
     VIS_S: { r: 6, cone: 11, half: 0.55 },      // sobrevivente
@@ -93,12 +94,17 @@
     TRACK: 2.5,          // segue o rastro por mais tempo depois de perder você
     SEARCH_WAIT: 2.5,
     PATROL_SPEED: 0.88,  // multiplicador de velocidade enquanto patrulha/procura
-    NOISE_MOVE: 3.5, NOISE_REPAIR: 9, NOISE_GATE: 8, NOISE_PHONE: 11, NOISE_VAULT: 5,
+    NOISE_MOVE: 3.5, NOISE_REPAIR: 9, NOISE_GATE: 8, NOISE_PHONE: 11, NOISE_ENGINE: 16, NOISE_VAULT: 5,
     RESPAWN: 8           // só no TREINO: pallets/janelas voltam
   };
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  const T_WIN = 5, T_WATER = 7;
+  const T_WIN = 5, T_WATER = 7, T_VEH = 8;
+  // peças dos veículos: o carro leva bateria, chave e combustível; o barco, hélice, chave e combustível
+  const PARTS = {
+    battery: { veh: 'car', name: 'BATERIA' }, ckey: { veh: 'car', name: 'CHAVE DO CARRO' }, cfuel: { veh: 'car', name: 'COMBUSTÍVEL' },
+    prop: { veh: 'boat', name: 'HÉLICE' }, bkey: { veh: 'boat', name: 'CHAVE DO BARCO' }, bfuel: { veh: 'boat', name: 'COMBUSTÍVEL' }
+  };
 
   function createGame(opts) {
     opts = opts || {};
@@ -131,8 +137,8 @@
       escapedCount: 0, deadCount: 0
     };
 
-    function makeAI() {
-      return { mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, zoneT: 0, planAge: 0, dx: 0, dy: 0, K: null, est: null, hearT: 0, fetch: null, wary: 0 };
+    function makeAI(i) {
+      return { route: map.vehicles ? ['police', 'car', 'boat', 'police'][i % 4] : 'police', mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, fT: new Float32Array(W * H), zoneT: 0, planAge: 0, dx: 0, dy: 0, K: null, est: null, hearT: 0, fetch: null, wary: 0 };
     }
     const nSurv = 1 + bots;
     for (let i = 0; i < nSurv; i++) {
@@ -143,7 +149,7 @@
         hp: 2, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
         noise: 0, acting: null, skill: null, skillCD: 4 + i * 1.7, tick: 0,
         dead: false, escaped: false, near: null, interact: null, human, item: null, tool: null, pickP: 0, pickFor: null, det: 0,
-        ai: human ? null : makeAI(), usedWin: 0
+        ai: human ? null : makeAI(i), usedWin: 0
       });
     }
 
@@ -184,12 +190,32 @@
     g.explore = (map.explore || []).map((e) => ({ x: e.x, y: e.y, kind: e.kind, id: e.id, seen: false }));
     // itens soltos no mapa (rádios). Cada item: { kind, x, y, cx, cy, holder, batt, on }
     g.items = [];
-    function spawnItem(kind, x, y) { const it = { id: g.items.length, kind, x, y, cx: x, cy: y, holder: null, batt: kind === 'radio' ? CFG.RADIO_BATT : 0, on: false }; g.items.push(it); return it; }
-    if (map.itemSpots && map.radios) {
-      const spots = map.itemSpots.slice();
+    let itemSeq = 0;
+    function spawnItem(kind, x, y, extra) { const it = Object.assign({ id: itemSeq++, kind, x, y, cx: x, cy: y, holder: null, batt: kind === 'radio' ? CFG.RADIO_BATT : 0, on: false }, extra || {}); g.items.push(it); return it; }
+    const spots = (map.itemSpots || []).slice();
+    if (spots.length && map.radios) {
       for (let i = 0; i < map.radios && spots.length; i++) { const j = (rnd() * spots.length) | 0; const p0 = spots.splice(j, 1)[0]; spawnItem('radio', p0.x, p0.y); }
     }
     g.spawnItem = spawnItem;
+    // veículos (só no mapa grande): carro e barco; as peças ficam espalhadas, longe de onde a equipe começa
+    g.vehicles = (map.vehicles || []).map((v) => ({
+      kind: v.kind, cx: v.cx, cy: v.cy, w: v.w, h: v.h, tx: v.tx, ty: v.ty, range: v.range, stand: v.stand,
+      need: Object.keys(PARTS).filter((n) => PARTS[n].veh === v.kind), parts: {}, wp: {}, order: [],
+      state: 'build', startP: 0, seated: 0, seats: 2, leaveT: -1, anim: 0, progress: 0, visited: -99, w0: 0, noisyT: -99, pax: []
+    }));
+    if (g.vehicles.length) {
+      const far = (p) => map.spawnSurvivors.every((q) => Math.hypot(p.x - q.x, p.y - q.y) > 14);
+      for (const v of g.vehicles) for (const name of v.need) {
+        const okSpots = spots.filter(far), inside = okSpots.filter((q) => q.inside);
+        const pool = inside.length && rnd() < 0.7 ? inside : okSpots.length ? okSpots : spots;       // a maioria nas cabanas
+        if (!pool.length) break;
+        const p0 = pool[(rnd() * pool.length) | 0];
+        spots.splice(spots.indexOf(p0), 1);
+        spawnItem('part', p0.x, p0.y, { part: name, veh: v.kind });
+      }
+    }
+    const vehByKind = (kind) => g.vehicles.find((v) => v.kind === kind);
+    g.partName = (it) => PARTS[it.part].name + ' (' + (it.veh === 'car' ? 'CARRO' : 'BARCO') + ')';
     // telefone (só no mapa grande): com energia ligada, segurar AGIR liga para a polícia; ela chega depois de um tempo e abre o portão por uma janela
     g.phone = map.phone ? { tx: map.phone.tx, ty: map.phone.ty, cx: map.phone.tx + 0.5, cy: map.phone.ty + 0.5, progress: 0, state: 'locked', visited: -99, w: 0, eta: 0, win: 0, calls: 0, noisyT: -99 } : null;
     g.door = { tx: map.door.tx, ty: map.door.ty, w: map.door.w, cx: map.door.tx + map.door.w / 2, cy: 0.5, progress: 0, powered: false, opened: false, t: 99, visited: -99 };
@@ -556,8 +582,15 @@
         const d = Math.hypot(s.x - w.cx, s.y - w.cy);
         if (d < CFG.WIN_RANGE && d < bd) { bd = d; best = { type: 'window', obj: w }; }
       }
+      for (const v of g.vehicles) {
+        const d = Math.hypot(s.x - v.cx, s.y - v.cy);
+        if (d > v.range || d >= bd) continue;
+        if (v.state === 'build' && s.item && s.item.veh === v.kind && !v.parts[s.item.part]) { bd = d; best = { type: 'install', obj: v }; }
+        else if (v.state === 'ready') { bd = d; best = { type: 'start', obj: v }; }
+        else if (v.state === 'started' && v.seated < v.seats) { bd = d; best = { type: 'board', obj: v }; }
+      }
       for (const it of g.items) {
-        if (it.holder || (it.kind === 'radio' && s.tool)) continue;
+        if (it.holder || (it.kind === 'radio' && s.tool) || (it.kind === 'part' && s.item)) continue;
         const d = Math.hypot(s.x - it.x, s.y - it.y);
         if (d < CFG.ITEM_RANGE && d < bd) { bd = d; best = { type: 'item', obj: it }; }
       }
@@ -574,7 +607,7 @@
       else { if (s.item) dropItem(s, s.item); s.item = it; }
       it.holder = s;
       sfx('pick', pan(s.x));
-      if (s.human) popup(it.kind === 'radio' ? 'RÁDIO! (Q LIGA/DESLIGA)' : 'PEGOU', s.x, s.y - 1.5, '#9bd3f0');
+      if (s.human) popup(it.kind === 'radio' ? 'RÁDIO! (Q LIGA/DESLIGA)' : it.kind === 'part' ? PARTS[it.part].name + ' (' + (it.veh === 'car' ? 'CARRO' : 'BARCO') + ')' : 'PEGOU', s.x, s.y - 1.5, '#9bd3f0');
     }
     function startSkill() { s.skill = { t: 0, tz: 1.5 + rnd() * 3.6 }; if (s.human) sfx('skill'); }
     function endSkill(result) {
@@ -612,6 +645,47 @@
         g.door.powered = true;
         if (g.phone) { g.phone.state = 'ready'; popup('ENERGIA LIGADA! USE O TELEFONE', g.phone.cx, g.phone.cy - 2.2, '#ffd23f'); sfx('gates'); }
         else { popup('PORTA PRINCIPAL LIBERADA!', g.door.cx, 3, '#ffd23f'); sfx('gates'); }
+      }
+    }
+    // entrar no veículo = escapar (quem entrou já não pode ser alcançado); ele parte depois de um tempo ou quando lota
+    function boardVehicle(v, sv) {
+      if (!alive(sv) || v.seated >= v.seats) return;
+      v.seated++; v.pax.push(sv.id);
+      if (sv.item) { g.items.splice(g.items.indexOf(sv.item), 1); sv.item = null; }
+      sv.escaped = true; sv.vault = null; g.escapedCount++;
+      popup('A BORDO!', sv.x, sv.y - 1.4, '#7dffa0'); sfx('escape');
+      if (v.leaveT < 0) v.leaveT = CFG.ROUTES.leaveWait;
+      if (v.seated >= v.seats) v.leaveT = Math.min(v.leaveT, 1.2);
+      checkEnd();
+    }
+    function sabotageable(v) { return (v.state === 'build' && v.order.length > 0) || v.state === 'ready' || (v.state === 'started' && v.seated === 0); }
+    function sabotageVehicle(v) {
+      if (!sabotageable(v)) return;
+      const pt = v.order.pop();
+      if (!pt) return;
+      v.parts[pt] = false; v.state = 'build'; v.startP = 0; v.leaveT = -1;
+      let x = v.cx, y = v.cy + v.h / 2 + 1.2;
+      for (let a = 0; a < 16; a++) { const px0 = v.cx + Math.cos(a * 0.7) * (v.w / 2 + 1.4), py0 = v.cy + Math.sin(a * 0.7) * (v.h / 2 + 1.4); if (!hitsCircle(px0, py0, 0.3) && t[Math.floor(py0) * W + Math.floor(px0)] !== T_WATER) { x = px0; y = py0; break; } }
+      spawnItem('part', x, y, { part: pt, veh: v.kind });
+      sfx('bang', pan(v.cx)); g.shake = Math.max(g.shake, 3);
+      popup('SABOTADO!', v.cx, v.cy - 2.4, '#ff4d4d');
+    }
+    function vehicleTick(dt) {
+      for (const v of g.vehicles) {
+        if (v.state === 'started' && v.seated > 0) {
+          v.leaveT -= dt;
+          if (v.leaveT <= 0) {
+            v.state = 'leaving'; v.anim = 0;
+            if (v.kind === 'car') {
+              for (let yy = 0; yy < v.h; yy++) for (let xx = 0; xx < v.w; xx++) if (t[(v.ty + yy) * W + v.tx + xx] === T_VEH) t[(v.ty + yy) * W + v.tx + xx] = 0;
+              g.door.pass = true; g.door.t = 0; sfx('doorOpen');
+            }
+            sfx('engine', pan(v.cx));
+          }
+        } else if (v.state === 'leaving') {
+          v.anim += dt;
+          if (v.anim >= (v.kind === 'car' ? 5 : 6.5)) { v.state = 'gone'; if (v.kind === 'car') g.door.pass = false; }
+        }
       }
     }
     function callPolice(ph) {
@@ -654,6 +728,34 @@
         o.w++;
         if (s.tick <= 0) { s.tick = 0.5; sfx('click', pan(o.cx)); }
         if (o.progress >= 1) callPolice(o);
+      } else if (tg.type === 'install') {
+        const pt = s.item.part;
+        s.noise = CFG.NOISE_REPAIR; o.noisyT = g.time;
+        o.wp[pt] = (o.wp[pt] || 0) + dt / routeT(o.kind + 'Part') * (o.w0 === 0 ? 1 : CFG.TEAM_BONUS);
+        o.w0++;
+        if (s.tick <= 0) { s.tick = 0.55; sfx('repair', pan(o.cx)); }
+        if (o.wp[pt] >= 1) {
+          o.parts[pt] = true; o.order.push(pt); o.wp[pt] = 0;
+          g.items.splice(g.items.indexOf(s.item), 1); s.item = null; s.acting = null;
+          sfx('genDone', pan(o.cx)); popup(PARTS[pt].name + ' INSTALADA!', o.cx, o.cy - 2.2, '#7dffa0');
+          alert(o.cx, o.cy);
+          if (o.need.every((n) => o.parts[n])) { o.state = 'ready'; popup(o.kind === 'car' ? 'CARRO PRONTO! LIGUE O MOTOR' : 'BARCO PRONTO! EMPURRE-O PARA A ÁGUA', o.cx, o.cy - 3.4, '#ffd23f'); }
+        }
+      } else if (tg.type === 'start') {
+        s.noise = CFG.NOISE_ENGINE; o.noisyT = g.time;
+        o.startP = Math.min(1, o.startP + dt / routeT(o.kind + 'Start') * (o.w0 === 0 ? 1 : CFG.TEAM_BONUS));
+        o.w0++;
+        if (s.tick <= 0) { s.tick = 0.45; sfx(o.kind === 'car' ? 'engine' : 'repair', pan(o.cx)); }
+        if (o.startP >= 1) {
+          o.state = 'started'; o.leaveT = -1; s.acting = null;
+          sfx('engine', pan(o.cx)); alert(o.cx, o.cy); g.shake = Math.max(g.shake, 2);
+          popup(o.kind === 'car' ? 'MOTOR LIGADO! ENTRE NO CARRO' : 'BARCO NA ÁGUA! ENTRE NO BARCO', o.cx, o.cy - 3.4, '#7dffa0');
+        }
+      } else if (tg.type === 'board') {
+        s.noise = 2;
+        if (s.pickFor !== o) { s.pickFor = o; s.pickP = 0; }
+        s.pickP += dt / 0.9;
+        if (s.pickP >= 1) { s.pickP = 0; s.pickFor = null; boardVehicle(o, s); }
       } else if (tg.type === 'door') {
         s.noise = CFG.NOISE_GATE;
         o.progress = Math.min(1, o.progress + dt / routeT('door'));
@@ -808,6 +910,11 @@
         const d = Math.hypot(k.x - o.cx, k.y - o.cy);
         if (d < 1.7 && d < bd) { bd = d; best = { type: 'kick', obj: o }; }
       }
+      for (const v of g.vehicles) {
+        if (!sabotageable(v)) continue;
+        const d = Math.hypot(k.x - v.cx, k.y - v.cy);
+        if (d < v.range && d < bd) { bd = d; best = { type: 'sabotage', obj: v }; }
+      }
       return best;
     }
     const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -849,6 +956,7 @@
         const it = g.kInteract;
         if (it.type === 'break') startBreak(it.obj, 'pallet');
         else if (it.type === 'smash') startBreak(it.obj, 'window');
+        else if (it.type === 'sabotage') startBreak(it.obj, 'sabotage');
         else kickGen(it.obj);
       }
     }
@@ -949,13 +1057,15 @@
       if (k.state === 'break') {
         if (role === 'killer' && Math.hypot(inp.ax || 0, inp.ay || 0) > 0.6 && k.t > 0.3) { k.state = 'chase'; k.t = 0; k.pal = null; return; }
         k.t += dt;
-        const o = k.pal, isWin = k.brkKind === 'window';
+        const o = k.pal, isWin = k.brkKind === 'window', isSab = k.brkKind === 'sabotage';
+        if (isSab && !sabotageable(o)) { k.pal = null; k.state = 'chase'; k.t = 0; return; }       // alguém embarcou / já foi sabotado
         if (Math.floor(k.t / 0.5) > k.brk) {
           k.brk++; sfx(isWin ? 'glassHit' : 'breakHit', pan(k.x)); g.shake = Math.max(g.shake, 1.5);
           if (isWin) glass(o.cx, o.cy, 3, 0, 0);
         }
-        if (k.t >= (isWin ? CFG.WIN_BREAK_T : CFG.BREAK_T)) {
-          if (isWin) { breakWindow(o, true); popup('QUEBROU!', o.cx, o.cy - 1.2, '#9bd3f0'); }
+        if (k.t >= (isWin ? CFG.WIN_BREAK_T : isSab ? CFG.SABOTAGE_T : CFG.BREAK_T)) {
+          if (isSab) sabotageVehicle(o);
+          else if (isWin) { breakWindow(o, true); popup('QUEBROU!', o.cx, o.cy - 1.2, '#9bd3f0'); }
           else {
             o.state = 'broken'; o.respawn = CFG.RESPAWN;
             g.stats.breaks++;
@@ -1041,8 +1151,9 @@
         if (!k.goal) { k.aware = 'search'; k.last = k.last || { x: k.x, y: k.y }; k.wait = 0; return; }
         const o = k.goal;
         gx = o.cx; gy = o.cy;
-        if (Math.hypot(k.x - gx, k.y - gy) < 1.7) {
+        if (Math.hypot(k.x - gx, k.y - gy) < (o.range ? o.range - 0.5 : 1.7)) {
           o.visited = g.time; k.goal = null;
+          if (g.vehicles.includes(o) && sabotageable(o)) { k.face = Math.atan2(o.cy - k.y, o.cx - k.x); startBreak(o, 'sabotage'); return; }
           if (o.progress > 0 && !o.done && (g.gens.includes(o) || o === g.phone)) { kickGen(o); return; }
           k.state = 'recover'; k.t = 0; k.dur = 1.2;
           return;
@@ -1101,12 +1212,13 @@
     // próximo gerador (ou a porta) a patrulhar: prefere os que já têm progresso e os que não visitou há pouco
     function pickGoal() {
       const ph = g.phone;
-      const list = !g.door.powered ? g.gens.filter((o) => !o.done) : ph ? (ph.state === 'ready' ? [ph] : [g.door]) : [g.door];
+      const list = (!g.door.powered ? g.gens.filter((o) => !o.done) : ph ? (ph.state === 'ready' ? [ph] : [g.door]) : [g.door])
+        .concat(g.vehicles.filter((v) => v.state === 'build' || v.state === 'ready' || v.state === 'started'));
       if (!list.length) return null;
       const w = list.map((o) => {
         const d = Math.hypot(k.x - o.cx, k.y - o.cy);
         const known = g.gens.includes(o) ? (k.genMem[g.gens.indexOf(o)] || 0) : 0;   // só sabe o progresso do que já viu
-        return (known > 0 ? 3 : 1) * (g.time - o.visited > 25 ? 1 : 0.1) / (1 + d / 25);
+        return (known > 0 ? 3 : 1) * (o.range && !sabotageable(o) ? 0.25 : 1) * (g.time - o.visited > 25 ? 1 : 0.1) / (1 + d / 25);
       });
       let r = rnd() * w.reduce((a, b) => a + b, 0);
       for (let i = 0; i < list.length; i++) { r -= w[i]; if (r <= 0) return list[i]; }
@@ -1114,7 +1226,7 @@
     }
 
     // ---------- IA do sobrevivente ----------
-    const fS = new Float32Array(W * H), fK = new Float32Array(W * H), fT = new Float32Array(W * H), fTc = new Float32Array(W * H);
+    const fS = new Float32Array(W * H), fK = new Float32Array(W * H), fTc = new Float32Array(W * H);   // fT (rumo ao destino) é um campo por bot: ai.fT
 
     // compromisso: só troca o plano de fuga se o atual deixou de valer ou depois de ~1,6 s (evita "barata tonta")
     function adoptPlan(cand) {
@@ -1127,7 +1239,7 @@
           invalid = Math.hypot(cur.T.x - s.x, cur.T.y - s.y) < 0.5 || fS[j] / CFG.RUN + 0.1 > fK[j] / CFG.K_SPEED;
         } else invalid = true;
       }
-      if (invalid || ai.planAge > 1.6) { ai.plan = cand; fT.set(fTc); ai.planAge = 0; }
+      if (invalid || ai.planAge > 1.6) { ai.plan = cand; ai.fT.set(fTc); ai.planAge = 0; }
     }
     // giro suave: o bot não inverte a direção de um quadro para o outro
     function smoothOut(out, dt) {
@@ -1284,7 +1396,7 @@
         } else ai.wait = 0;
         const k0 = winPass; winPass = s.hp > 1 ? 1 : 0;
         if (plan && plan.T && !waiting) {
-          if (Math.hypot(plan.T.x - s.x, plan.T.y - s.y) > 0.3) steer(fT, out, plan.T);
+          if (Math.hypot(plan.T.x - s.x, plan.T.y - s.y) > 0.3) steer(ai.fT, out, plan.T);
         } else if (!plan || (!plan.T && !waiting)) {
           const l = kd || 1; out.ax = -kdx / l; out.ay = -kdy / l;     // sem opção: corre para longe
         }
@@ -1299,21 +1411,26 @@
       let tg = null;
       if (g.door.opened) {
         // porta aberta: é só atravessar
-        if (ai.fieldT <= 0) { dijkstra(fT, g.door.cx, 1.2, true, { until: s }); ai.fieldT = 0.4; }
-        steer(fT, out, { x: g.door.cx, y: 1.2 });
+        if (ai.fieldT <= 0) { dijkstra(ai.fT, g.door.cx, 1.2, true, { until: s }); ai.fieldT = 0.4; }
+        steer(ai.fT, out, { x: g.door.cx, y: 1.2 });
         winPass = k0;
         return out;
       }
-      // um rádio à vista? vai pegar (só quem ainda não tem)
-      if (!s.tool && !ai.fetch) {
+      // um rádio ou uma peça de veículo à vista? vai pegar (rádio: só quem não tem; peça: só quem não carrega uma e se o veículo ainda precisa dela)
+      if (!ai.fetch) {
         for (const it of g.items) {
-          if (it.kind !== 'radio' || it.holder) continue;
+          if (it.holder) continue;
+          if (it.kind === 'radio' ? s.tool : (it.kind !== 'part' || s.item || !partWanted(it))) continue;
           if (canSee(s.x, s.y, s.face, false, it.x, it.y, botSkill())) { ai.fetch = it; ai.fieldT = 0; break; }
         }
       }
-      if (ai.fetch && (ai.fetch.holder || s.tool)) ai.fetch = null;
+      if (ai.fetch && (ai.fetch.holder || (ai.fetch.kind === 'radio' ? s.tool : (s.item || !partWanted(ai.fetch))))) ai.fetch = null;
       if (ai.wary > 0 && !fleeing) { out.walk = true; winPass = k0; return out; }          // quieto: não trabalha nem anda
-      if (ai.fetch) tg = ai.fetch;
+      const vt = vehicleGoal();
+      const rv = ai.route && ai.route !== 'police' ? vehByKind(ai.route) : null;
+      if (vt) tg = vt;
+      else if (ai.fetch) tg = ai.fetch;
+      else if (rv && (rv.state === 'build' || rv.state === 'ready') && (g.time < 330 || rv.order.length > 0)) tg = exploreTarget();   // bot do carro/barco: procura peças (desiste depois de ~5 min sem progresso)
       else if (g.phone && ai.mode === 'exit') {
         // energia ligada: telefone; depois de chamar, espera a polícia perto do portão (longe do meio do mapa)
         if (g.phone.state === 'ready') tg = g.phone;
@@ -1342,8 +1459,9 @@
       if (!tg) { winPass = k0; return out; }
       const it = s.interact;
       if (it && it.obj === tg) { out.act = true; winPass = k0; return out; }
-      if (ai.fieldT <= 0) { dijkstra(fT, tg.cx, tg.cy, true, { until: s }); ai.fieldT = 0.4; }
-      steer(fT, out, tg === g.door ? { x: g.door.cx, y: 1.2 } : { x: tg.cx, y: tg.cy });
+      const gp = tg.stand || { x: tg.cx, y: tg.cy };                      // veículos: o ponto onde se fica de pé ao lado dele
+      if (ai.fieldT <= 0) { dijkstra(ai.fT, gp.x, gp.y, true, { until: s }); ai.fieldT = 0.4; }
+      steer(ai.fT, out, tg === g.door ? { x: g.door.cx, y: 1.2 } : gp);
       if (out.winAct && it && it.obj === out.winAct) out.act = true;
       winPass = k0;
       return out;
@@ -1362,6 +1480,26 @@
       for (const e of g.explore) if (!e.seen && Math.hypot(sv.x - e.x, sv.y - e.y) < (e.kind === 'cabin' ? 4.5 : 6)) e.seen = true;
     }
     function popupKnown(o) { if (g.survivors[0].human) popup('GERADOR ENCONTRADO', o.cx, o.cy - 1.2, '#7dffa0'); }
+
+    // peças e veículos: o que o bot faz com o que carrega e com um veículo pronto
+    const partWanted = (it) => { const v = vehByKind(it.veh); return !!v && v.state === 'build' && !v.parts[it.part]; };
+    function vehicleGoal() {
+      if (!g.vehicles.length) return null;
+      if (s.item && s.item.veh) {
+        const v = vehByKind(s.item.veh);
+        if (v && v.state === 'build' && !v.parts[s.item.part]) return v;
+        dropItem(s, s.item);                                              // peça que não serve mais
+      }
+      for (const v of g.vehicles) {
+        const mine = Math.hypot(s.x - v.cx, s.y - v.cy);
+        if (v.state === 'ready') {
+          let rank = 0;
+          for (const o of g.survivors) if (o !== s && alive(o) && o.ai && Math.hypot(o.x - v.cx, o.y - v.cy) < mine) rank++;
+          if (rank < 2 && (ai.route === v.kind || mine < 35)) return v;
+        } else if (v.state === 'started' && v.seated < v.seats && (ai.route === v.kind || mine < 70)) return v;
+      }
+      return null;
+    }
 
     // sem gerador conhecido: vai ao ponto de exploração mais interessante (cabanas primeiro) que ninguém da equipe viu ainda
     function exploreTarget() {
@@ -1393,6 +1531,7 @@
       g.flash = Math.max(0, g.flash - dt);
       for (const w of g.windows) w.t += dt;
       g.door.t += dt;
+      vehicleTick(dt);                       // os veículos continuam andando mesmo depois do fim da partida
 
       if (g.over) {
         g.overT += dt;
@@ -1401,6 +1540,7 @@
 
       for (const o of g.gens) o.w = 0;
       if (g.phone) g.phone.w = 0;
+      for (const v of g.vehicles) v.w0 = 0;
       policeTick(dt);
       for (const sv of g.survivors) {
         if (!alive(sv)) continue;

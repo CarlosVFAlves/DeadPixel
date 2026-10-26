@@ -98,6 +98,8 @@
     bang(pan) { noise(0.35, 0.9, 1800, 'lowpass', 0.8, pan, 0, 150); tone(90, 0.3, 'square', 0.35, 40, pan); },
     genDone(pan) { for (let i = 0; i < 4; i++) tone(330 * Math.pow(1.26, i), 0.16, 'square', 0.14, 0, pan, i * 0.09); noise(0.3, 0.3, 4000, 'highpass', 0.7, pan); },
     gates() { for (let i = 0; i < 3; i++) tone(220 * (i + 2), 0.5, 'sawtooth', 0.12, 220 * (i + 2) * 1.5, 0, i * 0.12); },
+    // motor: ronco grave com tosse
+    engine(pan) { noise(0.5, 0.5, 220, 'lowpass', 0.9, pan); tone(70, 0.5, 'sawtooth', 0.22, 110, pan); tone(55, 0.35, 'square', 0.12, 90, pan, 0.15); },
     // sirene de polícia: duas notas alternadas
     siren(pan) { for (let i = 0; i < 6; i++) tone(i % 2 ? 660 : 880, 0.2, 'square', 0.09, 0, pan, i * 0.2); },
     escape() { for (let i = 0; i < 5; i++) tone(392 * Math.pow(1.19, i), 0.25, 'triangle', 0.2, 0, 0, i * 0.11); },

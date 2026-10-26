@@ -16,6 +16,7 @@ Cada partida gera um mapa novo por **semente**: estrada e estacionamento ao nort
 - Ninguém sabe onde ficam os geradores: **a equipe descobre vendo**. Os bots também **exploram** (cabanas primeiro) e só escolhem um gerador depois de o ter visto. Pressione **M** (ou o botão **MAPA**) para ver o mapa: o que já foi visitado, os geradores **achados** (laranja; verde = pronto), o portão e você.
 - Com o portão liberado, uma seta verde na borda da tela aponta a **saída**.
 - **Rota da polícia**: 5 geradores ligam a energia → vá ao **telefone** (guarita ao lado da estrada) e segure AGIR ~30 s → a polícia chega em ~2 min e **abre o portão por 2 min**: corra para ele. O assassino pode chutar o telefone e vai vigiar o telefone e o portão. Sem sair a tempo, ela vai embora e é preciso ligar de novo.
+- **Rota do carro e do barco**: 6 peças espalhadas pelo mapa (bateria, chave e combustível do carro; hélice, chave e combustível do barco; a maioria dentro de cabanas). Pegue **uma por vez** (segure E), leve ao veículo e **instale** segurando E (35–40 s). Com as três: ligue o motor (carro, 10 s) ou empurre o barco (15 s) e **entre** (2 lugares). O assassino pode **sabotar** (tira a última peça): proteja o veículo. O carro está no estacionamento; o barco, na ponta do cais.
 - O mapa antigo de 48×32 continua como `map: 'arena'` (usado nos testes).
 
 ## Visão curta (névoa de guerra)

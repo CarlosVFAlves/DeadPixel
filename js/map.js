@@ -95,5 +95,5 @@
     opts = opts || {};
     return opts.kind === 'arena' ? buildArena() : DP.buildCamp(opts);
   };
-  DP.T = { FLOOR: T_FLOOR, WALL: T_WALL, CRATE: T_CRATE, GEN: T_GEN, GATE: T_GATE, WIN: T_WIN, TREE: 6, WATER: 7 };
+  DP.T = { FLOOR: T_FLOOR, WALL: T_WALL, CRATE: T_CRATE, GEN: T_GEN, GATE: T_GATE, WIN: T_WIN, TREE: 6, WATER: 7, VEH: 8 };
 })(typeof window !== 'undefined' ? window : globalThis);
