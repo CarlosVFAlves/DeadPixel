@@ -7,7 +7,7 @@
   const W = 48, H = 32;
   const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2, T_GEN = 3, T_GATE = 4, T_WIN = 5;
 
-  function buildMap() {
+  function buildArena() {
     const t = new Uint8Array(W * H);
     const indoor = new Uint8Array(W * H);
     const pallets = [];
@@ -90,6 +90,10 @@
     };
   }
 
-  DP.buildMap = buildMap;
-  DP.T = { FLOOR: T_FLOOR, WALL: T_WALL, CRATE: T_CRATE, GEN: T_GEN, GATE: T_GATE, WIN: T_WIN };
+  // kind: 'camp' (padrão, 144x96 gerado por semente) ou 'arena' (48x32 fixa: treino e testes)
+  DP.buildMap = function (opts) {
+    opts = opts || {};
+    return opts.kind === 'arena' ? buildArena() : DP.buildCamp(opts);
+  };
+  DP.T = { FLOOR: T_FLOOR, WALL: T_WALL, CRATE: T_CRATE, GEN: T_GEN, GATE: T_GATE, WIN: T_WIN, TREE: 6, WATER: 7 };
 })(typeof window !== 'undefined' ? window : globalThis);

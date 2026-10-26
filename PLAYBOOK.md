@@ -29,6 +29,7 @@ Princípios herdados do protótipo anterior:
 | 4.1 | **Playtest 1** | Primeira rodada com uma pessoa jogando: ajuste do assassino-jogador, anti "barata tonta" dos bots, telemetria. Ver seção 4. |
 | 6 | **Visão e paridade** | Névoa de guerra (raio + cone de lanterna + memória), bots e assassino-IA com os mesmos sentidos de uma pessoa (sem trapaças), seletor de dificuldade, tabela de tempos `ROUTES`, interruptor de visão no treino. |
 | 7 | **Itens, rádio e stealth** | Sistema genérico de itens no chão (segurar E para pegar), **rádio detector** (pilha de 120 s, 3 faixas de proximidade, sem direção), **stealth do assassino** (Shift / botão ESPR., barra de energia, mais lento e silencioso, invisível ao rádio), bots que usam o rádio. |
+| 8 | **Mapa grande** | `js/camp.js`: acampamento 144×96 gerado por semente (floresta, lago + cais, cabanas, estrada, portão), conectividade garantida; navegação otimizada (fila em arrays tipados, busca limitada); equipe **descobre** geradores e bots **exploram**; **mapa de campo** (M); seta para a saída. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
 Marcos de qualidade: **126 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
@@ -335,3 +336,33 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 39. **Rádio "não pegava" no teste de navegador** (`tool false`). Eram dois erros do *teste*, não do jogo: o item estava a 2 tiles (alcance 1,25) e, depois, o assassino-IA em patrulha estava em stealth, o que encolhe o alcance do rádio de 24 para 6 tiles (o mecanismo funcionando como desenhado). Lição: `game.s` aponta para o *último sobrevivente processado*; para o jogador usar `g.survivors.find(x => x.human)`.
 40. **Espreita piscando** com energia 0 (liga/desliga a cada quadro). Solução: histerese (`k.sneakPrev ? 0.02 : STEALTH_MIN`).
 41. **Teste de bot "vendo" o assassino por virar o rosto** quando desligou o rádio. Solução: medir nos primeiros quadros com posições/rosto fixos e assassino a 7 tiles.
+
+### 11.2 Etapa 8 entregue: mapa grande, exploração e mapa de campo
+
+**O que entrou**
+- `DP.buildMap({kind:'camp'|'arena', rng})`; `createGame({map})` (padrão `camp`; os testes antigos usam `arena`).
+- Novos tiles: `T_TREE` (6, sólido, bloqueia a vista) e `T_WATER` (7, sólido, **não** bloqueia a vista); camada `ground` (grama, terra, areia, tábuas, cascalho) só para desenho.
+- Geração (`camp.js`): floresta por ruído de valor (mais aberta no centro) → estrada/estacionamento/praça → lago por elipse com borda irregular (nunca em cima de cabana) + areia + cais → trilhas da praça até cada cabana → cabanas (4 modelos × espelhamento) → muros com vão (16) e caixotes (24) → geradores (5 em cabanas, 3 em clareiras com 2 caixotes de marca) → pontos de partida → **conectividade**.
+- Conectividade: inundação (4 vizinhos) a partir da estrada; todo "ponto-chave" (porta de cabana, lados de cada pallet de muro, vizinho de gerador, spawns, ponta do cais) que não for alcançado ganha um **túnel** na mata (BFS por árvores) e, no fim, qualquer piso isolado vira mata. Testado em 12 sementes.
+- **Conhecimento da equipe**: `o.known` por gerador (visto por qualquer sobrevivente), `g.explore` (≈50 pontos: centro de cada cabana + malha na mata, marcados como visitados quando alguém passa perto). Bots sem gerador conhecido vão ao ponto não visitado mais interessante (cabanas valem −14 de distância, penalidade se outro bot já vai lá, desempate por bot). Na arena tudo é conhecido (comportamento antigo).
+- **Mapa de campo (M/Tab/botão MAPA)**: layout (terreno, cabanas, pallets, portão, lago, cais, praça) é conhecido desde o início — como uma placa do acampamento —, mas **geradores e itens só aparecem quando achados**; pontos já visitados ficam verdes. O mapa não mostra colegas nem assassino (paridade). O som passou para a tecla **N**.
+- Seta verde para a saída quando o portão está liberado; texto de introdução manda explorar.
+
+**Números (medidos em Node, 4 bots + assassino justo, 60 quadros/s)**
+| Medida | Antes das otimizações (144×96) | Depois |
+|---|---|---|
+| Dijkstra no mapa inteiro | ~3,4 ms | ~1,5 ms (heap tipado, entradas velhas ignoradas) |
+| Média por quadro (partida inteira) | 0,17–0,36 ms | 0,07–0,13 ms |
+| Pico por quadro (fora o 1º quadro, que inclui a compilação JIT) | 26–60 ms | ≤ 8 ms |
+| Geração do mapa | — | 46 ms no pior caso (12 sementes) |
+
+**Impasses**
+42. **Pico de 60 ms no primeiro quadro e a cada replanejamento.** Causa: 4 bots + assassino com busca no mapa inteiro ao mesmo tempo. Solução: (a) fila de prioridade em `Int32Array/Float32Array` reaproveitados; (b) `dijkstra(arr, x, y, sMode, {until, margin, limit})`: para quando o ponto de quem vai andar já foi resolvido (+ margem) ou quando passa de um custo máximo (fuga: 34 para o bot, 95 para o assassino). Quem só precisa do "melhor vizinho" não paga o mapa todo.
+43. **Bot recalculava o mapa inteiro todo quadro** quando não havia gerador conhecido (a escolha do alvo rodava sem alvo). Solução: só escolhe gerador se existir algum conhecido; senão usa `exploreTarget()`.
+44. **Pallets de muro viravam árvores.** O muro com vão era limpo, mas a clareira ficava isolada e a regra "piso isolado vira mata" a engolia. Solução: os dois lados de cada pallet de muro entram na lista de pontos-chave que o gerador conecta.
+45. **Legenda do mapa de campo estourava a tela do celular.** Solução: legenda quebrada em linhas pelo `wrap` e margem inferior calculada pelo número de linhas; rótulo "ESTACIONAMENTO" vira "ESTAC." quando a escala é pequena.
+
+**Observações honestas**
+- O assassino justo ainda vence muito rápido (4 mortos em 2–4 min na maior parte das sementes): com o mapa grande a busca é mais lenta, mas os bots ainda ficam parados consertando. Calibrar na etapa 11 junto com os tempos de reparo (fusível 45 s).
+- O assassino-IA **conhece** a posição dos geradores (ele é o "dono" do acampamento); os bots só conhecem o que viram. Assimetria intencional.
+- Árvores são tiles sólidos de 1×1; o visual é de "blocos de mata" (legível, mas rígido). Pode melhorar na fase de arte.

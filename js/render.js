@@ -14,7 +14,7 @@
 
   // ---------- mapa estático ----------
   function buildStatic(game) {
-    const { W, H, t, indoor } = game.map;
+    const { W, H, t, indoor, ground } = game.map;
     const cv = document.createElement('canvas');
     cv.width = W * TS; cv.height = H * TS;
     const c = cv.getContext('2d');
@@ -22,21 +22,66 @@
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS, r = hash(x, y);
-        const fl = t[i] === 0 || t[i] === 3;
+        const fl = t[i] === 0 || t[i] === 3 || t[i] === 6 || t[i] === 7;
+        const gk = ground ? ground[i] : 0;
         if (indoor[i] && fl) {
           // piso de tábuas
           px(c, (x + y) & 1 ? '#3a2f29' : '#40342c', X, Y, TS, TS);
           for (let l = 0; l < TS; l += 4) px(c, 'rgba(0,0,0,.28)', X, Y + l, TS, 1);
           if (r < 0.5) px(c, 'rgba(255,255,255,.04)', X + ((r * 40) | 0) % 12, Y + 1, 3, 3);
           px(c, 'rgba(0,0,0,.25)', X + ((hash(x, y, 3) * 14) | 0), Y + ((hash(x, y, 4) * 3) | 0) * 4, 1, 4);
+        } else if (fl && gk === 3) {
+          // varanda / cais: tábuas na horizontal
+          px(c, (x + y) & 1 ? '#4a3a2a' : '#524030', X, Y, TS, TS);
+          for (let l = 0; l < TS; l += 5) px(c, 'rgba(0,0,0,.35)', X, Y + l, TS, 1);
+          px(c, 'rgba(0,0,0,.3)', X + ((hash(x, y, 5) * 12) | 0) + 2, Y + ((hash(x, y, 6) * 3) | 0) * 5 + 1, 1, 4);
+          px(c, 'rgba(255,255,255,.05)', X, Y, TS, 1);
         } else if (fl) {
-          // chão de terra/grama escura
-          px(c, r < 0.5 ? '#1f2a22' : '#222e25', X, Y, TS, TS);
+          const base = gk === 1 ? ['#3a2f25', '#3e3329', '#2a2219', '#4a3d30']
+            : gk === 2 ? ['#59523a', '#5e573d', '#4a4430', '#6d6548']
+            : gk === 4 ? ['#3b3d42', '#3f4146', '#2c2e33', '#4e5057']
+            : ['#1f2a22', '#222e25', '#18211b', '#2b3a2d'];
+          px(c, r < 0.5 ? base[0] : base[1], X, Y, TS, TS);
           for (let n = 0; n < 5; n++) {
             const rx = (hash(x, y, n + 10) * 15) | 0, ry = (hash(x, y, n + 20) * 15) | 0;
-            px(c, hash(x, y, n + 30) < 0.5 ? '#2b3a2d' : '#18211b', X + rx, Y + ry, hash(x, y, n) < 0.3 ? 2 : 1, 1);
+            px(c, hash(x, y, n + 30) < 0.5 ? base[3] : base[2], X + rx, Y + ry, hash(x, y, n) < 0.3 ? 2 : 1, 1);
           }
+          if (gk === 0 && r > 0.93) { px(c, '#3d5a3a', X + 5, Y + 9, 1, 3); px(c, '#3d5a3a', X + 7, Y + 8, 1, 4); px(c, '#3d5a3a', X + 9, Y + 10, 1, 2); }
         }
+      }
+    }
+    // água
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x, X = x * TS, Y = y * TS;
+        if (t[i] !== 7) continue;
+        const r = hash(x, y, 40);
+        px(c, r < 0.5 ? '#142c42' : '#163248', X, Y, TS, TS);
+        for (let n = 0; n < 3; n++) px(c, '#21506c', X + ((hash(x, y, n + 41) * 12) | 0), Y + ((hash(x, y, n + 45) * 14) | 0), 3 + n, 1);
+        if (r > 0.85) px(c, '#3a7390', X + 4, Y + 6, 2, 1);
+        // margem: faixa clara do lado de terra
+        if (y > 0 && t[i - W] !== 7) px(c, '#2c6b88', X, Y, TS, 1);
+        if (x > 0 && t[i - 1] !== 7) px(c, '#2c6b88', X, Y, 1, TS);
+        if (x + 1 < W && t[i + 1] !== 7) px(c, '#10222f', X + TS - 1, Y, 1, TS);
+        if (y + 1 < H && t[i + W] !== 7) px(c, '#10222f', X, Y + TS - 1, TS, 1);
+      }
+    }
+    // árvores: copa redonda sobre o tronco; vizinhas se fundem numa mata fechada
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x, X = x * TS, Y = y * TS;
+        if (t[i] !== 6) continue;
+        const r = hash(x, y, 60), sh = r < 0.33 ? ['#102a1a', '#17381f', '#21502c'] : r < 0.66 ? ['#12301d', '#1b4125', '#265a33'] : ['#0e2617', '#153320', '#1e4a2a'];
+        px(c, 'rgba(0,0,0,.4)', X + 1, Y + 10, TS - 1, 5);
+        px(c, '#3a2718', X + 6, Y + 9, 4, 6);
+        px(c, '#2a1b10', X + 6, Y + 9, 1, 6);
+        px(c, sh[0], X, Y + 1, TS, 11);
+        px(c, sh[0], X + 2, Y, TS - 4, 13);
+        px(c, sh[1], X + 2, Y + 1, TS - 5, 8);
+        px(c, sh[1], X + 1, Y + 3, TS - 3, 6);
+        px(c, sh[2], X + 4 + ((hash(x, y, 61) * 4) | 0), Y + 2, 5, 3);
+        px(c, sh[2], X + 3, Y + 5 + ((hash(x, y, 62) * 3) | 0), 3, 2);
+        px(c, 'rgba(0,0,0,.25)', X + 8, Y + 8, 6, 3);
       }
     }
     // paredes
@@ -658,8 +703,18 @@
     } else if (game.k.state === 'intro') {
       const left = Math.ceil(game.cfg.INTRO - game.k.t);
       text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, Math.max(46, Math.round(H * 0.2)), '#ff5c5c', { align: 'c' });
-      DP.font.wrap('CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELA PORTA PRINCIPAL', Math.floor((W - 8) / 6)).forEach((l, i) =>
+      DP.font.wrap(game.explore.length ? 'EXPLORE: ACHE E CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELO PORTÃO. M ABRE O MAPA' : 'CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELA PORTA PRINCIPAL', Math.floor((W - 8) / 6)).forEach((l, i) =>
         text(ctx, l, W / 2, Math.max(46, Math.round(H * 0.2)) + 10 + i * 9, '#ffb347', { align: 'c' }));
+    }
+    if (!ka && gd && !game.over && game.explore.length) {                      // seta para o portão liberado
+      const dx = game.door.cx - s.x, dy = game.door.cy - s.y, d = Math.hypot(dx, dy);
+      if (d > 7) {
+        const ax = W / 2 + dx / d * Math.min(W, H) * 0.36, ay = H / 2 + dy / d * Math.min(W, H) * 0.36, an = Math.atan2(dy, dx);
+        ctx.save(); ctx.translate(Math.round(ax), Math.round(ay)); ctx.rotate(an);
+        ctx.fillStyle = Math.floor(tm * 3) % 2 ? '#7dffa0' : '#3fbf6a'; ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-4, -5); ctx.lineTo(-2, 0); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        text(ctx, 'SAÍDA ' + Math.round(d), Math.round(ax), Math.round(ay) + 8, '#7dffa0', { align: 'c', shadow: 'rgba(0,0,0,.9)' });
+      }
     }
     if (!(ka && (game.k.state === 'stumble' || game.k.state === 'stun' || game.time < 7)) && gd && game.time % 6 < 3 && !game.over) {
       DP.font.wrap(ka ? 'PORTA LIBERADA! IMPEÇA A FUGA' : 'PORTA LIBERADA! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
@@ -667,6 +722,69 @@
     } else if (!ka && game.k.hesitate) {
       text(ctx, 'ELE HESITA...', W / 2, Math.max(46, Math.round(H * 0.2)), '#ff9d5c', { align: 'c' });
     }
+  }
+
+  // ---------- mapa de campo (tecla M): o que a equipe já sabe ----------
+  function buildMapCv(game) {
+    const { W, H, t, indoor, ground } = game.map;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d'), im = c.createImageData(W, H), d = im.data;
+    const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    const col = { tree: hex('#1b3524'), grass: hex('#34523b'), dirt: hex('#7a6648'), sand: hex('#9a9068'), gravel: hex('#73757c'), plank: hex('#8a6a46'), water: hex('#2a6290'), wall: hex('#b1abc4'), crate: hex('#9a6c3a'), win: hex('#7cc4e8'), gate: hex('#ffd23f'), floor: hex('#54443a') };
+    for (let i = 0; i < W * H; i++) {
+      const v = t[i], g = ground ? ground[i] : 0;
+      const c0 = v === 6 ? col.tree : v === 7 ? col.water : v === 1 ? col.wall : v === 2 ? col.crate : v === 5 ? col.win : v === 4 ? col.gate
+        : indoor[i] ? col.floor : g === 1 ? col.dirt : g === 2 ? col.sand : g === 3 ? col.plank : g === 4 ? col.gravel : col.grass;
+      d[i * 4] = c0[0]; d[i * 4 + 1] = c0[1]; d[i * 4 + 2] = c0[2]; d[i * 4 + 3] = 255;
+    }
+    c.putImageData(im, 0, 0);
+    return cv;
+  }
+
+  function drawMap(ctx, game, W, H, tm) {
+    if (!R.mapCv) R.mapCv = buildMapCv(game);
+    const mw = game.map.W, mh = game.map.H;
+    overlay(ctx, W, H, 0.78);
+    const known = game.gens.filter((o) => o.known).length;
+    const legend = DP.font.wrap('GERADORES ACHADOS ' + known + '/' + game.gens.length + ' · PRONTOS ' + game.gensDone + '/' + game.need, Math.floor((W - 8) / 6))
+      .concat(DP.font.wrap('VERDE: JÁ VISTO. CINZA: A EXPLORAR. VOCÊ: QUADRADO VERMELHO. M FECHA', Math.floor((W - 8) / 6)));
+    const topPad = 16, botPad = 8 + legend.length * 9;
+    const sc = Math.max(1, Math.min((W - 12) / mw, (H - topPad - botPad) / mh));
+    const ox = Math.round((W - mw * sc) / 2), oy = topPad;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(R.mapCv, ox, oy, Math.round(mw * sc), Math.round(mh * sc));
+    const X = (x) => Math.round(ox + x * sc), Y = (y) => Math.round(oy + y * sc);
+    text(ctx, 'MAPA DO ACAMPAMENTO', Math.round(W / 2), 4, '#fff', { align: 'c' });
+    // pallets
+    for (const p of game.pallets) px(ctx, p.state === 'up' ? '#ffd9a0' : p.state === 'broken' ? '#5a4a3a' : '#c06a3a', X(p.cx) - 1, Y(p.cy) - 1, 2, 2);
+    // pontos de exploração já visitados pela equipe
+    for (const e of game.explore) {
+      if (e.seen) px(ctx, 'rgba(125,255,160,.8)', X(e.x) - 1, Y(e.y) - 1, 2, 2);
+      else px(ctx, 'rgba(255,255,255,.4)', X(e.x) - 1, Y(e.y) - 1, 3, 3);
+    }
+    // geradores encontrados
+    for (const o of game.gens) {
+      if (!o.known) continue;
+      const c0 = o.done ? '#7dffa0' : '#ffb347';
+      px(ctx, '#000', X(o.cx) - 3, Y(o.cy) - 3, 6, 6); px(ctx, c0, X(o.cx) - 2, Y(o.cy) - 2, 4, 4);
+      if (!o.done && o.progress > 0) px(ctx, '#fff', X(o.cx) - 2, Y(o.cy) + 3, Math.max(1, Math.round(4 * o.progress)), 1);
+    }
+    // portão e lugares conhecidos
+    const dr = game.door;
+    px(ctx, dr.opened ? '#7dffa0' : '#ffd23f', X(dr.cx) - 4, Y(0) - 1, 8, 3);
+    for (const p of game.map.pois || []) {
+      const lab = { parking: sc < 3 ? 'ESTAC.' : 'ESTACIONAMENTO', plaza: 'FOGUEIRA', dock: 'CAIS', lake: 'LAGO' }[p.kind];
+      if (lab) text(ctx, lab, X(p.x), Y(p.y) + (p.kind === 'dock' ? 5 : p.kind === 'plaza' ? 12 : -3), '#fff', { align: 'c', shadow: 'rgba(0,0,0,.95)' });
+    }
+    // você
+    const me = game.pl;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+    const pulse = 3 + Math.floor(tm * 3) % 2;
+    ctx.strokeRect(X(me.x) - pulse, Y(me.y) - pulse, pulse * 2, pulse * 2);
+    px(ctx, '#ff4d4d', X(me.x) - 1, Y(me.y) - 1, 3, 3);
+    // legenda
+    const ly = oy + Math.round(mh * sc) + 5;
+    legend.forEach((l, n) => text(ctx, l, Math.round(W / 2), ly + n * 9, n === 0 ? '#ffb347' : '#a9a9b5', { align: 'c' }));
   }
 
   // skill check no centro da tela
@@ -771,7 +889,7 @@
     ctx.restore();
   }
 
-  function reset() { R.staticCv = null; R.seen = null; }
+  function reset() { R.staticCv = null; R.seen = null; R.mapCv = null; }
 
-  DP.render = { uiSurvivor, uiKiller, drawWorld, drawHUD, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
+  DP.render = { uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
 })(typeof window !== 'undefined' ? window : globalThis);

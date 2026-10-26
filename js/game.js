@@ -98,7 +98,7 @@
   };
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  const T_WIN = 5;
+  const T_WIN = 5, T_WATER = 7;
 
   function createGame(opts) {
     opts = opts || {};
@@ -117,7 +117,7 @@
     };
     const routeT = (name) => CFG.ROUTES[name] * diff.time;
     const bots = opts.bots === undefined ? 3 : opts.bots;
-    const map = DP.buildMap();
+    const map = DP.buildMap({ kind: opts.map || 'camp', rng: rnd });
     const W = map.W, H = map.H, t = map.t;
 
     const g = {
@@ -179,7 +179,9 @@
       winAt[w.ty * W + w.tx] = o;
     }
     g.winAt = winAt;
-    g.gens = map.gens.map((o) => ({ tx: o.tx, ty: o.ty, cx: o.tx + 0.5, cy: o.ty + 0.5, progress: 0, done: false, visited: -99, w: 0 }));
+    g.gens = map.gens.map((o) => ({ tx: o.tx, ty: o.ty, cx: o.tx + 0.5, cy: o.ty + 0.5, progress: 0, done: false, visited: -99, w: 0, known: !map.explore }));
+    // pontos de exploração (só no mapa grande): a equipe descobre geradores vendo-os; na arena tudo é conhecido
+    g.explore = (map.explore || []).map((e) => ({ x: e.x, y: e.y, kind: e.kind, id: e.id, seen: false }));
     // itens soltos no mapa (rádios). Cada item: { kind, x, y, cx, cy, holder, batt, on }
     g.items = [];
     function spawnItem(kind, x, y) { const it = { id: g.items.length, kind, x, y, cx: x, cy: y, holder: null, batt: kind === 'radio' ? CFG.RADIO_BATT : 0, on: false }; g.items.push(it); return it; }
@@ -214,7 +216,7 @@
     function blocksSight(tx, ty) {
       if (tx < 0 || ty < 0 || tx >= W || ty >= H) return true;
       const i = ty * W + tx;
-      if (t[i]) return t[i] !== T_WIN;
+      if (t[i]) return t[i] !== T_WIN && t[i] !== T_WATER;
       const p = palAt[i];
       return !!(p && p.state === 'down');
     }
@@ -300,45 +302,60 @@
       if (sMode) return p.state === 'down' ? 1.4 : p.state === 'falling' ? 3 : 0;
       return p.state === 'down' ? CFG.BREAK_COST : p.state === 'up' ? 0.3 : 0;
     }
-    function dijkstra(arr, gx, gy, sMode) {
+    // fila de prioridade em arrays tipados (reaproveitados): o mapa grande chama isto várias vezes por segundo
+    const HEAP_N = W * H * 4;
+    const heapI = new Int32Array(HEAP_N), heapK = new Float32Array(HEAP_N);
+    let heapLen = 0;
+    function hpush(i, key) {
+      if (heapLen >= HEAP_N) return;
+      let n = heapLen++;
+      while (n > 0) {
+        const p = (n - 1) >> 1;
+        if (heapK[p] <= key) break;
+        heapK[n] = heapK[p]; heapI[n] = heapI[p]; n = p;
+      }
+      heapK[n] = key; heapI[n] = i;
+    }
+    function hpop() {
+      const top = heapI[0], lastI = heapI[--heapLen], lastK = heapK[heapLen];
+      if (heapLen) {
+        let n = 0;
+        for (;;) {
+          const l = 2 * n + 1;
+          if (l >= heapLen) break;
+          const r = l + 1, m = r < heapLen && heapK[r] < heapK[l] ? r : l;
+          if (heapK[m] >= lastK) break;
+          heapK[n] = heapK[m]; heapI[n] = heapI[m]; n = m;
+        }
+        heapK[n] = lastK; heapI[n] = lastI;
+      }
+      return top;
+    }
+    // opt.until = {x,y}: para quando esse ponto já está resolvido (+ opt.margin); opt.limit: custo máximo
+    // (o que ficar fora disso continua 1e9). Quem só precisa do vizinho certo para andar não paga o mapa todo.
+    function dijkstra(arr, gx, gy, sMode, opt) {
       arr.fill(1e9);
       const sx = clamp(Math.floor(gx), 0, W - 1), sy = clamp(Math.floor(gy), 0, H - 1);
-      const heapI = [], heapK = [];
-      const push = (i, key) => {
-        let n = heapI.length; heapI.push(i); heapK.push(key);
-        while (n > 0) {
-          const p = (n - 1) >> 1;
-          if (heapK[p] <= heapK[n]) break;
-          [heapK[p], heapK[n]] = [heapK[n], heapK[p]]; [heapI[p], heapI[n]] = [heapI[n], heapI[p]]; n = p;
-        }
-      };
-      const pop = () => {
-        const top = heapI[0], lastI = heapI.pop(), lastK = heapK.pop();
-        if (heapI.length) {
-          heapI[0] = lastI; heapK[0] = lastK;
-          let n = 0;
-          for (;;) {
-            const l = 2 * n + 1, r = l + 1; let m = n;
-            if (l < heapI.length && heapK[l] < heapK[m]) m = l;
-            if (r < heapI.length && heapK[r] < heapK[m]) m = r;
-            if (m === n) break;
-            [heapK[m], heapK[n]] = [heapK[n], heapK[m]]; [heapI[m], heapI[n]] = [heapI[n], heapI[m]]; n = m;
-          }
-        }
-        return top;
-      };
-      arr[sy * W + sx] = 0; push(sy * W + sx, 0);
-      while (heapI.length) {
-        const i = pop(), cd = arr[i];
+      const limit = opt && opt.limit !== undefined ? opt.limit : 1e9;
+      const uI = opt && opt.until ? clamp(Math.floor(opt.until.y), 0, H - 1) * W + clamp(Math.floor(opt.until.x), 0, W - 1) : -1;
+      const margin = opt && opt.margin !== undefined ? opt.margin : 4;
+      heapLen = 0;
+      arr[sy * W + sx] = 0; hpush(sy * W + sx, 0);
+      while (heapLen) {
+        const key = heapK[0], i = hpop(), cd = arr[i];
+        if (key > cd) continue;                                  // entrada velha da fila
+        if (cd > limit) break;
+        if (uI >= 0 && arr[uI] < 1e8 && cd > arr[uI] + margin) break;
         const ux = i % W, uy = (i / W) | 0;
+        const ci = costAt(i, sMode);
         for (const d of DIRS) {
           const vx = ux + d[0], vy = uy + d[1];
           if (blockedFor(vx, vy, sMode)) continue;
           const diag = d[0] !== 0 && d[1] !== 0;
           if (diag && (hardBlocked(ux + d[0], uy) || hardBlocked(ux, uy + d[1]))) continue;
           const j = vy * W + vx;
-          const nd = cd + (diag ? 1.414 : 1) + costAt(i, sMode);
-          if (nd < arr[j]) { arr[j] = nd; push(j, nd); }
+          const nd = cd + (diag ? 1.414 : 1) + ci;
+          if (nd < arr[j]) { arr[j] = nd; hpush(j, nd); }
         }
       }
     }
@@ -1006,7 +1023,7 @@
 
       const ti = clamp(Math.floor(gy), 0, H - 1) * W + clamp(Math.floor(gx), 0, W - 1);
       fieldT -= dt;
-      if (fieldT <= 0 || ti !== fieldTile) { dijkstra(field, gx, gy, false); fieldT = 0.15; fieldTile = ti; }
+      if (fieldT <= 0 || ti !== fieldTile) { dijkstra(field, gx, gy, false, { until: k }); fieldT = 0.15; fieldTile = ti; }
 
       // mind game: às vezes o assassino "respeita" um pallet de pé entre vocês
       k.hesitate = false;
@@ -1108,8 +1125,8 @@
 
     function planFlee() {
       const k0 = winPass; winPass = s.hp > 1 ? 1 : 0;       // com vida cheia aceita se cortar para escapar
-      dijkstra(fS, s.x, s.y, true);
-      dijkstra(fK, ai.K.x, ai.K.y, false);
+      dijkstra(fS, s.x, s.y, true, { limit: 34 });
+      dijkstra(fK, ai.K.x, ai.K.y, false, { limit: 95 });
       const myT = CFG.RUN, kT = CFG.K_SPEED;
       let best = null, bs = 1e9, bT = null;
       for (const p of g.pallets) {
@@ -1126,7 +1143,7 @@
         if (ts < bs) { bs = ts; best = p; bT = T; }
       }
       if (best) {
-        dijkstra(fTc, bT.x, bT.y, true);
+        dijkstra(fTc, bT.x, bT.y, true, { until: s });
         adoptPlan({ pal: best, T: bT, err: (rnd() - 0.5) * 0.6, react: rnd() * 0.22 / botSkill() });
         winPass = k0;
         return;
@@ -1135,7 +1152,7 @@
       let bt = null, bv = -1e9;
       for (let i = 0; i < W * H; i++) {
         if (t[i] !== 0 || fS[i] > 22 || fS[i] / myT + 0.15 > fK[i] / kT) continue;
-        let v = fK[i] - 0.35 * fS[i] + ((i * 7919 + s.id * 104729) % 97) / 97 * 5;      // cada um escolhe um canto diferente
+        let v = Math.min(fK[i], 95) - 0.35 * fS[i] + ((i * 7919 + s.id * 104729) % 97) / 97 * 5;      // cada um escolhe um canto diferente
         for (const o of g.survivors) if (o !== s && alive(o) && Math.hypot(o.x - ((i % W) + 0.5), o.y - (((i / W) | 0) + 0.5)) < 5) v -= 4;
         if (v > bv) { bv = v; bt = i; }
       }
@@ -1145,7 +1162,7 @@
       }
       if (bt !== null) {
         const T = { x: (bt % W) + 0.5, y: ((bt / W) | 0) + 0.5 };
-        dijkstra(fTc, T.x, T.y, true);
+        dijkstra(fTc, T.x, T.y, true, { until: s });
         adoptPlan({ pal: null, T, err: 0, react: 0 });
       } else adoptPlan({ pal: null, T: null, err: 0, react: 0 });
       winPass = k0;
@@ -1243,7 +1260,7 @@
       let tg = null;
       if (g.door.opened) {
         // porta aberta: é só atravessar
-        if (ai.fieldT <= 0) { dijkstra(fT, g.door.cx, 1.2, true); ai.fieldT = 0.4; }
+        if (ai.fieldT <= 0) { dijkstra(fT, g.door.cx, 1.2, true, { until: s }); ai.fieldT = 0.4; }
         steer(fT, out, { x: g.door.cx, y: 1.2 });
         winPass = k0;
         return out;
@@ -1260,11 +1277,11 @@
       if (ai.fetch) tg = ai.fetch;
       else if (ai.mode === 'exit') tg = g.door;
       else {
-        if (!ai.target || !g.gens.includes(ai.target) || ai.target.done) {
+        if ((!ai.target || !g.gens.includes(ai.target) || ai.target.done) && g.gens.some((o) => o.known && !o.done)) {
           dijkstra(fS, s.x, s.y, true);
           let bg = null, bv = 1e9;
           for (const o of g.gens) {
-            if (o.done) continue;
+            if (o.done || !o.known) continue;
             let v = Math.min(fS[o.ty * W + o.tx - 1] || 1e9, fS[o.ty * W + o.tx + 1] || 1e9, fS[(o.ty + 1) * W + o.tx] || 1e9, fS[(o.ty - 1) * W + o.tx] || 1e9) - o.progress * 10;
             if (ai.lk && Math.hypot(ai.lk.x - o.cx, ai.lk.y - o.cy) < 9) v += 30;      // evita onde viu o assassino
             for (const other of g.survivors) if (other !== s && alive(other) && other.ai && other.ai.target === o) v += 8;   // reparte o trabalho
@@ -1272,16 +1289,50 @@
           }
           ai.target = bg; ai.fieldT = 0;
         }
-        tg = ai.target;
+        if (ai.target && ai.target.done) ai.target = null;
+        tg = ai.target || exploreTarget();
       }
       if (!tg) { winPass = k0; return out; }
       const it = s.interact;
       if (it && it.obj === tg) { out.act = true; winPass = k0; return out; }
-      if (ai.fieldT <= 0) { dijkstra(fT, tg.cx, tg.cy, true); ai.fieldT = 0.4; }
+      if (ai.fieldT <= 0) { dijkstra(fT, tg.cx, tg.cy, true, { until: s }); ai.fieldT = 0.4; }
       steer(fT, out, tg === g.door ? { x: g.door.cx, y: 1.2 } : { x: tg.cx, y: tg.cy });
       if (out.winAct && it && it.obj === out.winAct) out.act = true;
       winPass = k0;
       return out;
+    }
+
+    // conhecimento da equipe: um gerador "vira conhecido" quando alguém o vê; pontos de exploração viram "vistos" quando alguém passa perto
+    function senseWorld(sv, dt) {
+      sv.knowT = (sv.knowT || 0) - dt;
+      if (sv.knowT > 0 || !g.explore.length) return;
+      sv.knowT = 0.25;
+      for (const o of g.gens) {
+        if (o.known) continue;
+        const dd = Math.hypot(sv.x - o.cx, sv.y - o.cy) || 1;
+        if (canSee(sv.x, sv.y, sv.face, false, o.cx + (sv.x - o.cx) / dd * 0.75, o.cy + (sv.y - o.cy) / dd * 0.75, 1)) { o.known = true; if (sv.human || role === 'survivor') popupKnown(o); }
+      }
+      for (const e of g.explore) if (!e.seen && Math.hypot(sv.x - e.x, sv.y - e.y) < (e.kind === 'cabin' ? 4.5 : 6)) e.seen = true;
+    }
+    function popupKnown(o) { if (g.survivors[0].human) popup('GERADOR ENCONTRADO', o.cx, o.cy - 1.2, '#7dffa0'); }
+
+    // sem gerador conhecido: vai ao ponto de exploração mais interessante (cabanas primeiro) que ninguém da equipe viu ainda
+    function exploreTarget() {
+      let e = ai.exT;
+      if (e && (e.seen || g.time - ai.exAt > 45)) e = null;
+      if (!e) {
+        let bv = 1e9, be = null, open = 0;
+        for (const q of g.explore) {
+          if (q.seen) continue;
+          open++;
+          let v = Math.hypot(q.x - s.x, q.y - s.y) - (q.kind === 'cabin' ? 14 : 0) + ((q.id * 7919 + s.id * 104729) % 97) / 97 * 8;
+          for (const o of g.survivors) if (o !== s && alive(o) && o.ai && o.ai.exT === q) v += 30;
+          if (v < bv) { bv = v; be = q; }
+        }
+        if (!open) for (const q of g.explore) q.seen = false;           // viu tudo e nada? recomeça a busca
+        e = be; ai.exT = e; ai.exAt = g.time; ai.fieldT = 0;
+      }
+      return e ? { cx: e.x, cy: e.y, explore: e } : null;
     }
 
     // ---------- loop ----------
@@ -1307,6 +1358,7 @@
         use(sv);
         sv.px = sv.x; sv.py = sv.y;
         sv.interact = findInteract();
+        senseWorld(sv, dt);
         const sin = sv.human ? inp : aiSurvivor(dt);
         if (s.skill && (sin.press || sin.drop || sin.actPress)) pressSkill();
         else if (sin.drop || (sin.actPress && !sv.interact)) { if (!(sin.drop || findDroppable()) && s.item) dropItem(s, s.item); else tryDrop(); }

@@ -1,4 +1,4 @@
-# Dead Pixel — Protótipo 6: Visão e Paridade
+# Dead Pixel — Protótipo 8: Acampamento (mapa grande)
 
 Jogo 2D em pixel art (HTML + canvas, **sem dependências**, gráficos e áudio gerados por código), pensado para **celular e PC**.
 Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
@@ -9,6 +9,13 @@ Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
 - **JOGAR** → sala de espera com **4 vagas de jogador** (você é o J1; as outras ficam "aguardando" e viram bots) e o **assassino apagado** (IA). Toque no assassino para **jogar com ele** (então os 4 sobreviventes são bots). Opção **TREINO** e **INICIAR PARTIDA**. Teclado: `Enter` inicia, `T` treino, `1`/`2` papel, `Esc` volta.
 - **PERSONAGENS** → só o personagem principal (**Pixel**), andando nas quatro direções, com atributos.
 - **LOJA** → protótipo: 6 cartas "em breve" e o saldo de **fichas** (você ganha fichas ao fim de cada partida, fora do treino).
+
+## O acampamento (mapa grande, 144×96 tiles)
+
+Cada partida gera um mapa novo por **semente**: estrada e estacionamento ao norte (com o **portão** de saída), a **fogueira** no centro, ~10 **cabanas** (4 modelos, espelhadas), **muros com vão** e caixotes, um **lago** com **cais** a leste e **floresta densa** em volta (árvores bloqueiam a vista; água não). São 36+ pallets, 20 janelas e 8 geradores (5 dentro de cabanas, 3 ao ar livre); 5 deles ligam o portão.
+- Ninguém sabe onde ficam os geradores: **a equipe descobre vendo**. Os bots também **exploram** (cabanas primeiro) e só escolhem um gerador depois de o ter visto. Pressione **M** (ou o botão **MAPA**) para ver o mapa: o que já foi visitado, os geradores **achados** (laranja; verde = pronto), o portão e você.
+- Com o portão liberado, uma seta verde na borda da tela aponta a **saída**.
+- O mapa antigo de 48×32 continua como `map: 'arena'` (usado nos testes).
 
 ## Visão curta (névoa de guerra)
 
@@ -49,7 +56,8 @@ Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celula
 | **RÁDIO** (aparece ao pegar) | **Q** | liga/desliga o rádio detector (3 faixas de proximidade do assassino; ele não aparece se estiver em espreita de longe) |
 | II | P / Esc | pausar |
 | — | R | reiniciar |
-| — | M | liga/desliga som |
+| botão **MAPA** | **M** ou **Tab** | abre/fecha o mapa de campo |
+| — | N | liga/desliga som |
 
 Modos: **JOGAR** (2 acertos e cai; nada volta) e **TREINO** (ninguém morre; pallets e janelas voltam sozinhos, para repetir as mecânicas à vontade).
 
@@ -122,7 +130,8 @@ O assassino ataca com um bote (arma erguida 0,16 s → bote de 0,3 s): dá para 
 | `index.html` | página e canvas |
 | `js/font.js` | fonte bitmap 5×7 com acentos |
 | `js/audio.js` | sons sintetizados (queda do pallet, atordoamento, golpe, batida de coração) |
-| `js/map.js` | arena fixa: 5 casas, 2 muros com vão, 12 pallets, 10 janelas, 8 geradores, porta principal, 4 pontos de início |
+| `js/camp.js` | gerador do **mapa grande** por semente (floresta, lago, cabanas, trilhas, conectividade garantida) |
+| `js/map.js` | arena fixa 48×32 (5 casas, 12 pallets, 10 janelas) e seletor `buildMap({kind})` |
 | `js/game.js` | **regras**: sobrevivente, IA do assassino, pallet (sem DOM, testável no Node) |
 | `js/render.js` | pixel art por código, zona de impacto, HUD |
 | `js/main.js` | laço, telas, entrada por toque/teclado |

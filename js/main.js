@@ -14,6 +14,7 @@
   let lobbyTraining = false;   // opção "TREINO" na sala
   let difficulty = 'normal';   // easy | normal | hard (para quem joga)
   let toast = null;            // { text, t }
+  let showMap = false;         // mapa de campo (tecla M)
   let coins = 0, hist = { survivor: [], killer: [] }, log = [];
   let lastReward = 0;
   try {
@@ -76,7 +77,8 @@
         if (game && game.s.tool) { const r3 = Math.round(r * 0.62); list.push({ id: 'radio', label: 'RÁDIO', round: true, x: W - 2 * r - 8 - 2 * r2 - 6 - 2 * r3 - 5, y: H - 2 * r3 - 10, w: 2 * r3, h: 2 * r3, active: !!game.s.tool.on, hot: '#9bd3f0' }); }
       }
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
-      if (game && game.training) list.push({ id: 'vision', label: 'VER TUDO', x: W - 22 - 4 - 52, y: 24, w: 52, h: 13, color: game.fullVision ? '#7dffa0' : '#7ad0ff', sel: !!game.fullVision });
+      list.push({ id: 'map', label: 'MAPA', x: W - 22 - 4 - 30, y: 24, w: 30, h: 13, color: '#ffd23f', sel: showMap });
+      if (game && game.training) list.push({ id: 'vision', label: 'VER TUDO', x: W - 22 - 4 - 30 - 4 - 52, y: 24, w: 52, h: 13, color: game.fullVision ? '#7dffa0' : '#7ad0ff', sel: !!game.fullVision });
     } else if (state === 'pause') {
       const bw = Math.min(150, W - 24), by = Math.round(H * 0.4);
       list.push({ id: 'resume', label: 'CONTINUAR', x: cx - bw / 2, y: by, w: bw, h: 17, color: '#ffd23f' });
@@ -107,6 +109,7 @@
       case 'kslot': role = role === 'killer' ? 'survivor' : 'killer'; break;
       case 'train_toggle': lobbyTraining = !lobbyTraining; break;
       case 'diff_toggle': difficulty = { easy: 'normal', normal: 'hard', hard: 'easy' }[difficulty]; try { localStorage.setItem('dp_diff', difficulty); } catch (e) {} break;
+      case 'map': showMap = !showMap; break;
       case 'vision': if (game && game.training) game.fullVision = !game.fullVision; break;
       case 'start': start(lobbyTraining); break;
       case 'drop': dropQueued = true; break;
@@ -122,7 +125,7 @@
   }
 
   function start(tr) {
-    training = tr; newBest = false;
+    training = tr; newBest = false; showMap = false;
     DP.render.reset();
     game = DP.createGame({ training: tr, role, difficulty, sfx: (n, p) => { const f = DP.audio.sfx[n]; if (f) f(p); } });
     state = 'play';
@@ -168,9 +171,9 @@
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // aceita e.code (posição física) e cai para e.key quando o navegador não informa
-  const FALLBACK = { w: 'KeyW', a: 'KeyA', s: 'KeyS', d: 'KeyD', e: 'KeyE', p: 'KeyP', r: 'KeyR', m: 'KeyM', t: 'KeyT', ' ': 'Space', Enter: 'Enter', Escape: 'Escape', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight' };
+  const FALLBACK = { w: 'KeyW', a: 'KeyA', s: 'KeyS', d: 'KeyD', e: 'KeyE', p: 'KeyP', r: 'KeyR', m: 'KeyM', n: 'KeyN', Tab: 'Tab', t: 'KeyT', ' ': 'Space', Enter: 'Enter', Escape: 'Escape', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight' };
   const codeOf = (e) => (e.code && e.code !== 'Unidentified') ? e.code : (FALLBACK[e.key] || FALLBACK[(e.key || '').toLowerCase()] || '');
-  const BLOCK = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+  const BLOCK = ['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
   window.addEventListener('keydown', (e) => {
     const code = codeOf(e);
@@ -204,7 +207,8 @@
       if (code === 'Escape') { state = 'menu'; game = null; }
     }
     if (code === 'KeyR' && state === 'play') start(training);
-    if (code === 'KeyM') DP.audio.toggleMute();
+    if (code === 'KeyM' || code === 'Tab') { if (state === 'play') showMap = !showMap; }
+    if (code === 'KeyN') DP.audio.toggleMute();
   });
   window.addEventListener('keyup', (e) => { const c = codeOf(e); if (c) keys[c] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -315,13 +319,14 @@
     } else if (game) {
       DP.render.drawWorld(ctx, game, W, H, tm);
       DP.render.drawHUD(ctx, game, W, H, tm);
+      if (showMap && state === 'play') DP.render.drawMap(ctx, game, W, H, tm);
       DP.render.drawSkill(ctx, game, W, H, tm);
       if (state === 'over') DP.render.drawOver(ctx, game, W, H, tm, best, newBest, lastReward);
       else if (game.over) DP.render.overlay(ctx, W, H, Math.min(0.6, game.overT * 0.5));
       if (state === 'pause') {
         DP.render.overlay(ctx, W, H, 0.7);
         text(ctx, 'PAUSADO', Math.round(W / 2), Math.round(H * 0.2), '#fff', { align: 'c' });
-        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. SHIFT (SEGURAR): ESPREITA. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU JANELA, CHUTAR GERADOR. M: SOM.' : 'WASD/SETAS: MOVER. SHIFT: ANDAR (QUIETO). Q: RÁDIO. SEGURE E: CONSERTAR / ABRIR JANELA / PEGAR. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: SOM.', Math.floor((W - 16) / 6));
+        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. SHIFT (SEGURAR): ESPREITA. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU JANELA, CHUTAR GERADOR. M: MAPA. N: SOM.' : 'WASD/SETAS: MOVER. SHIFT: ANDAR (QUIETO). Q: RÁDIO. SEGURE E: CONSERTAR / ABRIR JANELA / PEGAR. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: MAPA. N: SOM.', Math.floor((W - 16) / 6));
         tips.forEach((l, i) => text(ctx, l, Math.round(W / 2), Math.round(H * 0.2) + 14 + i * 9, '#a9a9b5', { align: 'c' }));
       }
     }

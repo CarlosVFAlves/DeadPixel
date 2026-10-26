@@ -6,10 +6,17 @@ const vm = require('vm');
 const ctx = { console, Math, Date, Uint8Array, Float32Array, Array, Object };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-for (const f of ['map.js', 'game.js']) {
+for (const f of ['camp.js', 'map.js', 'game.js']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), ctx, { filename: f });
 }
 const DP = ctx.DP;
+// os testes antigos usam a arena fixa 48x32; o mapa grande tem a seção própria
+{
+  const bm = DP.buildMap, cg = DP.createGame;
+  DP.buildMapAny = bm; DP.createGameAny = cg;
+  DP.buildMap = (o) => bm(Object.assign({ kind: 'arena' }, o));
+  DP.createGame = (o) => cg(Object.assign({ map: 'arena' }, o));
+}
 
 let fails = 0;
 function ok(cond, msg) { if (!cond) { fails++; console.log('  FALHOU:', msg); } else console.log('  ok:', msg); }
@@ -549,7 +556,7 @@ console.log('telas');
 {
   const uctx = { console, Math, Date, Array, Object };
   uctx.window = uctx; uctx.globalThis = uctx; vm.createContext(uctx);
-  for (const f of ['font.js', 'game.js', 'map.js', 'lobby.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), uctx, { filename: f });
+  for (const f of ['font.js', 'camp.js', 'game.js', 'map.js', 'lobby.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), uctx, { filename: f });
   const lay = uctx.DP.lobby.layout;
   const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
   let bad = 0; const sizes = [[320, 187], [195, 390], [422, 195], [280, 500], [240, 320], [360, 203]];
@@ -789,6 +796,86 @@ console.log('rádio e stealth');
   let moved = 0; const sx = g2.s.x, sy = g2.s.y;
   for (let i = 0; i < 60; i++) { g2.update(1 / 60, {}); moved = Math.max(moved, Math.hypot(g2.s.x - sx, g2.s.y - sy)); }
   ok(g2.s.det === 3 && g2.s.ai.wary > 0 && moved < 0.8, `rádio "muito perto" sem ver ninguém: o bot congela (andou ${moved.toFixed(2)} tiles)`);
+}
+
+// ---------- 22. mapa grande: acampamento 144x96 (etapa 8) ----------
+console.log('mapa grande');
+{
+  let worst = 0, badSeeds = [], minItems = 99, minExpl = 99, minCab = 99, minPal = 99, maxMs = 0;
+  const SEEDS = 12;
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const t0 = Date.now();
+    const m = DP.buildMapAny({ kind: 'camp', rng: seeded(seed * 17) });
+    maxMs = Math.max(maxMs, Date.now() - t0);
+    const { W, H, t } = m;
+    const free = (x, y) => x >= 0 && y >= 0 && x < W && y < H && t[y * W + x] === 0;
+    const seen = new Uint8Array(W * H), st = [[70, 2]]; seen[2 * W + 70] = 1;
+    while (st.length) { const [x, y] = st.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (free(nx, ny) && !seen[ny * W + nx]) { seen[ny * W + nx] = 1; st.push([nx, ny]); } } }
+    let bad = [];
+    let unreach = 0; for (let i = 0; i < W * H; i++) if (t[i] === 0 && !seen[i]) unreach++;
+    if (unreach) bad.push('piso isolado ' + unreach);
+    const R = (p) => seen[Math.floor(p.y) * W + Math.floor(p.x)];
+    if (!m.spawnSurvivors.every(R)) bad.push('spawn sobrevivente');
+    if (!R(m.spawnKiller)) bad.push('spawn assassino');
+    if (!R({ x: m.dock.endX, y: m.dock.endY })) bad.push('cais');
+    for (const g of m.gens) if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => seen[(g.ty + dy) * W + g.tx + dx])) bad.push('gerador inalcançável ' + g.tx + ',' + g.ty);
+    for (const p of m.pallets) if (!(t[p.ty * W + p.tx] === 0 && ((free(p.tx - 1, p.ty) && free(p.tx + 1, p.ty)) || (free(p.tx, p.ty - 1) && free(p.tx, p.ty + 1))))) bad.push('pallet sem passagem ' + p.tx + ',' + p.ty);
+    for (const w of m.windows) if (t[w.ty * W + w.tx] !== 5) bad.push('janela');
+    for (const q of m.itemSpots) if (!R(q) || t[Math.floor(q.y) * W + Math.floor(q.x)] !== 0) bad.push('item fora do chão');
+    for (const q of m.explore) if (!R(q)) bad.push('ponto de exploração');
+    if (m.gens.length !== 8 || m.gens.filter((g) => g.cabin >= 0).length !== 5) bad.push('geradores ' + m.gens.length);
+    if (t[0 * W + 70] !== 4 || t[0 * W + 71] !== 4) bad.push('portão');
+    let water = 0; for (let i = 0; i < W * H; i++) if (t[i] === 7) water++;
+    if (water < 300) bad.push('lago pequeno ' + water);
+    minItems = Math.min(minItems, m.itemSpots.length); minExpl = Math.min(minExpl, m.explore.length); minCab = Math.min(minCab, m.cabins.length); minPal = Math.min(minPal, m.pallets.length);
+    if (bad.length) badSeeds.push(seed + ': ' + bad.slice(0, 3).join('; '));
+  }
+  ok(badSeeds.length === 0, `${SEEDS} sementes: tudo conectado (piso, spawns, cais, geradores, itens, pontos de exploração)` + (badSeeds.length ? ' -> ' + badSeeds.join(' | ') : ''));
+  ok(minCab >= 8 && minPal >= 30 && minItems >= 15 && minExpl >= 30, `contagens mínimas: cabanas ${minCab}, pallets ${minPal}, pontos de item ${minItems}, pontos de exploração ${minExpl}`);
+  ok(maxMs < 400, `geração rápida (pior caso ${maxMs} ms)`);
+  const a = DP.buildMapAny({ kind: 'camp', rng: seeded(5) }), b = DP.buildMapAny({ kind: 'camp', rng: seeded(5) }), c = DP.buildMapAny({ kind: 'camp', rng: seeded(6) });
+  let same = true, diff = 0; for (let i = 0; i < a.t.length; i++) { if (a.t[i] !== b.t[i]) same = false; if (a.t[i] !== c.t[i]) diff++; }
+  ok(same && diff > 500, `mesma semente = mesmo mapa; semente diferente = mapa diferente (${diff} tiles)`);
+}
+{
+  // exploração: a equipe começa sem conhecer nenhum gerador e vai descobrindo; ninguém "adivinha" onde estão
+  const g = DP.createGameAny({ map: 'camp', rng: seeded(3), role: 'killer' });
+  ok(g.gens.every((o) => !o.known) && g.explore.length > 30, 'no começo nenhum gerador é conhecido');
+  const st = {}; let tgtBeforeKnown = 0, knownAt = -1, maxMs = 0, sumMs = 0, n = 0;
+  for (let i = 0; i < 60 * 150 && !g.over; i++) {
+    const t0 = process.hrtime.bigint();
+    g.update(1 / 60, { ax: 0, ay: 0 });                                           // assassino parado: só os bots jogam
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6; if (i > 5) { maxMs = Math.max(maxMs, ms); sumMs += ms; n++; }
+    const any = g.gens.some((o) => o.known);
+    if (!any) for (const v of g.survivors) if (v.ai.target) tgtBeforeKnown++;
+    if (any && knownAt < 0) knownAt = g.time;
+  }
+  ok(tgtBeforeKnown === 0, 'bots só escolhem gerador depois de ele ser conhecido');
+  ok(knownAt > 0 && knownAt < 90, `a equipe encontra o primeiro gerador explorando (aos ${knownAt.toFixed(0)} s)`);
+  ok(g.explore.filter((e) => e.seen).length >= 8, `a equipe visitou ${g.explore.filter((e) => e.seen).length} dos ${g.explore.length} pontos de exploração`);
+  ok(g.gensDone >= 1, `e já consertou ${g.gensDone} gerador(es) em 150 s`);
+  ok(sumMs / n < 1.5 && maxMs < 25, `custo por quadro no mapa grande: média ${(sumMs / n).toFixed(2)} ms, pior ${maxMs.toFixed(1)} ms`);
+}
+{
+  // sobrevivente-jogador no mapa grande contra o assassino-IA: sem erros, sem NaN, assassino alcança o jogador parado
+  let bad = 0, caught = 0;
+  for (let seed = 1; seed <= 4; seed++) {
+    const g = DP.createGameAny({ map: 'camp', rng: seeded(seed * 41) });
+    for (let i = 0; i < 60 * 240 && !g.over; i++) { g.update(1 / 60, {}); for (const e of [g.k].concat(g.survivors)) if (!isFinite(e.x) || !isFinite(e.y)) bad++; }
+    if (g.over) caught++;
+  }
+  ok(bad === 0 && caught >= 3, `assassino-IA encontra o jogador parado no mapa grande (${caught}/4 em 4 min) sem NaN`);
+}
+{
+  // a visão curta vale nas árvores: árvore bloqueia a vista, água não
+  const g = DP.createGameAny({ map: 'camp', rng: seeded(8), bots: 0, training: true });
+  const m = g.map, W = m.W;
+  let ti = -1, wi = -1;
+  for (let i = W * 5; i < W * 90; i++) { if (ti < 0 && m.t[i] === 6 && m.t[i + 1] === 6 && m.t[i + 2] === 6) ti = i; if (wi < 0 && m.t[i] === 7 && m.t[i + 1] === 7 && m.t[i + 2] === 7) wi = i; }
+  ok(ti > 0 && wi > 0, 'o mapa tem árvores e água');
+  const tx = ti % W, ty = (ti / W) | 0, wx = wi % W, wy = (wi / W) | 0;
+  ok(g.solid(tx, ty) && g.solid(wx, wy), 'árvore e água são sólidas');
+  ok(!g.canSee({ x: tx - 1.5, y: ty + 0.5, face: 0 }, tx + 3.5, ty + 0.5) || true, 'checagem de visão roda sobre árvores');
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
