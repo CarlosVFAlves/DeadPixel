@@ -180,14 +180,19 @@
     }
   }
 
+  const CFGT = 0.4;   // = CFG.TRIP_T
   function drawKiller(ctx, k, game, tm) {
     const d = dir4(k.face);
     const x = Math.round(k.x * TS), y = Math.round(k.y * TS) + 6;
     const step = Math.floor(k.walk) % 2;
     const dormant = k.state === 'intro';
     const stun = k.state === 'stun';
-    const wob = stun ? Math.round(Math.sin(tm * 18) * 1.5) : 0;
-    const bob = k.moving && step ? 1 : 0;
+    const stumble = k.state === 'stumble';
+    const trip = stumble && k.trip > 0;
+    // cambaleia de um lado para o outro; no tombo se joga para a frente
+    const wob = stun ? Math.round(Math.sin(tm * 18) * 1.5) : stumble ? Math.round(Math.sin(tm * 13 + k.ph) * 2.2) : 0;
+    const dip = trip ? Math.round(3 * Math.sin(Math.min(1, (CFGT - k.trip) / CFGT * 1.6) * Math.PI / 2)) : 0;
+    const bob = (k.moving && step ? 1 : 0) - (trip ? dip : 0);
     const brk = k.state === 'break' ? Math.round(Math.sin(k.t * 20) * 1.5) : 0;
 
     px(ctx, 'rgba(0,0,0,.45)', x - 6, y - 1, 12, 3);
@@ -230,6 +235,11 @@
         hx + Math.cos(wa - i * 0.35 - 0.3) * wl, hy2 + Math.sin(wa - i * 0.35 - 0.3) * wl, 'rgba(255,255,255,' + (0.5 - i * 0.12) + ')');
     }
 
+    if (stumble) {
+      // poeira e "tontura" suave durante o tropeço
+      px(ctx, 'rgba(255,157,92,.9)', x + Math.round(Math.sin(tm * 9) * 6) - 1, hy - 4, 2, 2);
+      if (trip) { px(ctx, 'rgba(139,115,85,.7)', x - 7, y - 1, 3, 1); px(ctx, 'rgba(139,115,85,.7)', x + 5, y - 2, 3, 1); }
+    }
     if (stun) {
       for (let i = 0; i < 3; i++) {
         const an = tm * 7 + i * 2.09;
@@ -349,11 +359,35 @@
     }
   }
 
+  // setas na borda da tela para barulhos fora de vista (gerador sendo consertado, explosões, gerador pronto)
+  function drawNoiseArrows(ctx, game, W, H, cx, cy, tm) {
+    const spots = [];
+    for (const o of game.gens) if (!o.done && o.noisyT !== undefined && game.time - o.noisyT < 1.3) spots.push({ x: o.cx, y: o.cy, c: '#ffb347' });
+    for (const q of game.pings) spots.push({ x: q.x, y: q.y, c: '#ff5c5c' });
+    for (const p of spots) {
+      const sx = p.x * TS - cx, sy = p.y * TS - cy;
+      const m = 14;
+      if (sx > m && sx < W - m && sy > m && sy < H - m) continue;       // já está na tela
+      const ang = Math.atan2(sy - H / 2, sx - W / 2);
+      const ex = Math.max(m, Math.min(W - m, W / 2 + Math.cos(ang) * 4000)), ey = Math.max(m, Math.min(H - m, H / 2 + Math.sin(ang) * 4000));
+      // reduz ao retângulo da tela mantendo a direção
+      const k = Math.min((W / 2 - m) / Math.abs(Math.cos(ang) || 1e-6), (H / 2 - m) / Math.abs(Math.sin(ang) || 1e-6));
+      const ax = W / 2 + Math.cos(ang) * k, ay = H / 2 + Math.sin(ang) * k;
+      void ex; void ey;
+      const pulse = 0.65 + 0.35 * Math.sin(tm * 8);
+      ctx.save(); ctx.translate(Math.round(ax), Math.round(ay)); ctx.rotate(ang);
+      ctx.globalAlpha = pulse; ctx.fillStyle = p.c;
+      ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -6); ctx.lineTo(-2, 0); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function drawWorld(ctx, game, W, H, tm) {
     if (!R.staticCv) R.staticCv = buildStatic(game);
     const mw = game.map.W * TS, mh = game.map.H * TS;
-    const s = game.s;
-    let cx = s.x * TS - W / 2, cy = s.y * TS - H / 2;
+    const s = game.s, pl = game.pl;
+    let cx = pl.x * TS - W / 2, cy = pl.y * TS - H / 2;
     cx = mw <= W ? (mw - W) / 2 : Math.max(0, Math.min(mw - W, cx));
     cy = mh <= H ? (mh - H) / 2 : Math.max(0, Math.min(mh - H, cy));
     let sh = game.shake;
@@ -397,9 +431,12 @@
     // dicas sobre o que dá para fazer perto
     if (!game.over) {
       const bob = Math.round(Math.sin(tm * 6));
-      if (game.near) text(ctx, 'ESPAÇO', game.near.cx * TS, game.near.cy * TS - 16 + bob, '#ffd23f', { align: 'c' });
-      const it = game.interact;
-      if (it && !game.s.acting) text(ctx, it.type === 'gen' ? 'SEGURE E' : 'SEGURE E: ABRIR', it.obj.cx * TS, it.obj.cy * TS - (it.type === 'gen' ? 14 : 16) + bob, '#7dffa0', { align: 'c' });
+      if (game.near && game.role === 'survivor') text(ctx, 'ESPAÇO', game.near.cx * TS, game.near.cy * TS - 16 + bob, '#ffd23f', { align: 'c' });
+      const it = game.pInteract;
+      if (it && !(game.role === 'survivor' && game.s.acting)) {
+        const label = { gen: 'SEGURE E', gate: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', kick: 'E: CHUTAR' }[it.type];
+        text(ctx, label, it.obj.cx * TS, it.obj.cy * TS - (it.type === 'gen' ? 14 : 16) + bob, it.type === 'break' || it.type === 'kick' ? '#ff9d5c' : '#7dffa0', { align: 'c' });
+      }
     }
     // textos flutuantes
     for (const pu of game.popups) {
@@ -410,35 +447,49 @@
     ctx.globalAlpha = 1;
     ctx.restore();
 
-    // perigo = proximidade do assassino (raio de terror)
-    const danger = game.k.state === 'intro' ? 0 : Math.max(0, 1 - game.dist / 11);
+    // perigo = proximidade do assassino (raio de terror) — só para quem joga de sobrevivente
+    const danger = game.role === 'killer' || game.k.state === 'intro' ? 0 : Math.max(0, 1 - game.dist / 11);
     vignette(ctx, W, H, danger, tm);
+    if (game.role === 'killer' && !game.over) drawNoiseArrows(ctx, game, W, H, cx, cy, tm);
     if (game.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.5, game.flash * 1.5) + ')'; ctx.fillRect(0, 0, W, H); }
     return danger;
   }
 
   // ---------- HUD ----------
   function drawHUD(ctx, game, W, H, tm) {
-    const s = game.s;
-    text(ctx, 'VIDA', 4, 4, '#cfcfd8');
-    for (let i = 0; i < 2; i++) text(ctx, '♥', 32 + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
+    const s = game.s, ka = game.role === 'killer';
+    text(ctx, ka ? 'ALVO' : 'VIDA', 4, 4, '#cfcfd8');
+    for (let i = 0; i < 2; i++) text(ctx, '♥', (ka ? 28 : 32) + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
     const gd = game.gensDone >= game.need;
     text(ctx, 'GERADORES ' + game.gensDone + '/' + game.need, 4, 14, gd ? '#7dffa0' : '#ffb347');
     text(ctx, 'PALLETS ' + game.standing() + '/' + game.pallets.length, 4, 24, '#e9c07a');
-    text(ctx, 'ATORDOADO ' + game.stats.stuns + 'X', 4, 34, '#ffd23f');
+    text(ctx, (ka ? 'TROPEÇOU ' : 'ATORDOADO ') + game.stats.stuns + 'X', 4, 34, ka ? '#ff9d5c' : '#ffd23f');
     const tt = Math.floor(game.time);
     text(ctx, Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0'), W - 4, 4, '#fff', { align: 'r' });
     if (game.training) text(ctx, 'TREINO', W - 4, 14, '#7ad0ff', { align: 'r' });
 
-    if (game.k.state === 'intro') {
+    if (ka) {
+      const y0 = Math.max(46, Math.round(H * 0.2));
+      if (game.k.state === 'stumble' || game.k.state === 'stun') {
+        const lines = game.k.state === 'stun' ? 'ATORDOADO!' : 'TROPEÇANDO!';
+        text(ctx, lines, W / 2, y0, '#ff9d5c', { align: 'c' });
+        const f = game.k.state === 'stun' ? 1 : 1 - game.k.t / game.cfg.STUMBLE_T;
+        px(ctx, 'rgba(0,0,0,.6)', W / 2 - 25, y0 + 10, 50, 4);
+        px(ctx, '#ff9d5c', W / 2 - 24, y0 + 11, Math.round(48 * f), 2);
+      } else if (game.time < 7) {
+        DP.font.wrap('CACE O SOBREVIVENTE ANTES QUE ELE ESCAPE. SETAS NA BORDA = BARULHO', Math.floor((W - 8) / 6)).forEach((l, i) =>
+          text(ctx, l, W / 2, y0 + i * 9, '#ffb347', { align: 'c' }));
+      }
+    } else if (game.k.state === 'intro') {
       const left = Math.ceil(game.cfg.INTRO - game.k.t);
       text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, Math.max(46, Math.round(H * 0.2)), '#ff5c5c', { align: 'c' });
       DP.font.wrap('CONSERTE ' + game.need + ' GERADORES E ESCAPE PELO PORTÃO', Math.floor((W - 8) / 6)).forEach((l, i) =>
         text(ctx, l, W / 2, Math.max(46, Math.round(H * 0.2)) + 10 + i * 9, '#ffb347', { align: 'c' }));
-    } else if (gd && game.time % 6 < 3 && !game.over) {
-      DP.font.wrap('PORTÕES ABERTOS! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
+    }
+    if (!(ka && (game.k.state === 'stumble' || game.k.state === 'stun' || game.time < 7)) && gd && game.time % 6 < 3 && !game.over) {
+      DP.font.wrap(ka ? 'PORTÕES ABERTOS! IMPEÇA A FUGA' : 'PORTÕES ABERTOS! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
         text(ctx, l, W / 2, Math.max(46, Math.round(H * 0.2)) + i * 9, '#7dffa0', { align: 'c' }));
-    } else if (game.k.hesitate) {
+    } else if (!ka && game.k.hesitate) {
       text(ctx, 'ELE HESITA...', W / 2, Math.max(46, Math.round(H * 0.2)), '#ff9d5c', { align: 'c' });
     }
   }
@@ -446,7 +497,7 @@
   // skill check no centro da tela
   function drawSkill(ctx, game, W, H, tm) {
     const sk = game.s.skill;
-    if (!sk) return;
+    if (!sk || game.role === 'killer') return;
     const C = game.cfg;
     const cx = Math.round(W / 2), cy = Math.round(H / 2) - 46, r = 15;
     ctx.fillStyle = 'rgba(8,8,12,.72)'; ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.fill();
@@ -468,17 +519,19 @@
     const col = b.color || '#e9c07a';
     if (b.round) {
       const r = b.w / 2, cx = b.x + r, cy = b.y + r;
+      const hot = b.hot || '#ffd23f';
       const glow = b.active ? 0.5 + 0.3 * Math.sin(tm * 8) : 0.0;
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = pressed ? 'rgba(255,210,63,.55)' : 'rgba(20,18,24,' + (b.active ? 0.8 : 0.5) + ')';
+      ctx.fillStyle = pressed ? hot + '8c' : 'rgba(20,18,24,' + (b.active ? 0.8 : 0.5) + ')';
       ctx.fill();
-      ctx.lineWidth = 2; ctx.strokeStyle = b.active ? 'rgba(255,210,63,' + (0.6 + glow * 0.4) + ')' : 'rgba(255,255,255,.25)';
-      ctx.stroke();
-      text(ctx, b.label, cx, cy - 3, b.active ? '#ffd23f' : '#9a9aa5', { align: 'c' });
+      ctx.lineWidth = 2; ctx.strokeStyle = b.active ? hot : 'rgba(255,255,255,.25)';
+      ctx.globalAlpha = b.active ? 0.6 + glow * 0.4 : 1; ctx.stroke(); ctx.globalAlpha = 1;
+      text(ctx, b.label, cx, cy - 3, b.active ? hot : '#9a9aa5', { align: 'c' });
     } else {
-      ctx.fillStyle = pressed ? 'rgba(255,210,63,.4)' : 'rgba(20,18,24,.85)';
+      ctx.fillStyle = pressed ? 'rgba(255,210,63,.4)' : b.sel ? 'rgba(255,255,255,.14)' : 'rgba(20,18,24,.85)';
       ctx.fillRect(b.x, b.y, b.w, b.h);
-      ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+      ctx.strokeStyle = col; ctx.lineWidth = b.sel ? 2 : 1;
+      ctx.strokeRect(b.x + 0.5 + (b.sel ? 0.5 : 0), b.y + 0.5 + (b.sel ? 0.5 : 0), b.w - 1 - (b.sel ? 1 : 0), b.h - 1 - (b.sel ? 1 : 0));
       text(ctx, b.label, b.x + b.w / 2, b.y + (b.h - 7) / 2, col, { align: 'c' });
     }
   }
@@ -494,7 +547,7 @@
   // ---------- telas ----------
   function overlay(ctx, W, H, a) { ctx.fillStyle = 'rgba(5,5,8,' + a + ')'; ctx.fillRect(0, 0, W, H); }
 
-  function drawMenu(ctx, W, H, tm, best) {
+  function drawMenu(ctx, W, H, tm, best, role) {
     ctx.fillStyle = '#0b0b10'; ctx.fillRect(0, 0, W, H);
     const cx = Math.round(W / 2);
     const title = 'DEAD PIXEL';
@@ -503,9 +556,11 @@
     ctx.translate(cx, Math.round(H * 0.16)); ctx.scale(sc, sc);
     text(ctx, title, 0, 0, '#e23a3a', { align: 'c' });
     ctx.restore();
-    text(ctx, 'PROTÓTIPO 2: GERADORES', cx, Math.round(H * 0.16) + 7 * sc + 6, '#e9c07a', { align: 'c' });
+    text(ctx, 'PROTÓTIPO 3: ASSASSINO', cx, Math.round(H * 0.16) + 7 * sc + 6, '#e9c07a', { align: 'c' });
     if (best) text(ctx, best, cx, Math.round(H * 0.36), '#8a8a99', { align: 'c' });
-    const lines = DP.font.wrap('CONSERTE 5 GERADORES, ABRA O PORTÃO E ESCAPE. DERRUBE O PALLET NO ASSASSINO PARA GANHAR TEMPO.', Math.floor((W - 16) / 6));
+    const lines = DP.font.wrap(role === 'killer'
+      ? 'CACE O SOBREVIVENTE. QUEBRE PALLETS, CHUTE GERADORES E CUIDADO: LEVOU PALLET, TROPEÇA!'
+      : 'CONSERTE 5 GERADORES, ABRA O PORTÃO E ESCAPE. DERRUBE O PALLET NO ASSASSINO PARA GANHAR TEMPO.', Math.floor((W - 16) / 6));
     lines.forEach((l, i) => text(ctx, l, cx, Math.round(H * 0.82) + i * 9, '#a9a9b5', { align: 'c' }));
   }
 
@@ -515,15 +570,16 @@
     if (game.overT < 0.8) return;
     const cx = Math.round(W / 2);
     const y0 = Math.round(H * 0.16);
-    const esc = game.result === 'escaped';
-    text(ctx, esc ? 'VOCÊ ESCAPOU!' : 'VOCÊ MORREU', cx, y0, esc ? '#7dffa0' : '#e23a3a', { align: 'c' });
+    const esc = game.result === 'escaped', ka = game.role === 'killer';
+    const win = ka ? !esc : esc;
+    text(ctx, ka ? (esc ? 'ELE ESCAPOU...' : 'ELE CAIU!') : (esc ? 'VOCÊ ESCAPOU!' : 'VOCÊ MORREU'), cx, y0, win ? '#7dffa0' : '#e23a3a', { align: 'c' });
     const tt = Math.floor(game.time);
     const rows = [
-      [esc ? 'TEMPO DE FUGA' : 'SOBREVIVEU', Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0')],
+      [ka ? 'DURAÇÃO DA CAÇADA' : esc ? 'TEMPO DE FUGA' : 'SOBREVIVEU', Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0')],
       ['GERADORES', game.gensDone + '/' + game.need],
-      ['ATORDOAMENTOS', String(game.stats.stuns)],
-      ['PALLETS DERRUBADOS', String(game.stats.drops)],
-      ['SKILL CHECKS', game.stats.skillOk + ' OK / ' + game.stats.skillFail + ' ERROS']
+      ka ? ['TROPEÇOS', String(game.stats.stuns)] : ['ATORDOAMENTOS', String(game.stats.stuns)],
+      ka ? ['GOLPES CERTEIROS', String(game.stats.hits)] : ['PALLETS DERRUBADOS', String(game.stats.drops)],
+      ka ? ['PALLETS QUEBRADOS', String(game.stats.breaks)] : ['SKILL CHECKS', game.stats.skillOk + ' OK / ' + game.stats.skillFail + ' ERROS']
     ];
     rows.forEach((r, i) => {
       const y = y0 + 15 + i * 10;

@@ -1,9 +1,13 @@
-# Dead Pixel — Protótipo 2: Geradores e Fuga
+# Dead Pixel — Protótipo 3: Jogue como o Assassino
 
 Jogo 2D em pixel art (HTML + canvas, **sem dependências**, gráficos e áudio gerados por código), pensado para **celular e PC**.
 Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
 
-Agora há um **objetivo**: conserte **5 de 7 geradores**, abra um dos **2 portões de saída** e escape — sem deixar o assassino te pegar.
+**Dois papéis** (escolha no menu, ou teclas `1` / `2`):
+- **SOBREVIVENTE:** fuja do assassino (IA), conserte geradores e escape.
+- **ASSASSINO:** você caça um sobrevivente controlado por IA. Ele conserta geradores, foge, usa pallets e tenta escapar.
+
+Objetivo do sobrevivente: conserte **5 de 7 geradores**, abra um dos **2 portões de saída** e escape — sem deixar o assassino te pegar.
 O **pallet** continua sendo a sua principal defesa (veja abaixo).
 
 Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celular).
@@ -21,6 +25,25 @@ Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celula
 | — | M | liga/desliga som |
 
 Modos: **JOGAR** (2 acertos e você cai; os pallets não voltam) e **TREINO** (não morre e os pallets voltam a ficar de pé depois de ~8 s, para repetir a mecânica à vontade).
+
+## Jogando como assassino
+
+| Celular | Teclado | Ação |
+|---|---|---|
+| joystick | WASD / setas | andar (4,55 tiles/s; o sobrevivente corre ~4,4) |
+| **ATACAR** | **Espaço** | golpe com bote (ergue 0,16 s, avança ~2,5 tiles). Tem um pouco de mira assistida |
+| **AGIR** | **E** | **quebrar** pallet caído (~2 s, mexer cancela) ou **chutar** gerador com progresso (−15%) |
+
+- **Você ganha** derrubando o sobrevivente (2 acertos). **Perde** se ele escapar.
+- Setas laranja/vermelhas na borda da tela apontam **barulhos fora de vista**: gerador sendo consertado, skill check errado, gerador pronto.
+- A zona amarela/vermelha no chão mostra onde um pallet cairia se o sobrevivente derrubasse agora.
+- A IA do sobrevivente: **sente** você (batimento) a ~11 tiles e **vê** com linha de visão; foge de quem se aproxima; corre até um pallet que esteja no seu caminho, passa para o outro lado e **derruba na hora certa** (prevendo onde você estará, com tempo de reação humano); pula pallets caídos; foge para o portão quando está aberto.
+
+## Tropeçar
+
+Quando o assassino (você ou a IA) leva um pallet:
+1. **Atordoado** ~0,9 s, parado.
+2. **Tropeçando** por 2,8 s: anda a 55% da velocidade, o rumo **desvia** do que você aponta (cambaleia de um lado para o outro, mais forte no começo), e de vez em quando **cai** (0,4 s de tombo para a frente). Não dá para atacar nem agir. O HUD mostra a barra de recuperação.
 
 ## Geradores, skill check e portões
 
@@ -57,7 +80,7 @@ O assassino ataca com um bote (arma erguida 0,16 s → bote de 0,3 s): dá para 
 
 ## Ajustes (`CFG` em `js/game.js`)
 
-`RUN` / `K_SPEED` (velocidades), `REPAIR_T` (tempo do gerador), `SKILL_*` (skill check), `SIGHT` / `NOISE_*` / `TRACK` (percepção do assassino), `FALL_T` (tempo de queda), `ZONE_LEN` / `ZONE_W` (tamanho da zona de impacto), `STUN`, `BREAK_T`, `BREAK_COST` (quanto a IA prefere dar a volta a quebrar), `RESPECT` (chance de hesitar), `ATTACK_RANGE`, `RECOVER_*`.
+`RUN` / `K_SPEED` (velocidades), `STUN` / `STUMBLE_T` / `STUMBLE_SPEED` / `TRIP_T` (tropeço), `AI_SPEED` / `AI_SENSE` / `AI_FLEE` / `AI_SKILL_ERR` (IA do sobrevivente), `REPAIR_T` (tempo do gerador), `SKILL_*` (skill check), `SIGHT` / `NOISE_*` / `TRACK` (percepção do assassino), `FALL_T` (tempo de queda), `ZONE_LEN` / `ZONE_W` (tamanho da zona de impacto), `STUN`, `BREAK_T`, `BREAK_COST` (quanto a IA prefere dar a volta a quebrar), `RESPECT` (chance de hesitar), `ATTACK_RANGE`, `RECOVER_*`.
 
 ## Próximos passos (ideias)
 

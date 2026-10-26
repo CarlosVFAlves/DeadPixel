@@ -24,7 +24,10 @@
     FALL_T: 0.22,        // tempo de queda — o atordoamento só vale no impacto
     ZONE_LEN: 1.7,       // zona de impacto: comprimento (a partir do pallet, no lado da queda)
     ZONE_W: 0.9,         // zona de impacto: meia largura
-    STUN: 2.4,           // atordoamento do assassino
+    STUN: 0.9,           // atordoamento do assassino (parado, de estrelas)...
+    STUMBLE_T: 2.8,      // ...e depois ele TROPEÇA por este tempo
+    STUMBLE_SPEED: 0.55, // velocidade enquanto tropeça
+    TRIP_T: 0.4,         // cada tombo (para e cambaleia para a frente)
     BREAK_T: 2.0,        // tempo para o assassino quebrar um pallet caído
     BREAK_COST: 9,       // "custo em tiles" de quebrar vs. dar a volta (IA)
     VAULT_T: 0.5,        // pular o pallet caído
@@ -43,6 +46,12 @@
     SKILL_ZONE: 0.34,        // meia largura da zona de acerto (rad)
     SKILL_GREAT: 0.12,       // meia largura da zona perfeita
     SKILL_FAIL: 0.10,        // progresso perdido ao errar
+    // IA do sobrevivente (quando você é o assassino)
+    AI_SENSE: 11,        // sente o assassino por perto (batimento), mesmo sem ver
+    AI_SEE: 16,          // vê o assassino com linha de visão até aqui
+    AI_FLEE: 14,         // começa a fugir dentro desta distância
+    AI_SPEED: 1.1,       // o sobrevivente-IA corre um pouco mais (compensa não ter olhos humanos)
+    AI_SKILL_ERR: 0.40,  // erro (rad) no skill check: ~85% de acerto
     KICK: 0.15,              // progresso que o assassino destrói ao chutar um gerador
 
     // percepção do assassino
@@ -61,16 +70,17 @@
     const rnd = opts.rng || Math.random;
     const sfx = opts.sfx || function () {};
     const training = !!opts.training;
+    const role = opts.role === 'killer' ? 'killer' : 'survivor';
     const map = DP.buildMap();
     const W = map.W, H = map.H, t = map.t;
 
     const g = {
-      cfg: CFG, map, training,
+      cfg: CFG, map, training, role,
       time: 0, over: false, overT: 0,
       stats: { stuns: 0, drops: 0, misses: 0, hits: 0, breaks: 0, vaults: 0, gens: 0, kicks: 0, skillOk: 0, skillFail: 0 },
       pallets: [], popups: [], fx: [],
       shake: 0, hitstop: 0, flash: 0,
-      near: null, los: false, dist: 99, interact: null, result: null, gensDone: 0, need: 0, gens: [], gates: [],
+      near: null, los: false, dist: 99, interact: null, kInteract: null, pInteract: null, pings: [], result: null, gensDone: 0, need: 0, gens: [], gates: [],
       s: {
         x: map.spawnSurvivor.x, y: map.spawnSurvivor.y, face: Math.PI / 2,
         hp: 2, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
@@ -78,7 +88,7 @@
       },
       k: {
         x: map.spawnKiller.x, y: map.spawnKiller.y, face: -Math.PI / 2,
-        state: 'intro', t: 0, dur: 0, ldx: 0, ldy: 0, hitDone: false, pal: null,
+        state: role === 'killer' ? 'chase' : 'intro', t: 0, dur: 0, trip: 0, tripCD: 0, tripDir: 0, ph: 0, vx: 0, vy: 0, ldx: 0, ldy: 0, hitDone: false, pal: null,
         moving: false, walk: 0, hesitate: false,
         aware: 'patrol', lost: 0, last: null, wait: 0, goal: null
       }
@@ -152,8 +162,15 @@
     function blocked(tx, ty) { return tx < 0 || ty < 0 || tx >= W || ty >= H || t[ty * W + tx] !== 0; }
     const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
-    function computeField(gx, gy) {
-      field.fill(1e9);
+    // custo de pisar no tile i: o assassino quebra pallet caído (caro); o sobrevivente pula (barato)
+    function costAt(i, sMode) {
+      const p = palAt[i];
+      if (!p) return 0;
+      if (sMode) return p.state === 'down' ? 1.4 : p.state === 'falling' ? 3 : 0;
+      return extra(i);
+    }
+    function dijkstra(arr, gx, gy, sMode) {
+      arr.fill(1e9);
       const sx = clamp(Math.floor(gx), 0, W - 1), sy = clamp(Math.floor(gy), 0, H - 1);
       const heapI = [], heapK = [];
       const push = (i, key) => {
@@ -179,9 +196,9 @@
         }
         return top;
       };
-      field[sy * W + sx] = 0; push(sy * W + sx, 0);
+      arr[sy * W + sx] = 0; push(sy * W + sx, 0);
       while (heapI.length) {
-        const i = pop(), cd = field[i];
+        const i = pop(), cd = arr[i];
         const ux = i % W, uy = (i / W) | 0;
         for (const d of DIRS) {
           const vx = ux + d[0], vy = uy + d[1];
@@ -189,14 +206,16 @@
           const diag = d[0] !== 0 && d[1] !== 0;
           if (diag && (blocked(ux + d[0], uy) || blocked(ux, uy + d[1]))) continue;
           const j = vy * W + vx;
-          const nd = cd + (diag ? 1.414 : 1) + extra(i);
-          if (nd < field[j]) { field[j] = nd; push(j, nd); }
+          const nd = cd + (diag ? 1.414 : 1) + costAt(i, sMode);
+          if (nd < arr[j]) { arr[j] = nd; push(j, nd); }
         }
       }
     }
+    function computeField(gx, gy) { dijkstra(field, gx, gy, false); }
 
-    function bestNeighbor() {
-      const kx = Math.floor(k.x), ky = Math.floor(k.y);
+    // melhor tile vizinho de e seguindo o campo arr
+    function bestNb(arr, e, sMode) {
+      const kx = Math.floor(e.x), ky = Math.floor(e.y);
       let best = null, bv = 1e9;
       for (const d of DIRS) {
         const nx = kx + d[0], ny = ky + d[1];
@@ -204,11 +223,12 @@
         const diag = d[0] !== 0 && d[1] !== 0;
         if (diag && (solid(kx + d[0], ky) || solid(kx, ky + d[1]))) continue;
         const j = ny * W + nx;
-        const v = field[j] + (diag ? 1.414 : 1) + extra(j);
+        const v = arr[j] + (diag ? 1.414 : 1) + costAt(j, sMode);
         if (v < bv) { bv = v; best = { x: nx, y: ny, pal: palAt[j] && palAt[j].state === 'down' ? palAt[j] : null }; }
       }
       return best;
     }
+    function bestNeighbor() { return bestNb(field, k, false); }
 
     // ---------- eventos visuais ----------
     function popup(text, x, y, color) { g.popups.push({ text, x, y, t: 0, color: color || '#fff' }); }
@@ -275,13 +295,15 @@
         sfx('miss', pan(k.x));
         popup('ERROU!', p.cx, p.cy - 1.2, '#ff7a59');
       }
-      // quem estava em cima do tile é empurrado para fora
+      // quem estava em cima do tile (ou encostando nele) é empurrado para fora, para o lado em que estava
       for (const e of [s, k]) {
-        if (Math.floor(e.x) === p.tx && Math.floor(e.y) === p.ty) {
-          const sg = e === s ? -1 : 1, r = e === s ? CFG.R_S : CFG.R_K;
-          e.x = p.cx + p.dir.x * sg * (0.5 + r + 0.03) + (p.dir.x ? 0 : e.x - p.cx);
-          e.y = p.cy + p.dir.y * sg * (0.5 + r + 0.03) + (p.dir.y ? 0 : e.y - p.cy);
-        }
+        const r = e === s ? CFG.R_S : CFG.R_K;
+        const dxr = e.x - clamp(e.x, p.tx, p.tx + 1), dyr = e.y - clamp(e.y, p.ty, p.ty + 1);
+        if (dxr * dxr + dyr * dyr >= r * r) continue;
+        let side = (e.x - p.cx) * p.nx + (e.y - p.cy) * p.ny;
+        if (Math.abs(side) < 0.05) side = (e === s ? -1 : 1) * (p.dir.x * p.nx + p.dir.y * p.ny);
+        const sg = side >= 0 ? 1 : -1;
+        if (p.nx) e.x = p.cx + sg * (0.5 + r + 0.03); else e.y = p.cy + sg * (0.5 + r + 0.03);
       }
     }
 
@@ -290,25 +312,37 @@
       k.face = Math.atan2(p.cy - k.y, p.cx - k.x);
     }
 
+    // rede de segurança: se alguém ficar encostado em algo sólido, solta no ponto livre mais próximo
+    function unstick(e, r) {
+      if (!hitsCircle(e.x, e.y, r)) return;
+      for (let rad = 0.1; rad <= 1.2; rad += 0.1) {
+        for (let a = 0; a < 16; a++) {
+          const x = e.x + Math.cos(a * Math.PI / 8) * rad, y = e.y + Math.sin(a * Math.PI / 8) * rad;
+          if (!hitsCircle(x, y, r)) { e.x = x; e.y = y; return; }
+        }
+      }
+    }
+
     // ---------- sobrevivente ----------
     function hurt() {
       g.stats.hits++;
       s.invuln = 0.7; s.burst = CFG.BURST_T;
       g.shake = 6; g.flash = 0.3;
       sfx('hit', pan(s.x));
-      popup('-1', s.x, s.y - 1.4, '#ff4d4d');
+      popup(role === 'killer' ? 'ACERTOU!' : '-1', s.x, s.y - 1.4, role === 'killer' ? '#ffd23f' : '#ff4d4d');
       k.aware = 'hunt'; k.lost = 0;
       if (training) return;
       s.hp--;
       if (s.hp <= 0) {
         g.over = true; g.overT = 0; g.result = 'dead';
-        sfx('death');
+        sfx(role === 'killer' ? 'escape' : 'death');
       }
     }
 
     // ---------- geradores, skill check, portões ----------
     function alert(x, y) {
-      if (k.state === 'intro') return;
+      g.pings.push({ x, y, t: g.time });
+      if (k.state === 'intro' || role === 'killer') return;
       k.last = { x, y };
       if (k.aware !== 'hunt') { k.aware = 'search'; k.wait = 0; }
     }
@@ -337,7 +371,7 @@
         if (o) o.progress = Math.max(0, o.progress - CFG.SKILL_FAIL);
         g.shake = 5; g.flash = 0.12;
         sfx('bang', pan(s.x));
-        popup('FALHOU!', s.x, s.y - 1.5, '#ff4d4d');
+        popup(role === 'killer' ? 'ALGO EXPLODIU!' : 'FALHOU!', s.x, s.y - 1.5, '#ff4d4d');
         alert(s.x, s.y);
       } else {
         g.stats.skillOk++;
@@ -369,12 +403,12 @@
     }
     function escape() {
       g.over = true; g.overT = 0; g.result = 'escaped';
-      sfx('escape');
+      sfx(role === 'killer' ? 'death' : 'escape');
     }
     function act(dt) {
       const tg = s.acting, o = tg.obj;
       if (tg.type === 'gen') {
-        s.noise = CFG.NOISE_REPAIR;
+        s.noise = CFG.NOISE_REPAIR; o.noisyT = g.time;
         o.progress = Math.min(1, o.progress + dt / CFG.REPAIR_T);
         s.tick -= dt; if (s.tick <= 0) { s.tick = 0.55; sfx('repair', pan(o.cx)); }
         if (o.progress >= 1) finishGen(o);
@@ -388,6 +422,7 @@
 
     function updateSurvivor(dt, inp) {
       s.noise = 0; s.acting = null;
+      if (!s.vault) unstick(s, CFG.R_S);
       s.invuln = Math.max(0, s.invuln - dt);
       s.burst = Math.max(0, s.burst - dt);
       s.vaultCD = Math.max(0, s.vaultCD - dt);
@@ -412,7 +447,7 @@
       }
       if (s.moving) {
         s.noise = CFG.NOISE_MOVE;
-        const sp = CFG.RUN * (s.burst > 0 ? CFG.BURST : 1);
+        const sp = CFG.RUN * (role === 'killer' ? CFG.AI_SPEED : 1) * (s.burst > 0 ? CFG.BURST : 1);
         moveBy(s, ax * sp * dt, ay * sp * dt, CFG.R_S);
         s.face = Math.atan2(ay, ax);
         s.walk += dt * 11;
@@ -441,13 +476,101 @@
     }
 
     // ---------- assassino ----------
-    function updateKiller(dt) {
+    function kickGen(o) {
+      o.progress = Math.max(0, o.progress - CFG.KICK); g.stats.kicks++;
+      sfx('bang', pan(k.x)); g.shake = Math.max(g.shake, 2);
+      popup('REGREDIU', o.cx, o.cy - 1.2, '#ff7a59');
+      k.state = 'recover'; k.t = 0; k.dur = 1.0;
+    }
+    function findKillerInteract() {
+      let best = null, bd = 1e9;
+      for (const p of g.pallets) {
+        if (p.state !== 'down') continue;
+        const d = Math.hypot(k.x - p.cx, k.y - p.cy);
+        if (d < 1.25 && d < bd) { bd = d; best = { type: 'break', obj: p }; }
+      }
+      if (best) return best;
+      for (const o of g.gens) {
+        if (o.done || o.progress <= 0) continue;
+        const d = Math.hypot(k.x - o.cx, k.y - o.cy);
+        if (d < 1.7 && d < bd) { bd = d; best = { type: 'kick', obj: o }; }
+      }
+      return best;
+    }
+    const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+
+    // controle do jogador quando ele é o assassino
+    function playerKiller(dt, inp, dx, dy, d) {
+      let ax = inp.ax || 0, ay = inp.ay || 0;
+      const len = Math.hypot(ax, ay);
+      if (len > 1) { ax /= len; ay /= len; }
+      if (len > 0.12) {
+        const ox = k.x, oy = k.y;
+        moveBy(k, ax * CFG.K_SPEED * dt, ay * CFG.K_SPEED * dt, CFG.R_K);
+        k.face = Math.atan2(ay, ax);
+        if (Math.hypot(k.x - ox, k.y - oy) > 0.0005) { k.moving = true; k.walk += dt * 11; }
+      }
+      if (inp.drop) {                                  // ATACAR (com um pouco de mira assistida)
+        let lx = Math.cos(k.face), ly = Math.sin(k.face);
+        if (d < CFG.ATTACK_RANGE * 1.5 && hasLOS(k, s) && Math.abs(angDiff(Math.atan2(dy, dx), k.face)) < 1.0) { lx = dx / (d || 1); ly = dy / (d || 1); }
+        k.ldx = lx; k.ldy = ly; k.face = Math.atan2(ly, lx);
+        k.state = 'windup'; k.t = 0;
+        sfx('windup', pan(k.x));
+        return;
+      }
+      if (inp.actPress && g.kInteract) {
+        const it = g.kInteract;
+        if (it.type === 'break') startBreak(it.obj); else kickGen(it.obj);
+      }
+    }
+
+    // tropeço: depois do atordoamento ele cambaleia, desvia do rumo e cai de vez em quando
+    function doStumble(dt, inp) {
+      k.t += dt;
+      const f = Math.max(0, 1 - k.t / CFG.STUMBLE_T);
+      let hx, hy;
+      if (role === 'killer') { hx = inp.ax || 0; hy = inp.ay || 0; }
+      else { const tg = k.last || s; hx = tg.x - k.x; hy = tg.y - k.y; }
+      const hl = Math.hypot(hx, hy);
+      if (k.trip > 0) {
+        k.trip -= dt;
+        const sp = CFG.K_SPEED * 0.4 * (k.trip / CFG.TRIP_T);
+        moveBy(k, Math.cos(k.tripDir) * sp * dt, Math.sin(k.tripDir) * sp * dt, CFG.R_K);
+      } else {
+        k.tripCD -= dt;
+        if (k.tripCD <= 0) {
+          k.trip = CFG.TRIP_T; k.tripCD = 0.75 + rnd() * 0.7; k.tripDir = k.face;
+          sfx('trip', pan(k.x)); dust(k.x, k.y + 0.3, 6, '#8b7355'); g.shake = Math.max(g.shake, 2);
+        } else {
+          const drift = (Math.sin(k.t * 4.3 + k.ph) * 0.85 + Math.sin(k.t * 11.1 + k.ph * 2) * 0.35) * (0.45 + 0.55 * f);
+          const base = hl > 0.12 ? Math.atan2(hy, hx) : k.face;
+          const ang = base + drift;
+          const mag = hl > 0.12 ? Math.min(1, hl) : 0.25;
+          const sp = CFG.K_SPEED * CFG.STUMBLE_SPEED * mag * (0.75 + 0.25 * Math.sin(k.t * 7.3));
+          const ox = k.x, oy = k.y;
+          moveBy(k, Math.cos(ang) * sp * dt, Math.sin(ang) * sp * dt, CFG.R_K);
+          if (Math.hypot(k.x - ox, k.y - oy) > 0.0005) { k.face = ang; k.moving = true; k.walk += dt * 9; }
+        }
+      }
+      if (k.t >= CFG.STUMBLE_T) { k.state = 'chase'; k.t = 0; k.trip = 0; }
+    }
+
+    function updateKiller(dt, inp) {
+      unstick(k, CFG.R_K);
       const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy);
       g.dist = d;
       k.moving = false;
 
       if (k.state === 'intro') { k.t += dt; if (k.t >= CFG.INTRO) { k.state = 'chase'; k.t = 0; k.aware = 'patrol'; } return; }
-      if (k.state === 'stun') { k.t += dt; if (k.t >= CFG.STUN) { k.state = 'chase'; k.t = 0; } return; }
+      if (k.state === 'stun') {
+        k.t += dt;
+        if (k.t >= CFG.STUN) {
+          k.state = 'stumble'; k.t = 0; k.trip = 0; k.tripCD = 0.45; k.ph = rnd() * 6.28;
+          sfx('trip', pan(k.x));
+        }
+        return;
+      }
+      if (k.state === 'stumble') { doStumble(dt, inp); return; }
       if (k.state === 'recover') { k.t += dt; if (k.t >= k.dur) { k.state = 'chase'; k.t = 0; } return; }
       if (k.state === 'windup') {
         k.t += dt;
@@ -465,6 +588,7 @@
         return;
       }
       if (k.state === 'break') {
+        if (role === 'killer' && Math.hypot(inp.ax || 0, inp.ay || 0) > 0.6 && k.t > 0.3) { k.state = 'chase'; k.t = 0; k.pal = null; return; }
         k.t += dt;
         const p = k.pal;
         if (Math.floor(k.t / 0.5) > k.brk) { k.brk++; sfx('breakHit', pan(k.x)); g.shake = Math.max(g.shake, 1.5); }
@@ -477,6 +601,8 @@
         }
         return;
       }
+
+      if (role === 'killer') { playerKiller(dt, inp, dx, dy, d); return; }
 
       // ---- percepção: vê (linha de visão), ouve (ruído) ou rastreia ----
       const los = hasLOS(k, s);
@@ -516,11 +642,7 @@
         gx = o.cx; gy = o.cy;
         if (Math.hypot(k.x - gx, k.y - gy) < 1.7) {
           o.visited = g.time; k.goal = null;
-          if (o.progress > 0 && !o.done && o.tx !== undefined && g.gens.includes(o)) {
-            o.progress = Math.max(0, o.progress - CFG.KICK); g.stats.kicks++;
-            sfx('bang', pan(k.x)); g.shake = Math.max(g.shake, 2);
-            popup('REGREDIU', o.cx, o.cy - 1.2, '#ff7a59');
-          }
+          if (o.progress > 0 && !o.done && g.gens.includes(o)) { kickGen(o); return; }
           k.state = 'recover'; k.t = 0; k.dur = 1.2;
           return;
         }
@@ -577,6 +699,149 @@
       return list[list.length - 1];
     }
 
+    // ---------- IA do sobrevivente (quando o jogador é o assassino) ----------
+    const fS = new Float32Array(W * H), fK = new Float32Array(W * H), fT = new Float32Array(W * H);
+    const ai = { mode: 'repair', target: null, aware: 0, lk: null, thinkT: 0, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, gateGoal: null, fieldT: 0, zoneT: 0 };
+    g.ai = ai;
+    const tileOf = (e) => clamp(Math.floor(e.y), 0, H - 1) * W + clamp(Math.floor(e.x), 0, W - 1);
+
+    function steer(arr, out, goal) {
+      // já no tile do destino: vai direto ao ponto (senão o campo empurra para fora do tile)
+      if (goal && Math.floor(goal.x) === Math.floor(s.x) && Math.floor(goal.y) === Math.floor(s.y)) {
+        const gx = goal.x - s.x, gy = goal.y - s.y, gl = Math.hypot(gx, gy);
+        if (gl > 0.05) { out.ax = gx / gl; out.ay = gy / gl; }
+        return;
+      }
+      const n = bestNb(arr, s, true);
+      if (!n) return;
+      const mx = n.x + 0.5 - s.x, my = n.y + 0.5 - s.y, l = Math.hypot(mx, my) || 1;
+      out.ax = mx / l; out.ay = my / l;
+    }
+
+    function planFlee() {
+      dijkstra(fS, s.x, s.y, true);
+      dijkstra(fK, k.x, k.y, false);
+      const myT = CFG.RUN, kT = CFG.K_SPEED;
+      let best = null, bs = 1e9, bT = null;
+      for (const p of g.pallets) {
+        if (p.state !== 'up' || (ai.noPal[p.tx + ',' + p.ty] || 0) > g.time) continue;
+        const j = p.ty * W + p.tx;
+        const A = j + p.nx + p.ny * W, B = j - p.nx - p.ny * W;       // os dois lados da passagem
+        if (fK[A] > 1e8 || fK[B] > 1e8) continue;
+        const farI = fK[A] > fK[B] ? A : B, nearI = farI === A ? B : A, sg = farI === A ? 1 : -1;
+        // o caminho mais curto do assassino até o lado de lá passa por este pallet?
+        if (fK[farI] - fK[j] < 0.8 || fK[j] - fK[nearI] < 0.8) continue;
+        const T = { x: p.cx + p.nx * sg * 0.95, y: p.cy + p.ny * sg * 0.95 };
+        const ts = fS[farI], tk = fK[farI];
+        if (ts > 26 || ts / myT + 0.2 > tk / kT) continue;               // o assassino chegaria antes
+        if (ts < bs) { bs = ts; best = p; bT = T; }
+      }
+      if (best) {
+        dijkstra(fT, bT.x, bT.y, true);
+        ai.plan = { pal: best, T: bT, err: (rnd() - 0.5) * 0.6, react: rnd() * 0.22 };
+        return;
+      }
+      // sem pallet seguro: o tile mais longe do assassino que ainda dá para alcançar primeiro (portão aberto tem bônus)
+      let bt = null, bv = -1e9;
+      for (let i = 0; i < W * H; i++) {
+        if (t[i] !== 0 || fS[i] > 22 || fS[i] / myT + 0.15 > fK[i] / kT) continue;
+        const v = fK[i] - 0.35 * fS[i];
+        if (v > bv) { bv = v; bt = i; }
+      }
+      for (const gt of g.gates) {
+        if (!gt.open) continue;
+        const gi = gt.ty * W + gt.tx;
+        // o portão está na parede: usa o tile livre ao lado
+        const ni = gt.side === 'W' ? gi + 1 : gi - 1;
+        if (fS[ni] < 1e8 && fS[ni] / myT + 0.15 < fK[ni] / kT && 40 - 0.35 * fS[ni] + fK[ni] > bv) { bv = 40 - 0.35 * fS[ni] + fK[ni]; bt = ni; }
+      }
+      if (bt !== null) {
+        const T = { x: (bt % W) + 0.5, y: ((bt / W) | 0) + 0.5 };
+        dijkstra(fT, T.x, T.y, true);
+        ai.plan = { pal: null, T, err: 0, react: 0 };
+      } else ai.plan = { pal: null, T: null, err: 0, react: 0 };
+    }
+
+    function aiSurvivor(dt) {
+      const out = { ax: 0, ay: 0, act: false, drop: false, press: false, actPress: false };
+      const kdx = k.x - s.x, kdy = k.y - s.y, kd = Math.hypot(kdx, kdy);
+      const sensed = kd < CFG.AI_SENSE || (kd < CFG.AI_SEE && hasLOS(s, k));
+      if (sensed) { ai.aware = 4; ai.lk = { x: k.x, y: k.y }; } else ai.aware = Math.max(0, ai.aware - dt);
+      if (s.burst > 0) ai.aware = Math.max(ai.aware, 3);
+
+      // skill check: o "jogador" aperta com um pequeno erro
+      if (s.skill) {
+        if (ai.skill !== s.skill) { ai.skill = s.skill; ai.skillAt = s.skill.tz + (rnd() - 0.5) * 2 * CFG.AI_SKILL_ERR; }
+        if (s.skill.t > CFG.SKILL_DELAY && skillAngle() >= ai.skillAt) out.press = true;
+      }
+
+      // foge de quem se aproxima; um assassino parado e distante não assusta
+      const kMoving = Math.hypot(k.vx, k.vy) > 0.6 || k.state === 'lunge' || k.state === 'windup';
+      const fleeing = ai.aware > 0 && (kd < 7 || (kMoving && kd < CFG.AI_FLEE) || s.burst > 0);
+      ai.mode = fleeing ? 'flee' : (g.gensDone >= g.need ? 'exit' : 'repair');
+
+      if (ai.mode === 'flee') {
+        ai.thinkT -= dt;
+        if (ai.thinkT <= 0) { ai.thinkT = 0.3; planFlee(); }
+        const plan = ai.plan;
+        const p = plan && plan.pal;
+        let waiting = false;
+        if (p && p.state === 'up') {
+          const ds = Math.hypot(s.x - p.cx, s.y - p.cy);
+          const along = (s.x - p.cx) * p.nx + (s.y - p.cy) * p.ny;
+          const kSide = (k.x - p.cx) * p.nx + (k.y - p.cy) * p.ny;
+          if (ds < CFG.DROP_RANGE && along * kSide < 0 && !s.vault) {
+            const dir = dropDir(p);
+            const fake = { cx: p.cx + dir.x * plan.err, cy: p.cy + dir.y * plan.err, dir };
+            const inc = k.state === 'stun' || k.state === 'stumble';
+            const ahead = { x: k.x + k.vx * (CFG.FALL_T + 0.12), y: k.y + k.vy * (CFG.FALL_T + 0.12) };
+            const zone = inZone(fake, ahead);
+            // tempo de reação humano: a zona precisa ficar "ocupada" por um instante antes de ele reagir
+            ai.zoneT = zone && !inc ? ai.zoneT + dt : 0;
+            if (!inc && ((zone && ai.zoneT >= plan.react) || (kd < 1.7 && k.state !== 'recover')) && kd > 0.5) { out.drop = true; ai.noPal[p.tx + ',' + p.ty] = g.time + 5; }
+            waiting = true;
+            ai.wait += dt;
+            if (ai.wait > 2.5 && kd < 9) { out.drop = true; ai.noPal[p.tx + ',' + p.ty] = g.time + 5; }   // trava a passagem
+          }
+        } else ai.wait = 0;
+        if (plan && plan.T && !waiting) {
+          if (Math.hypot(plan.T.x - s.x, plan.T.y - s.y) > 0.3) steer(fT, out, plan.T);
+        } else if (!plan || (!plan.T && !waiting)) {
+          const l = kd || 1; out.ax = -kdx / l; out.ay = -kdy / l;     // sem opção: corre para longe
+        }
+        return out;
+      }
+      ai.wait = 0;
+
+      // exit/repair: caminha até o alvo e segura AGIR
+      ai.fieldT -= dt;
+      if (ai.mode === 'exit') {
+        if (!ai.target || !g.gates.includes(ai.target)) {
+          let bg = null, bd = 1e9;
+          dijkstra(fS, s.x, s.y, true);
+          for (const gt of g.gates) { const ni = gt.side === 'W' ? gt.ty * W + gt.tx + 1 : gt.ty * W + gt.tx - 1; if (fS[ni] < bd) { bd = fS[ni]; bg = gt; } }
+          ai.target = bg; ai.fieldT = 0;
+        }
+      } else if (!ai.target || !g.gens.includes(ai.target) || ai.target.done) {
+        dijkstra(fS, s.x, s.y, true);
+        let bg = null, bv = 1e9;
+        for (const o of g.gens) {
+          if (o.done) continue;
+          let v = Math.min(fS[o.ty * W + o.tx - 1] || 1e9, fS[o.ty * W + o.tx + 1] || 1e9, fS[(o.ty + 1) * W + o.tx] || 1e9, fS[(o.ty - 1) * W + o.tx] || 1e9) - o.progress * 10;
+          if (ai.lk && Math.hypot(ai.lk.x - o.cx, ai.lk.y - o.cy) < 9) v += 30;      // evita onde viu o assassino
+          if (v < bv) { bv = v; bg = o; }
+        }
+        ai.target = bg; ai.fieldT = 0;
+      }
+      const tg = ai.target;
+      if (!tg) return out;
+      const it = g.interact;
+      if (it && it.obj === tg) { out.act = true; return out; }
+      if (ai.fieldT <= 0) { dijkstra(fT, tg.cx, tg.cy, true); ai.fieldT = 0.4; }
+      steer(fT, out, { x: tg.cx, y: tg.cy });
+      return out;
+    }
+
     // ---------- loop ----------
     g.tryDrop = tryDrop;
 
@@ -593,9 +858,12 @@
       }
 
       g.interact = findInteract();
-      if (s.skill && (inp.press || inp.drop || inp.actPress)) pressSkill();
-      else if (inp.drop || (inp.actPress && !g.interact)) tryDrop();
-      updateSurvivor(dt, inp);
+      g.kInteract = role === 'killer' ? findKillerInteract() : null;
+      g.pInteract = role === 'killer' ? g.kInteract : g.interact;
+      const sin = role === 'killer' ? aiSurvivor(dt) : inp;   // quem controla o sobrevivente
+      if (s.skill && (sin.press || sin.drop || sin.actPress)) pressSkill();
+      else if (sin.drop || (sin.actPress && !g.interact)) tryDrop();
+      updateSurvivor(dt, sin);
 
       // skill checks só acontecem enquanto conserta um gerador
       if (s.acting && s.acting.type === 'gen') {
@@ -621,8 +889,11 @@
         }
       }
 
-      updateKiller(dt);
+      const kox = k.x, koy = k.y;
+      updateKiller(dt, inp);
+      k.vx = (k.x - kox) / (dt || 1); k.vy = (k.y - koy) / (dt || 1);
       g.near = findDroppable();
+      g.pings = g.pings.filter((q) => g.time - q.t < 4);
 
       for (const pu of g.popups) pu.t += dt;
       g.popups = g.popups.filter((pu) => pu.t < 1.1);
@@ -630,7 +901,17 @@
       g.fx = g.fx.filter((f) => f.t < f.life);
     };
 
+    // vetor unitário de e até (gx,gy) pelo melhor caminho (usado por bots de teste)
+    const fTest = new Float32Array(W * H);
+    g.pathVec = (e, gx, gy) => {
+      dijkstra(fTest, gx, gy, false);
+      const n = bestNb(fTest, e, false);
+      if (!n) return { x: 0, y: 0 };
+      const mx = n.x + 0.5 - e.x, my = n.y + 0.5 - e.y, l = Math.hypot(mx, my) || 1;
+      return { x: mx / l, y: my / l };
+    };
     g.alert = alert;
+    g.pl = role === 'killer' ? k : s;
     g.standing = () => g.pallets.filter((p) => p.state === 'up').length;
     g.inZone = inZone;
     g.solid = solid;

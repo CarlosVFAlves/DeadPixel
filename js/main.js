@@ -8,15 +8,16 @@
 
   let W = 320, H = 180, scale = 4;
   let state = 'menu';          // menu | play | pause | over
+  let role = 'survivor';       // quem o jogador controla: 'survivor' | 'killer'
   let game = null;
   let training = false;
-  let best = 0, fastest = 0, newBest = false;
-  try { best = parseFloat(localStorage.getItem('dp_best') || '0') || 0; fastest = parseFloat(localStorage.getItem('dp_esc') || '0') || 0; } catch (e) {}
+  let best = 0, fastest = 0, hunt = 0, newBest = false;
+  try { best = parseFloat(localStorage.getItem('dp_best') || '0') || 0; fastest = parseFloat(localStorage.getItem('dp_esc') || '0') || 0; hunt = parseFloat(localStorage.getItem('dp_hunt') || '0') || 0; } catch (e) {}
   const fmt = (v) => Math.floor(v / 60) + ':' + String(Math.floor(v % 60)).padStart(2, '0');
   function bestText() {
     const a = [];
-    if (best) a.push('SOBREVIVEU ' + fmt(best));
-    if (fastest) a.push('FUGA ' + fmt(fastest));
+    if (role === 'killer') { if (hunt) a.push('CAÇADA MAIS RÁPIDA ' + fmt(hunt)); }
+    else { if (best) a.push('SOBREVIVEU ' + fmt(best)); if (fastest) a.push('FUGA ' + fmt(fastest)); }
     return a.join('  ');
   }
 
@@ -49,13 +50,21 @@
     const list = [];
     const cx = Math.round(W / 2);
     if (state === 'menu') {
-      const bw = Math.min(150, W - 24), by = Math.round(H * 0.5);
-      list.push({ id: 'play', label: 'JOGAR', x: cx - bw / 2, y: by, w: bw, h: 17, color: '#ffd23f' });
-      list.push({ id: 'train', label: 'TREINO (NÃO MORRE)', x: cx - bw / 2, y: by + 23, w: bw, h: 17, color: '#7ad0ff' });
+      const bw = Math.min(170, W - 24), by = Math.round(H * 0.44), hw = Math.floor((bw - 4) / 2);
+      list.push({ id: 'role_s', label: 'SOBREVIVENTE', x: cx - bw / 2, y: by, w: hw, h: 17, color: role === 'survivor' ? '#7dffa0' : '#5a5a66', sel: role === 'survivor' });
+      list.push({ id: 'role_k', label: 'ASSASSINO', x: cx - bw / 2 + hw + 4, y: by, w: hw, h: 17, color: role === 'killer' ? '#ff5c5c' : '#5a5a66', sel: role === 'killer' });
+      list.push({ id: 'play', label: 'JOGAR', x: cx - bw / 2, y: by + 23, w: bw, h: 17, color: '#ffd23f' });
+      list.push({ id: 'train', label: 'TREINO (NÃO MORRE)', x: cx - bw / 2, y: by + 46, w: bw, h: 17, color: '#7ad0ff' });
     } else if (state === 'play') {
       const r = Math.max(22, Math.min(30, Math.round(Math.min(W, H) * 0.16))), r2 = Math.round(r * 0.8);
-      list.push({ id: 'act', label: 'AGIR', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: !!(game && game.interact) });
-      list.push({ id: 'drop', label: 'PALLET', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.near) });
+      if (role === 'killer') {
+        const close = !!(game && !game.over && game.dist < 2.4 && game.k.state === 'chase');
+        list.push({ id: 'drop', label: 'ATACAR', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: close, hot: '#ff5c5c' });
+        list.push({ id: 'act', label: 'AGIR', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.kInteract), hot: '#ff9d5c' });
+      } else {
+        list.push({ id: 'act', label: 'AGIR', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: !!(game && game.interact) });
+        list.push({ id: 'drop', label: 'PALLET', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.near) });
+      }
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
     } else if (state === 'pause') {
       const bw = Math.min(150, W - 24), by = Math.round(H * 0.4);
@@ -80,6 +89,8 @@
   function act(id) {
     DP.audio.init();
     switch (id) {
+      case 'role_s': role = 'survivor'; break;
+      case 'role_k': role = 'killer'; break;
       case 'play': start(false); break;
       case 'train': start(true); break;
       case 'drop': dropQueued = true; break;
@@ -94,7 +105,7 @@
   function start(tr) {
     training = tr; newBest = false;
     DP.render.reset();
-    game = DP.createGame({ training: tr, sfx: (n, p) => { const f = DP.audio.sfx[n]; if (f) f(p); } });
+    game = DP.createGame({ training: tr, role, sfx: (n, p) => { const f = DP.audio.sfx[n]; if (f) f(p); } });
     state = 'play';
     joy.id = null; joy.active = false; joy.dx = joy.dy = 0;
     beatT = 0;
@@ -111,7 +122,7 @@
     focusGame();
     DP.audio.init();
     const p = toLocal(e);
-    if (state === 'play' && game && game.s.skill) pressQueued = true;
+    if (state === 'play' && game && game.role === 'survivor' && game.s.skill) pressQueued = true;
     const b = hit(buttons(), p);
     if (b) { held.set(e.pointerId, b.id); act(b.id); try { canvas.setPointerCapture(e.pointerId); } catch (x) {} return; }
     if (state === 'play' && joy.id === null) {
@@ -158,6 +169,8 @@
     } else if (state === 'menu') {
       if (code === 'Enter' || code === 'Space') start(false);
       if (code === 'KeyT') start(true);
+      if (code === 'Digit1') role = 'survivor';
+      if (code === 'Digit2') role = 'killer';
     } else if (state === 'over') {
       if (code === 'KeyR' || code === 'Enter') start(training);
     }
@@ -213,7 +226,12 @@
       }
       if (game.over && state === 'play' && game.overT > 1.6) {
         state = 'over';
-        if (!training) {
+        if (!training && game.role === 'killer') {
+          if (game.result === 'dead' && (!hunt || game.time < hunt)) {
+            hunt = game.time; newBest = true;
+            try { localStorage.setItem('dp_hunt', String(hunt)); } catch (e) {}
+          }
+        } else if (!training) {
           if (game.result === 'escaped' && (!fastest || game.time < fastest)) {
             fastest = game.time; newBest = true;
             try { localStorage.setItem('dp_esc', String(fastest)); } catch (e) {}
@@ -227,7 +245,7 @@
 
     // ---- desenho ----
     if (state === 'menu') {
-      DP.render.drawMenu(ctx, W, H, tm, bestText());
+      DP.render.drawMenu(ctx, W, H, tm, bestText(), role);
     } else if (game) {
       DP.render.drawWorld(ctx, game, W, H, tm);
       DP.render.drawHUD(ctx, game, W, H, tm);
@@ -237,7 +255,7 @@
       if (state === 'pause') {
         DP.render.overlay(ctx, W, H, 0.7);
         text(ctx, 'PAUSADO', Math.round(W / 2), Math.round(H * 0.2), '#fff', { align: 'c' });
-        const tips = DP.font.wrap('WASD/SETAS: MOVER. SEGURE E: CONSERTAR GERADOR. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: SOM.', Math.floor((W - 16) / 6));
+        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU CHUTAR GERADOR (MEXER CANCELA). M: SOM.' : 'WASD/SETAS: MOVER. SEGURE E: CONSERTAR GERADOR. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: SOM.', Math.floor((W - 16) / 6));
         tips.forEach((l, i) => text(ctx, l, Math.round(W / 2), Math.round(H * 0.2) + 14 + i * 9, '#a9a9b5', { align: 'c' }));
       }
     }
@@ -250,7 +268,7 @@
     requestAnimationFrame(frame);
   }
 
-  window.__dp = { buttons, get game() { return game; }, set game(v) { game = v; }, start, get state() { return state; }, set state(v) { state = v; }, keys };
+  window.__dp = { buttons, get role() { return role; }, set role(v) { role = v; }, get game() { return game; }, set game(v) { game = v; }, start, get state() { return state; }, set state(v) { state = v; }, keys };
   resize();
   requestAnimationFrame(frame);
 })();

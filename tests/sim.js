@@ -284,5 +284,114 @@ function CFG_SIGHT(g) { return g.cfg.SIGHT; }
   ok(gen.progress < 0.5 && g.stats.kicks >= 1, `assassino chuta gerador com progresso (${gen.progress.toFixed(2)})`);
 }
 
+
+// ---------- 11. jogador como ASSASSINO ----------
+console.log('assassino (jogador)');
+function killerScene(training, seed) { return DP.createGame({ rng: seeded(seed || 3), role: 'killer', training: !!training }); }
+{
+  const g = killerScene();
+  ok(g.role === 'killer' && g.k.state === 'chase', 'começa livre para andar');
+  const x0 = g.k.x;
+  runFor(g, 1, { ax: 1, ay: 0 });
+  ok(Math.abs((g.k.x - x0) - DP.CFG.K_SPEED) < 0.3, `anda na velocidade do assassino (${(g.k.x - x0).toFixed(2)} tiles/s)`);
+}
+{
+  // atacar: acerta o sobrevivente colado
+  const g = killerScene(); g.s.x = 30.5; g.s.y = 26.5; g.k.x = 30.5; g.k.y = 28.0; g.k.face = -Math.PI / 2;
+  g.update(1 / 60, { drop: true });
+  ok(g.k.state === 'windup', 'ATACAR inicia o golpe');
+  for (let i = 0; i < 36; i++) { g.s.x = 30.5; g.s.y = 26.5; g.update(1 / 60, {}); }   // alvo parado
+  ok(g.stats.hits === 1 && g.s.hp === 1, `golpe acerta com mira assistida (hp do alvo: ${g.s.hp})`);
+  g.s.invuln = 0; g.k.state = 'chase'; g.s.x = g.k.x; g.s.y = g.k.y - 1.0;
+  const sx = g.k.x, sy = g.k.y - 1.0;
+  g.update(1 / 60, { drop: true });
+  for (let i = 0; i < 36; i++) { g.s.x = sx; g.s.y = sy; g.update(1 / 60, {}); }
+  ok(g.over && g.result === 'dead', 'segundo acerto derruba: vitória do assassino');
+}
+{
+  // chutar gerador e quebrar pallet com AGIR
+  const g = killerScene(true); const gen = g.gens[4]; gen.progress = 0.6; g.s.x = 3; g.s.y = 3;
+  g.k.x = gen.cx - 1; g.k.y = gen.cy;
+  g.update(1 / 60, {});
+  ok(g.kInteract && g.kInteract.type === 'kick', 'perto de gerador com progresso: AGIR = chutar');
+  g.update(1 / 60, { actPress: true });
+  ok(gen.progress < 0.5, `gerador regrediu (${gen.progress.toFixed(2)})`);
+  const g2 = killerScene(true); const p = g2.pallets.find((q) => q.tx === 5 && q.ty === 7);
+  p.state = 'down'; p.dir = { x: 1, y: 0 }; g2.s.x = 3; g2.s.y = 3; g2.k.x = p.cx + 0.9; g2.k.y = p.cy;
+  g2.update(1 / 60, {});
+  ok(g2.kInteract && g2.kInteract.type === 'break', 'perto de pallet caído: AGIR = quebrar');
+  g2.update(1 / 60, { actPress: true }); runFor(g2, 2.2, {});
+  ok(p.state === 'broken', 'pallet quebrado após ~2s');
+}
+
+// ---------- 12. TROPEÇAR ----------
+console.log('tropeço');
+{
+  const g = killerScene(true); g.s.x = 2; g.s.y = 2; g.s.skillCD = 999;
+  const p = g.pallets.find((q) => q.tx === 5 && q.ty === 7);
+  g.s.x = p.cx - 0.9; g.s.y = p.cy; g.k.x = p.cx + 1.0; g.k.y = p.cy;
+  g.ai.aware = 0;
+  g.update(1 / 60, {}); g.tryDrop(); runFor(g, 0.4, {});
+  ok(g.k.state === 'stun' && g.stats.stuns === 1, 'pallet acerta o jogador: atordoado');
+  runFor(g, DP.CFG.STUN + 0.05, {});
+  ok(g.k.state === 'stumble', 'depois do atordoamento ele começa a TROPEÇAR');
+  // com o direcional empurrado para a direita, o caminho real desvia e ele anda bem mais devagar
+  g.k.x = 30.5; g.k.y = 24.5; const ys = []; let maxDev = 0; const x0 = g.k.x, y0 = g.k.y;
+  let tripped = false;
+  for (let i = 0; i < 60 * DP.CFG.STUMBLE_T && g.k.state === 'stumble'; i++) {
+    g.update(1 / 60, { ax: 1, ay: 0 }); maxDev = Math.max(maxDev, Math.abs(g.k.y - y0)); if (g.k.trip > 0) tripped = true;
+  }
+  const dist = g.k.x - x0;
+  ok(maxDev > 0.25, `trajetória desvia do comando (desvio lateral máx ${maxDev.toFixed(2)} tiles)`);
+  ok(dist < DP.CFG.K_SPEED * DP.CFG.STUMBLE_T * 0.6, `avança bem menos que o normal (${dist.toFixed(1)} vs ${(DP.CFG.K_SPEED * DP.CFG.STUMBLE_T).toFixed(1)} tiles)`);
+  ok(tripped, 'ele cai (tombo) pelo menos uma vez');
+  runFor(g, 0.3, { ax: 1 });
+  ok(g.k.state === 'chase', 'recupera o equilíbrio e o controle volta ao normal');
+  // sem controle: não atacar nem agir durante o tropeço
+  g.k.state = 'stumble'; g.k.t = 0; g.update(1 / 60, { drop: true });
+  ok(g.k.state === 'stumble', 'não dá para atacar tropeçando');
+}
+{
+  // assassino IA também tropeça (jogador como sobrevivente)
+  const g = scene(); const p = g.pallets.find((q) => q.tx === 5 && q.ty === 7);
+  g.s.x = p.cx - 0.9; g.s.y = p.cy; g.k.x = p.cx + 1.0; g.k.y = p.cy; g.k.aware = 'hunt';
+  g.tryDrop(); runFor(g, 0.4 + DP.CFG.STUN + 0.1, {});
+  ok(g.k.state === 'stumble', 'o assassino IA também tropeça depois do pallet');
+}
+
+// ---------- 13. IA do sobrevivente ----------
+console.log('IA do sobrevivente');
+{
+  // com o assassino parado a IA conserta 5 geradores e foge pelo portão
+  const g = killerScene(false, 5);
+  let tEsc = 0;
+  for (let i = 0; i < 60 * 330 && !g.over; i++) g.update(1 / 60, {});
+  tEsc = g.time;
+  ok(g.over && g.result === 'escaped', `com o assassino parado, a IA escapa (geradores ${g.gensDone}, em ${tEsc.toFixed(0)}s)`);
+  ok(tEsc > 90 && tEsc < 300, 'tempo de fuga plausível (90–300s)');
+}
+{
+  // assassino-bot: segue o caminho até o sobrevivente e ataca quando está perto
+  const res = { dead: 0, escaped: 0, timeout: 0 }; let stuns = 0, drops = 0, bad = 0, hits = 0, tTot = 0, trips = 0;
+  for (let seed = 1; seed <= 24; seed++) {
+    const g = killerScene(false, seed * 11);
+    let ns = 0;
+    for (let i = 0; i < 60 * 300 && !g.over; i++) {
+      const dx = g.s.x - g.k.x, dy = g.s.y - g.k.y, d = Math.hypot(dx, dy);
+      if (i % 6 === 0) g._v = (g.los && d < 12) ? { x: dx / (d || 1), y: dy / (d || 1) } : g.pathVec(g.k, g.s.x, g.s.y);
+      const v = g._v;
+      const atk = d < 1.35 && g.k.state === 'chase';
+      const still = g.k.state === 'break';                       // quem quebra pallet fica parado
+      g.update(1 / 60, { ax: still ? 0 : v.x, ay: still ? 0 : v.y, drop: atk, actPress: !!g.kInteract && g.k.state === 'chase' });
+      if (g.k.state === 'stumble') ns++;
+      for (const e of [g.s, g.k]) if (!isFinite(e.x) || !isFinite(e.y) || (g.solid(Math.floor(e.x), Math.floor(e.y)) && !g.s.vault)) bad++;
+    }
+    res[g.over ? g.result : 'timeout']++; stuns += g.stats.stuns; drops += g.stats.drops; hits += g.stats.hits; tTot += g.time; trips += ns > 0 ? 1 : 0;
+  }
+  ok(bad === 0, 'ninguém entra em parede/NaN com o bot jogando');
+  ok(drops > 0, `a IA usa pallets (${drops} derrubados em 24 partidas, ${stuns} atordoamentos, ${trips} partidas com tropeço)`);
+  console.log('   resultados (assassino-bot):', JSON.stringify(res), 'acertos:', hits, 'tempo médio', (tTot / 24).toFixed(0) + 's');
+}
+
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
 process.exit(fails ? 1 : 0);
