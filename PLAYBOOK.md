@@ -36,7 +36,7 @@ Princípios herdados do protótipo anterior:
 | 12 | **Consolidação (v0.1)** | Mapa de campo também para o assassino, viatura da polícia, tela de fim com a rota usada, dicas de pausa, README/Playbook revisados, lista de pendências. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
-Marcos de qualidade: **225 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
+Marcos de qualidade: **226 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
 
 ## 3. Arquitetura (resumo)
 
@@ -200,7 +200,7 @@ Teste visual rápido (Chromium já instalado): carregar o HTML, apertar `T` (tre
 - **"Matar o assassino"** (4ª rota do pedido original) muda o gênero: fica para um protótipo à parte.
 - **Multiplayer de verdade**: sincronizar o `game.js` (já sem DOM) num servidor autoritativo; os bots viram placeholders para jogadores ausentes.
 
-**Falta validar com gente de verdade:** tempo de partida (meta 8–12 min), letalidade do assassino-IA, equilíbrio entre as rotas, conforto do joystick e dos botões no celular, legibilidade das árvores (hoje são "blocos"). Use `__dp.report()` no console depois de algumas partidas.
+**Falta validar com gente de verdade:** tempo de partida (meta 8–12 min), letalidade do assassino-IA, equilíbrio entre as rotas, conforto do joystick e dos botões no celular, legibilidade da floresta (as árvores agora têm copa redonda/pinheiro, mas continuam sendo tiles 1×1). Use `__dp.report()` no console depois de algumas partidas.
 
 **Dívidas técnicas conhecidas**
 - Arte: árvores e água são tiles simples; vegetação rasteira, reflexos, ambiente sonoro (vento, grilos, água) e passos na água não existem.
@@ -464,7 +464,7 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 | Bots com sentidos humanos, exploração, rotas | ✅ (sem trapaças de visão; exceção declarada do assassino-IA) |
 | Tempos maiores (fusível 45 s, peças 35/40 s, polícia 150 s) | ✅ |
 | Dificuldade, telemetria, lobby com modos | ✅ |
-| Testes automáticos | ✅ 225 checagens, ~25 s |
+| Testes automáticos | ✅ 226 checagens, ~30 s |
 | Matar o assassino | ⛔ fora da v0.1 (protótipo à parte) |
 
 **Como jogar uma partida típica (bots + você, sobrevivente):** abra o mapa (M), vá às cabanas, segure E nos geradores (acerte os skill checks com Espaço), pegue o rádio se vir um (Q liga), se achar peças leve-as ao carro (estacionamento) ou ao barco (cais). Com 5 geradores a energia liga: ligue no telefone, resista ~2,5 min e corra para o portão quando a polícia abrir.

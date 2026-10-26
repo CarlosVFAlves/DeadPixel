@@ -66,22 +66,32 @@
         if (y + 1 < H && t[i + W] !== 7) px(c, '#10222f', X, Y + TS - 1, TS, 1);
       }
     }
-    // árvores: copa redonda sobre o tronco; vizinhas se fundem numa mata fechada
+    // árvores: copas redondas ou pinheiros, com a copa transbordando um pouco para os vizinhos (mata fechada, sem "grade")
+    const disc = (cx, cy, rr, col) => {
+      for (let dy = -rr; dy <= rr; dy++) { const hw = Math.floor(Math.sqrt(rr * rr - dy * dy) + 0.4); px(c, col, cx - hw, cy + dy, hw * 2 + 1, 1); }
+    };
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS;
         if (t[i] !== 6) continue;
-        const r = hash(x, y, 60), sh = r < 0.33 ? ['#102a1a', '#17381f', '#21502c'] : r < 0.66 ? ['#12301d', '#1b4125', '#265a33'] : ['#0e2617', '#153320', '#1e4a2a'];
-        px(c, 'rgba(0,0,0,.4)', X + 1, Y + 10, TS - 1, 5);
-        px(c, '#3a2718', X + 6, Y + 9, 4, 6);
-        px(c, '#2a1b10', X + 6, Y + 9, 1, 6);
-        px(c, sh[0], X, Y + 1, TS, 11);
-        px(c, sh[0], X + 2, Y, TS - 4, 13);
-        px(c, sh[1], X + 2, Y + 1, TS - 5, 8);
-        px(c, sh[1], X + 1, Y + 3, TS - 3, 6);
-        px(c, sh[2], X + 4 + ((hash(x, y, 61) * 4) | 0), Y + 2, 5, 3);
-        px(c, sh[2], X + 3, Y + 5 + ((hash(x, y, 62) * 3) | 0), 3, 2);
-        px(c, 'rgba(0,0,0,.25)', X + 8, Y + 8, 6, 3);
+        const r = hash(x, y, 60), r2 = hash(x, y, 61), r3 = hash(x, y, 62);
+        const pal = r < 0.34 ? ['#0c2214', '#133019', '#1b4423', '#2a5e33'] : r < 0.68 ? ['#0e281a', '#173a22', '#215230', '#33703f'] : ['#0a1f12', '#112c19', '#18391f', '#255129'];
+        const ox = Math.round((r2 - 0.5) * 4), oy = Math.round((r3 - 0.5) * 3);
+        px(c, 'rgba(0,0,0,.38)', X + 2 + ox, Y + 11, 13, 4);
+        px(c, '#2c1d12', X + 6 + ox, Y + 8, 4, 7); px(c, '#4a3320', X + 7 + ox, Y + 8, 1, 7);
+        if (r2 < 0.3) {                                   // pinheiro: três camadas de triângulo
+          for (let L = 0; L < 3; L++) {
+            const by = Y + 10 - L * 5 + oy, hw = 7 - L * 2;
+            for (let dy = 0; dy < 6; dy++) { const w = Math.round(hw * (dy + 1) / 6); px(c, L % 2 ? pal[1] : pal[0], X + 8 + ox - w, by - 5 + dy, w * 2 + 1, 1); }
+            px(c, pal[2], X + 8 + ox - Math.round(hw / 2), by - 2, 2, 1);
+          }
+        } else {                                          // copa redonda
+          const rr = 7 + (r3 < 0.5 ? 0 : 1);
+          disc(X + 8 + ox, Y + 5 + oy, rr, pal[0]);
+          disc(X + 7 + ox, Y + 4 + oy, rr - 2, pal[1]);
+          disc(X + 6 + ox, Y + 2 + oy, Math.max(2, rr - 5), pal[2]);
+          px(c, pal[3], X + 4 + ox, Y + 1 + oy, 2, 1); px(c, pal[3], X + 8 + ox, Y + 3 + oy, 1, 1);
+        }
       }
     }
     // paredes

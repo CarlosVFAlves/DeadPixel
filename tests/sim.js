@@ -1083,5 +1083,27 @@ console.log('ajuste fino');
   ok(v.hp === 3 && !v.dead, 'começa com 3 de vida');
 }
 
+// ---------- 26. fuzz no mapa grande ----------
+console.log('fuzz mapa grande');
+{
+  let bad = 0, errors = 0, games = 0, maxIdle = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const rnd = seeded(seed * 101);
+    const role = seed % 3 === 0 ? 'killer' : 'survivor';
+    let g;
+    try {
+      g = DP.createGameAny({ map: 'camp', rng: rnd, role, training: seed % 2 === 0 });
+      for (let i = 0; i < 60 * 150; i++) {
+        const ax = Math.round(rnd() * 2 - 1), ay = Math.round(rnd() * 2 - 1);
+        g.update(1 / 60, { ax, ay, drop: rnd() < 0.02, act: rnd() < 0.4, press: rnd() < 0.03, actPress: rnd() < 0.03, walk: rnd() < 0.2, radio: rnd() < 0.005, stealth: rnd() < 0.3 });
+        for (const e of [g.k].concat(g.survivors)) if (!isFinite(e.x) || !isFinite(e.y)) bad++;
+        if (g.over) break;
+      }
+      games++;
+    } catch (e) { errors++; console.log('   erro:', e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e); }
+  }
+  ok(errors === 0 && bad === 0, `fuzz: 12 partidas aleatórias no acampamento sem exceção nem NaN (${games} completas)`);
+}
+
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
 process.exit(fails ? 1 : 0);
