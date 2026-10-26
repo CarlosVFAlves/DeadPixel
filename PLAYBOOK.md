@@ -196,3 +196,61 @@ Teste visual rápido (Chromium já instalado): carregar o HTML, apertar `T` (tre
 - **Multiplayer de verdade** (objetivo final): sincronizar o `game.js` (já sem DOM) num servidor autoritativo; os bots atuais viram placeholders para jogadores ausentes.
 - Mapa procedural (o protótipo *Retail Nightmare* já tem um gerador), névoa de guerra/luz, mais tipos de janela e obstáculos, 8-bit "de verdade" (paleta fixa) se for o desejo.
 - Dificuldade selecionável (`AI_*`) e placar por semente.
+
+## 10. Em discussão: direção "Friday the 13th" (rascunho, nada implementado)
+
+**Pedidos do time:** (1) jogo mais para *Friday the 13th*; (2) **mapa grande**; (3) **rotas de fuga**: polícia, arrumar o carro, fugir de barco, matar o assassino; (4) **bots simulam um jogador** para a partida ficar fluida; (5) **ferramenta do sobrevivente que detecta o assassino por perto**, a menos que ele esteja em **stealth**; (6) **raio de visão dos sobreviventes é amplo demais** (veem o mapa todo e onde está todo mundo).
+
+> Nota de originalidade: usar o jogo de referência como **inspiração** (acampamento, lago, rotas de fuga); nomes, personagens e marcas dele não entram no nosso jogo. Cenário e nomes próprios.
+
+### 10.1 Princípio proposto: paridade de informação (bots como jogadores humanos)
+Um bot só pode (a) dar as **mesmas entradas** que uma pessoa (já é assim: `ax, ay, act, drop...`), (b) usar os **mesmos sentidos** (visão com linha de vista e alcance; audição com alcance), (c) lembrar apenas o que **viu/ouviu** (última posição conhecida), e (d) variar de nível por **imperfeição humana** (tempo de reação, erros, indecisão), não por números trapaceados.
+
+**Onde os bots hoje trapaceiam (medido no código):**
+| Onde | Trapaça |
+|---|---|
+| Sobrevivente-IA | `AI_SENSE`=11 tiles **atravessa paredes**; depois de perder o assassino, ainda usa a posição **real** dele por ~4 s. |
+| Sobrevivente-IA | `AI_SPEED`=1,05 (corre 5% mais) só para compensar ser burro; é balanceamento por estatística. |
+| Assassino-IA | Rastreia a posição **real** do alvo por 2,5 s depois de perder; escolhe gerador sabendo **qual tem progresso** em qualquer lugar. |
+| Jogo (pessoa) | **Sem névoa**: a tela mostra tudo, inclusive através de paredes (assassino e todos os sobreviventes dentro do quadro). |
+
+### 10.2 Visão e névoa
+Proposta: **círculo de visão** com **linha de vista** (paredes bloqueiam; janela de vidro não) + **cone de lanterna** + escuro fora disso; o que já foi visto fica "na memória" (gerador, item), jogadores só aparecem **em linha de vista**. O HUD de equipe mostra **estado** (vivo/ferido/fora), não **posição**. O protótipo *Retail Nightmare* já provou a técnica (gostaram da névoa por linha de visão). Custo estimado: máscara de visibilidade por raios (~180 raios) por quadro, barata. Assimetria a decidir: assassino enxerga mais longe? tem "sentir" (revela sobreviventes próximos por X s)?
+
+### 10.3 Ferramenta de detecção + stealth do assassino
+- **Detector (rádio de pilha):** item **encontrado** no mapa (não todo mundo começa com ele), **pilha finita** (decisão: ligar só quando precisa). Avisa **proximidade em 3 faixas** (longe/perto/muito perto) com som e pulsação na tela; **sem direção exata** (senão vira radar e anula o assassino).
+- **Stealth do assassino ("espreita"):** segurando um botão, anda devagar (~60%), **raio de detecção cai para ~25%** (o detector só dispara a ~3 tiles) e o ruído diminui; **quebra ao atacar ou correr**; recarga/fôlego para não ficar o tempo todo. Funciona melhor no escuro (longe de lâmpadas/lanternas).
+- Bots: reagem às faixas do detector como uma pessoa (hesitam, olham, fogem), com tempo de reação.
+- Tensão com o playtest 1 ("não senti necessidade de outras ferramentas"): aquilo valia para o mapa pequeno e sem névoa. Com mapa grande e visão curta, saber "ele está perto" passa a ser necessidade real. Por isso sugiro entrar **depois** da névoa.
+
+### 10.4 Mapa grande
+- Hoje: 48×32 tiles (1.536). Alvo inicial sugerido: **96×64** (6.144); depois, se fizer sentido, ~160×110.
+- **Custo medido** do cálculo de caminhos (Dijkstra por chamada, ~41 chamadas/s com 4 bots + IA): 48×32 = **0,38 ms** (~15 ms/s); 96×64 = ~1,5 ms (~62 ms/s); 160×110 = ~4,3 ms (~180 ms/s, **~18% de um núcleo** no PC, mais no celular).
+- Plano de performance: **campos pré-calculados** para alvos fixos (geradores, portas, barco, carro: calculados uma vez), **grade grossa** (2×2) para planejar e a fina só para desviar, buscas **limitadas por raio**, e **espalhar** os cálculos dos bots em quadros diferentes.
+- Layout: **desenhado à mão com prefabs** (as casas atuais viram "cabanas") + **itens e spawns sorteados** a cada partida; gerador procedural de mapa inteiro fica para depois (o do *Retail Nightmare* é de shopping, não serve direto).
+- Mapa grande precisa de **motivo para andar**: objetivos espalhados, veículos e rotas distantes (próxima seção).
+
+### 10.5 Rotas de fuga (escopo por rota)
+| Rota | Ideia | O que precisa | Contra-jogada do assassino | Custo |
+|---|---|---|---|---|
+| **Polícia** | Restaurar energia (os **geradores viram fusíveis**) e **ligar para a polícia**; ela chega depois de T segundos e quem estiver vivo na área escapa. | Estado de energia, telefone interativo, **temporizador** de chegada. | Vigiar/cortar o telefone, caçar quem espera. | **Baixo** (reusa geradores e porta). |
+| **Carro** | Achar **peças** (bateria, chave, combustível) e consertar; dirigir até a saída. | **Itens e inventário**, interação de conserto, entidade "carro" com assentos limitados. | Sabotar peças, esconder o carro, barulho do motor. | Médio. |
+| **Barco** | Mesmo esquema de peças + **água** no mapa. | Itens, tiles de água, saída pelo lago. | Sabotar, interceptar no cais. | Médio-alto (só faz sentido em mapa grande). |
+| **Matar o assassino** | Reunir equipamento e **derrotar** o assassino. | **Combate dos sobreviventes**, estado de "morte" do assassino, equilíbrio novo (hoje o jogo é só fuga). | — | **Alto** (muda o gênero do jogo). Sugiro tratar como protótipo separado, depois das outras. |
+
+Pontos a decidir: a equipe **escolhe** uma rota ou cumpre várias? **Assentos limitados** (ex.: carro com 2) forçam decisões difíceis? Os **bots precisam de uma camada de planejamento** para escolher a rota (nova, mas combina com a ideia de simular jogador).
+
+### 10.6 Ordem sugerida (cada etapa jogável e testável)
+1. **Visão e paridade**: névoa + memória + bots sem trapaça (+ testes: "bot não reage a assassino atrás de parede"). Remove `AI_SPEED`.
+2. **Detector + stealth** no mapa atual.
+3. **Mapa grande (96×64)** com navegação otimizada + **rota Polícia**.
+4. **Carro** (itens/inventário) e depois **Barco**.
+5. **Matar o assassino**, como protótipo à parte.
+6. Discussão pendente de **bits/skins** (pode ser feita antes da etapa 3, pois mexe no tamanho de tile).
+
+### 10.7 Perguntas em aberto
+- O **pallet** fica (reskin: tronco/armário/barricada) ou sai em favor de mecânicas mais "acampamento" (trancar portas, esconderijos)?
+- Visão: o assassino enxerga **mais** que os sobreviventes? Tem "sentir"?
+- Detector: item **encontrado** ou habilidade de todos? Só proximidade ou também direção vaga?
+- Mapa: tamanho-alvo e se mantém **um** mapa bem desenhado ou vários.
+- Quais rotas entram na primeira versão (sugestão: Polícia + Carro)?
