@@ -27,9 +27,10 @@ Princípios herdados do protótipo anterior:
 | 3 | **Jogar de assassino** | Novo papel + **IA do sobrevivente** (foge, usa pallets, conserta, escapa). Mecânica de **tropeço** quando o assassino leva pallet. Correção de personagem preso em pallet. |
 | 4 | **Janelas e equipe** | 10 janelas animadas (abrir / pular / passar com calma / atravessar quebrando / assassino quebra), **4 sobreviventes** (você + 3 bots, ou 4 bots), **8 geradores**, **porta principal**, fim de partida por equipe. Reescrita do `game.js` para multi-sobrevivente. |
 | 4.1 | **Playtest 1** | Primeira rodada com uma pessoa jogando: ajuste do assassino-jogador, anti "barata tonta" dos bots, telemetria. Ver seção 4. |
+| 6 | **Visão e paridade** | Névoa de guerra (raio + cone de lanterna + memória), bots e assassino-IA com os mesmos sentidos de uma pessoa (sem trapaças), seletor de dificuldade, tabela de tempos `ROUTES`, interruptor de visão no treino. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
-Marcos de qualidade: **104 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
+Marcos de qualidade: **126 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
 
 ## 3. Arquitetura (resumo)
 
@@ -254,6 +255,36 @@ Pontos a decidir: a equipe **escolhe** uma rota ou cumpre várias? **Assentos li
 - Detector: item **encontrado** ou habilidade de todos? Só proximidade ou também direção vaga?
 - Mapa: tamanho-alvo e se mantém **um** mapa bem desenhado ou vários.
 - Quais rotas entram na primeira versão (sugestão: Polícia + Carro)?
+
+### 10.9 Etapa 6 entregue: visão e paridade (como foi e o que sobrou)
+
+**Decisões do time:** visão curta **na partida inteira**; no **treino** há interruptor (feito: botão VER TUDO / tecla V).
+
+**Trapaças removidas (tabela da 10.1):**
+| Antes | Agora |
+|---|---|
+| Bot sentia o assassino a 11 tiles através de paredes | Bot **vê** (raio 6 + cone 11, linha de vista) ou **ouve** (assassino andando: 6 tiles; golpe/quebra: 9) e a posição ouvida tem **erro de ~2,2 tiles** |
+| Bot usava a posição real do assassino por ~4 s depois de perdê-lo | Usa a **última posição conhecida** (`ai.K`, "só lembra") |
+| Bot decidia derrubar pallet olhando o estado real do assassino | Só decide pelo golpe do pallet se estiver **vendo** o assassino (`K.live`) |
+| `AI_SPEED` +5% | Removido (e `AI_SENSE`, `AI_SEE`, `SIGHT`) |
+| Assassino-IA seguia o alvo real por 2,5 s e sabia qual gerador tinha progresso | Segue **para onde o alvo ia** (última posição + velocidade, até 1,2 s); só conhece o progresso dos geradores que **já viu** (`k.genMem`); só ouvir = posição aproximada e vai "buscar" |
+
+**Dificuldade:** `diff = {time, bot, kp}` calculado no `createGame` a partir do papel (ver README). Tempos de tarefa em `CFG.ROUTES` × `diff.time`.
+
+**Impasses desta etapa**
+34. **Gerador "invisível" para o assassino.** `canSee()` testava a linha de vista até o *centro* do gerador, que é um bloco sólido, e a visão batia no próprio bloco. Solução: olhar para um ponto 0,75 tile à frente da face voltada para o observador.
+35. **Teste de audição falhava por motivo errado.** O sobrevivente-bot saía andando durante o teste e a distância passava do alcance de audição. Solução: o teste segura as posições a cada quadro (`hold`).
+36. **Bot de teste do assassino era trapaceiro** (sabia a posição de todos), o que superestimava o desempenho. Solução: `fairKillerInput()` usa só `g.canSee`, os barulhos (setas) e uma patrulha por geradores, ou seja, a mesma informação de uma pessoa.
+37. **Legenda da sala batia nos botões no celular.** O teste de layout não cobria a legenda. Solução: cobrir (até 3 linhas) e adaptar a altura das vagas quando a tela é baixa (`H < 400`).
+38. **Névoa e custo.** Em vez de um polígono por entidade, um único canvas de névoa do tamanho da tela (≈140 raios ambiente + 40 do cone) com `destination-out`, mais uma matriz de "tiles vistos" para a memória.
+
+**Números depois da mudança (assassino justo, 8 partidas, equipe de 4 bots):** o assassino vence 8/8, em ~74 s de média, com 85% de aproveitamento de golpe. Interpretação: uma pessoa será bem mais lenta que esse bot (e o bot não erra o caminho), **mas** pode estar fácil demais para o assassino; avaliar com `__dp.report()` antes de mexer.
+
+**Ainda NÃO é paridade perfeita (anotado para as próximas etapas):**
+- Bots e assassino-IA conhecem o **mapa inteiro** (layout e posição dos geradores, pallets, janelas); numa partida com itens sorteados isso exigirá **exploração** (etapa do mapa grande).
+- Sobreviventes-IA conhecem o **progresso real** dos geradores (como se a equipe se comunicasse).
+- Ao ouvir o **reparo** (ruído 9), o assassino-IA recebe posição aproximada, mas a informação sai do `noise` real do sobrevivente.
+- O assassino-IA não usa stealth e o sobrevivente-IA não tem detector (etapa 7).
 
 ### 10.8 Decisões da conversa seguinte (aprovadas pelo time)
 - Plano da seção 10.6 **aprovado**. Pedidos novos: **mapa ainda maior** e **tempos de reparo das rotas de fuga maiores**.

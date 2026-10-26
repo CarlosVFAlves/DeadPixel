@@ -40,22 +40,24 @@
         sw = Math.floor((W - 2 * M - 3 * gap) / 4); slotH = 62;
         for (let i = 0; i < 4; i++) L.slots.push({ x: M + i * (sw + gap), y: top, w: sw, h: slotH });
       } else {
-        sw = Math.floor((W - 2 * M - gap) / 2); slotH = 66;
+        sw = Math.floor((W - 2 * M - gap) / 2); slotH = H < 400 ? 50 : 66;
         for (let i = 0; i < 4; i++) L.slots.push({ x: M + (i % 2) * (sw + gap), y: top + Math.floor(i / 2) * (slotH + gap), w: sw, h: slotH });
       }
       const rows = wide ? 1 : 2;
-      const ky = top + rows * (slotH + gap) + 2, kh = wide ? 38 : 64;
+      const ky = top + rows * (slotH + gap) + 2, kh = wide ? 38 : (H < 400 ? 40 : 64);
       L.box.killer = { x: M, y: ky, w: W - 2 * M, h: kh };
       L.box.legend = { y: ky + kh + 5 };
       L.buttons.push({ id: 'kslot', ghost: true, x: M, y: ky, w: W - 2 * M, h: kh });
       if (wide) {
-        const by = H - 24, bh = 18, bw1 = 58, bw2 = 112;
+        const by = H - 24, bh = 18, bw1 = 50, bw2 = 78, bw3 = 82;
         L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: by, w: bw1, h: bh, color: '#8a8a99' });
-        L.buttons.push({ id: 'train_toggle', label: '', x: M + bw1 + 4, y: by, w: bw2, h: bh, color: '#7ad0ff', toggle: true });
-        L.buttons.push({ id: 'start', label: 'INICIAR PARTIDA', x: M + bw1 + bw2 + 8, y: by, w: W - 2 * M - bw1 - bw2 - 8, h: bh, color: '#ffd23f' });
+        L.buttons.push({ id: 'diff_toggle', label: '', x: M + bw1 + 4, y: by, w: bw2, h: bh, color: '#e9c07a' });
+        L.buttons.push({ id: 'train_toggle', label: '', x: M + bw1 + bw2 + 8, y: by, w: bw3, h: bh, color: '#7ad0ff', toggle: true });
+        L.buttons.push({ id: 'start', label: 'INICIAR', x: M + bw1 + bw2 + bw3 + 12, y: by, w: W - 2 * M - bw1 - bw2 - bw3 - 12, h: bh, color: '#ffd23f' });
       } else {
         const bw = W - 2 * M;
-        L.buttons.push({ id: 'start', label: 'INICIAR PARTIDA', x: M, y: H - 66, w: bw, h: 19, color: '#ffd23f' });
+        L.buttons.push({ id: 'start', label: 'INICIAR PARTIDA', x: M, y: H - 89, w: bw, h: 19, color: '#ffd23f' });
+        L.buttons.push({ id: 'diff_toggle', label: '', x: M, y: H - 66, w: bw, h: 17, color: '#e9c07a' });
         L.buttons.push({ id: 'train_toggle', label: '', x: M, y: H - 43, w: bw, h: 17, color: '#7ad0ff', toggle: true });
         L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: bw, h: 17, color: '#8a8a99' });
       }
@@ -100,7 +102,7 @@
     text(ctx, 'DEAD PIXEL', 0, 0, '#e23a3a', { align: 'c' });
     ctx.restore();
     const subY = Math.round(H * 0.07) + 7 * sc + 5;
-    text(ctx, 'PROTÓTIPO 5: A SALA', cx, subY, '#e9c07a', { align: 'c' });
+    text(ctx, 'PROTÓTIPO 6: VISÃO', cx, subY, '#e9c07a', { align: 'c' });
     // prévia: o personagem principal e o assassino apagado, à espreita
     const ps = H >= 300 ? 3 : H >= 230 ? 2 : 1;
     const feet = Math.min(Math.round(H * 0.5) - 10, subY + 14 + 22 * ps);
@@ -121,7 +123,7 @@
     rect(ctx, you ? 'rgba(125,255,160,.08)' : 'rgba(255,255,255,.03)', b.x, b.y, b.w, b.h);
     frame(ctx, you ? '#7dffa0' : '#3b3b47', b.x, b.y, b.w, b.h, !you);
     text(ctx, 'J' + (i + 1), b.x + 3, b.y + 3, you ? '#7dffa0' : '#4d4d59');
-    const sc = 2, cxs = b.x + Math.round(b.w / 2), feet = b.y + b.h - 20;
+    const sc = b.h >= 62 ? 2 : 1, cxs = b.x + Math.round(b.w / 2), feet = b.y + b.h - 20;
     if (you) R().uiSurvivor(ctx, cxs, feet, sc, { id: 0, moving: false, tm, face: Math.PI / 2 + Math.sin(tm * 1.2) * 0.0, human: false });
     else R().uiSurvivor(ctx, cxs, feet, sc, { id: i, tm, alpha: 0.16 });
     if (!you) text(ctx, state === 'bot' ? 'IA' : '?', cxs, feet - 10 * sc, '#4d4d59', { align: 'c' });
@@ -146,7 +148,7 @@
     text(ctx, hint, k.x + 56, k.y + 26, kill ? '#ffb347' : '#5d5d69');
     // legenda
     const ly = L.box.legend.y;
-    DP.font.wrap(kill ? 'OS 4 SOBREVIVENTES SÃO BOTS. CACE TODOS ANTES QUE ESCAPEM.' : 'VAGAS LIVRES VIRAM BOTS QUANDO A PARTIDA COMEÇA. MULTIPLAYER EM BREVE.', Math.floor((W - 16) / 6))
+    DP.font.wrap(kill ? 'OS 4 SOBREVIVENTES SÃO BOTS. CACE TODOS ANTES QUE ESCAPEM.' : 'VAGAS LIVRES VIRAM BOTS. VISÃO CURTA: SÓ SE VÊ O QUE ESTÁ PERTO OU NA LANTERNA.', Math.floor((W - 16) / 6))
       .forEach((l, i) => text(ctx, l, Math.round(W / 2), ly + i * 9, '#6f6f7c', { align: 'c' }));
   }
 
@@ -225,7 +227,8 @@
   }
 
   function labelFor(b, ui) {
-    if (b.id === 'train_toggle') return 'TREINO: ' + (ui.training ? 'LIGADO' : 'DESLIGADO');
+    if (b.id === 'train_toggle') return b.w < 100 ? 'TREINO: ' + (ui.training ? 'SIM' : 'NÃO') : 'TREINO: ' + (ui.training ? 'LIGADO' : 'DESLIGADO');
+    if (b.id === 'diff_toggle') { const n = { easy: 'FÁCIL', normal: 'NORMAL', hard: 'DIFÍCIL' }[ui.difficulty]; return b.w < 100 ? 'DIF: ' + n : 'DIFICULDADE: ' + n; }
     return b.label;
   }
 

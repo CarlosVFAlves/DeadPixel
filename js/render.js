@@ -381,8 +381,8 @@
   }
 
   // ---------- zona de impacto (ajuda visual) ----------
-  function drawZone(ctx, game, tm) {
-    for (const nz of game.nearList) drawOneZone(ctx, game, tm, nz.pal, nz.sv);
+  function drawZone(ctx, game, tm, vis) {
+    for (const nz of game.nearList) if (!vis || vis(nz.sv.x, nz.sv.y)) drawOneZone(ctx, game, tm, nz.pal, nz.sv);
   }
   function drawOneZone(ctx, game, tm, p, sv) {
     const C = game.cfg;
@@ -449,10 +449,66 @@
     ctx.globalAlpha = 1;
   }
 
+  // ---------- névoa de guerra: raio ambiente + cone da lanterna, com linha de vista; o que já foi visto fica "na memória" ----------
+  function drawFog(ctx, game, W, H, cx, cy) {
+    const mw = game.map.W, mh = game.map.H;
+    if (!R.seen || R.seen.length !== mw * mh) R.seen = new Uint8Array(mw * mh);
+    if (!R.fog || R.fog.width !== W || R.fog.height !== H) { R.fog = document.createElement('canvas'); R.fog.width = W; R.fog.height = H; R.fogCtx = R.fog.getContext('2d'); }
+    const f = R.fogCtx, pl = game.pl, V = pl === game.k ? game.cfg.VIS_K : game.cfg.VIS_S;
+    const ox = pl.x * TS - cx, oy = pl.y * TS - cy;
+    f.globalCompositeOperation = 'source-over';
+    f.clearRect(0, 0, W, H);
+    f.fillStyle = 'rgba(3,4,8,0.97)'; f.fillRect(0, 0, W, H);
+    f.globalCompositeOperation = 'destination-out';
+    // memória: tiles já vistos ficam mais claros
+    f.fillStyle = 'rgba(0,0,0,0.5)';
+    const x0 = Math.max(0, Math.floor(cx / TS)), x1 = Math.min(mw - 1, Math.ceil((cx + W) / TS)), y0 = Math.max(0, Math.floor(cy / TS)), y1 = Math.min(mh - 1, Math.ceil((cy + H) / TS));
+    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (R.seen[ty * mw + tx]) f.fillRect(tx * TS - cx, ty * TS - cy, TS, TS);
+    const mark = (ang, len) => {
+      for (let l = 0; l <= len; l += 0.5) {
+        const tx = Math.floor(pl.x + Math.cos(ang) * l), ty = Math.floor(pl.y + Math.sin(ang) * l);
+        if (tx >= 0 && ty >= 0 && tx < mw && ty < mh) R.seen[ty * mw + tx] = 1;
+      }
+    };
+    const reach = (ang, maxLen) => {                       // o raio vai um pouco além da parede para ela aparecer
+      const len = game.castRay(pl.x, pl.y, ang, maxLen);
+      const out = len < maxLen ? len + 0.7 : len;
+      mark(ang, out);
+      return out;
+    };
+    // círculo ambiente
+    const N = 140;
+    f.beginPath();
+    for (let i = 0; i < N; i++) {
+      const a = i / N * Math.PI * 2, l = reach(a, V.r) * TS;
+      const px_ = ox + Math.cos(a) * l, py_ = oy + Math.sin(a) * l;
+      if (i) f.lineTo(px_, py_); else f.moveTo(px_, py_);
+    }
+    f.closePath();
+    const rg = f.createRadialGradient(ox, oy, V.r * TS * 0.5, ox, oy, V.r * TS);
+    rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    f.fillStyle = rg; f.fill();
+    // cone da lanterna
+    const M = 40, face = pl.face;
+    f.beginPath(); f.moveTo(ox, oy);
+    for (let i = 0; i <= M; i++) {
+      const a = face - V.half + (i / M) * 2 * V.half, l = reach(a, V.cone) * TS;
+      f.lineTo(ox + Math.cos(a) * l, oy + Math.sin(a) * l);
+    }
+    f.closePath();
+    const lg = f.createLinearGradient(ox, oy, ox + Math.cos(face) * V.cone * TS, oy + Math.sin(face) * V.cone * TS);
+    lg.addColorStop(0, 'rgba(0,0,0,0.9)'); lg.addColorStop(0.55, 'rgba(0,0,0,0.75)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
+    f.fillStyle = lg; f.fill();
+    f.globalCompositeOperation = 'source-over';
+    ctx.drawImage(R.fog, 0, 0);
+  }
+
   function drawWorld(ctx, game, W, H, tm) {
     if (!R.staticCv) R.staticCv = buildStatic(game);
     const mw = game.map.W * TS, mh = game.map.H * TS;
     const s = game.s, pl = game.pl;
+    const full = game.fullVision;                                   // só no treino: interruptor "ver tudo"
+    const vis = (x, y) => full || game.canSee(pl, x, y);           // o que o jogador consegue ver agora
     let cx = pl.x * TS - W / 2, cy = pl.y * TS - H / 2;
     cx = mw <= W ? (mw - W) / 2 : Math.max(0, Math.min(mw - W, cx));
     cy = mh <= H ? (mh - H) / 2 : Math.max(0, Math.min(mh - H, cy));
@@ -477,19 +533,20 @@
     for (const o of game.gens) drawGenGlow(ctx, o, tm);
     for (const w of game.windows) drawWindow(ctx, w, game, tm);
     drawDoor(ctx, game.door, game, tm);
-    drawZone(ctx, game, tm);
+    drawZone(ctx, game, tm, vis);
 
     // pallets de pé + personagens, ordenados por y
     const list = [];
     for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.nearList.some((n) => n.pal === p) ? tm : 0) });
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
-    for (const v of game.survivors) if (!v.dead && !v.escaped) list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) });
-    list.push({ y: game.k.y, f: () => drawKiller(ctx, game.k, game, tm) });
+    for (const v of game.survivors) if (!v.dead && !v.escaped && (v === pl || vis(v.x, v.y))) list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) });
+    if (game.k === pl || vis(game.k.x, game.k.y)) list.push({ y: game.k.y, f: () => drawKiller(ctx, game.k, game, tm) });
     list.sort((a, b) => a.y - b.y);
     for (const o of list) o.f();
 
     // partículas
     for (const f of game.fx) {
+      if (!vis(f.x, f.y)) continue;
       ctx.globalAlpha = Math.max(0, 1 - f.t / f.life);
       px(ctx, f.c, f.x * TS, f.y * TS - f.t * 6, 2, 2);
     }
@@ -508,12 +565,14 @@
     }
     // textos flutuantes
     for (const pu of game.popups) {
+      if (!vis(pu.x, pu.y)) continue;
       const y = pu.y * TS - pu.t * 14;
       ctx.globalAlpha = Math.min(1, (1.1 - pu.t) * 2);
       text(ctx, pu.text, pu.x * TS, y, pu.color, { align: 'c' });
     }
     ctx.globalAlpha = 1;
     ctx.restore();
+    if (!full) drawFog(ctx, game, W, H, cx, cy);
 
     // perigo = proximidade do assassino (raio de terror) — só para quem joga de sobrevivente
     const danger = game.role === 'killer' || game.k.state === 'intro' ? 0 : Math.max(0, 1 - game.dist / 11);
@@ -552,7 +611,7 @@
     text(ctx, (ka ? 'TROPEÇOU ' : 'ATORDOADO ') + game.stats.stuns + 'X', 4, 34, ka ? '#ff9d5c' : '#ffd23f');
     const tt = Math.floor(game.time);
     text(ctx, Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0'), W - 4, 4, '#fff', { align: 'r' });
-    if (game.training) text(ctx, 'TREINO', W - 4, 14, '#7ad0ff', { align: 'r' });
+    if (game.training) text(ctx, game.fullVision ? 'TREINO: VÊ TUDO' : 'TREINO', W - 4, 14, '#7ad0ff', { align: 'r' });
 
     if (ka) {
       const y0 = Math.max(46, Math.round(H * 0.2));
@@ -682,7 +741,7 @@
     ctx.restore();
   }
 
-  function reset() { R.staticCv = null; }
+  function reset() { R.staticCv = null; R.seen = null; }
 
   DP.render = { uiSurvivor, uiKiller, drawWorld, drawHUD, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
 })(typeof window !== 'undefined' ? window : globalThis);

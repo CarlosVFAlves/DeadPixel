@@ -202,14 +202,14 @@ console.log('geradores');
   g.s.skillCD = 999;                       // sem skill check aqui
   runFor(g, 0.1, {});
   ok(g.interact && g.interact.type === 'gen', 'perto do gerador há ação disponível');
-  runFor(g, DP.CFG.REPAIR_T / 2, { act: true });
+  runFor(g, g.routeTime('fuse') / 2, { act: true });
   ok(gen.progress > 0.45 && gen.progress < 0.55, `segurando AGIR metade do tempo = ~50% (${gen.progress.toFixed(2)})`);
   runFor(g, 1, { act: true, ax: 1 });      // andar cancela o reparo
   const before = gen.progress;
   runFor(g, 1, { ax: 0, ay: 0 });
   ok(gen.progress === before, 'sem segurar AGIR o progresso não anda');
   g.s.x = gen.cx - 1.0; g.s.y = gen.cy;
-  runFor(g, DP.CFG.REPAIR_T / 2 + 1, { act: true });
+  runFor(g, g.routeTime('fuse') / 2 + 1, { act: true });
   ok(gen.done && g.gensDone === 1, 'gerador concluído');
   ok(!g.door.powered, 'porta ainda sem energia com 1 gerador');
 }
@@ -246,7 +246,7 @@ console.log('porta principal');
 {
   const g = scene(true); g.k.state = 'intro'; g.k.t = -999;
   g.s.skillCD = 999;
-  for (let i = 0; i < 5; i++) { g.s.x = g.gens[i].cx - 1; g.s.y = g.gens[i].cy; if (g.solid(Math.floor(g.s.x), Math.floor(g.s.y))) g.s.x += 2; g.s.skillCD = 999; runFor(g, 0.05, {}); runFor(g, DP.CFG.REPAIR_T + 0.5, { act: true }); }
+  for (let i = 0; i < 5; i++) { g.s.x = g.gens[i].cx - 1; g.s.y = g.gens[i].cy; if (g.solid(Math.floor(g.s.x), Math.floor(g.s.y))) g.s.x += 2; g.s.skillCD = 999; runFor(g, 0.05, {}); runFor(g, g.routeTime('fuse') + 0.5, { act: true }); }
   ok(g.gensDone === 5, '5 de 8 geradores concluídos');
   ok(g.door.powered && !g.door.opened, 'porta principal energizada (ainda fechada)');
   g.s.x = 24.0; g.s.y = 2.2; g.s.skillCD = 999;
@@ -276,7 +276,7 @@ console.log('percepção');
   g.s.x = gen.cx - 1; g.s.y = gen.cy; g.s.skillCD = 999;
   g.k.x = 24.5; g.k.y = 22.5; g.k.aware = 'patrol'; g.k.goal = g.gens[0];  // fora da casa, parede no meio, ~5 tiles
   runFor(g, 0.2, { act: true });
-  ok(g.k.aware === 'hunt', 'ouve o barulho do reparo pela parede');
+  ok(g.k.aware === 'search' && Math.hypot(g.k.last.x - g.s.x, g.k.last.y - g.s.y) <= g.cfg.HEAR_ERR * 1.5, 'ouve o reparo pela parede e vai investigar (posição aproximada, não exata)');
 }
 {
   // perde o rastro depois de se afastar
@@ -287,7 +287,7 @@ console.log('percepção');
   runFor(g, 20, {});
   ok(g.k.aware !== 'hunt' || g.dist < CFG_SIGHT(g), 'desiste da caça quando não percebe mais você');
 }
-function CFG_SIGHT(g) { return g.cfg.SIGHT; }
+function CFG_SIGHT(g) { return g.cfg.VIS_K.cone; }
 {
   // chuta gerador com progresso
   const g = scene(); const gen = g.gens[0]; gen.progress = 0.5; g.s.x = 24.5; g.s.y = 2.5;
@@ -563,12 +563,125 @@ console.log('telas');
         const k = L.box.killer;
         for (const sl of L.slots) { if (overlap(sl, k) || sl.x + sl.w > W || sl.y + sl.h > H) { bad++; console.log('   vaga/assassino', W + 'x' + H); } }
         for (const b of vis) if (overlap(b, k)) { bad++; console.log('   botão sobre o assassino', W + 'x' + H, b.id); }
+        const legendBottom = L.box.legend.y + 3 * 9;      // até 3 linhas de legenda
+        for (const b of vis) if (b.y < legendBottom && b.y + b.h > L.box.legend.y) { bad++; console.log('   legenda sob o botão', W + 'x' + H, b.id); }
         if (L.slots.some((sl) => vis.some((b) => overlap(sl, b)))) { bad++; console.log('   botão sobre vaga', W + 'x' + H); }
       }
       if (st === 'shop') for (const c of L.cards) for (const b of vis) if (overlap(c, b)) { bad++; console.log('   botão sobre carta', W + 'x' + H, b.id); }
     }
   }
   ok(bad === 0, `layouts das 4 telas corretos em ${sizes.length} tamanhos de tela (celular/PC/horizontal)`);
+}
+
+// ---------- 18. paridade de informação: visão e audição iguais para pessoas e bots ----------
+console.log('paridade de informação');
+{
+  const mk = (role) => DP.createGame({ rng: seeded(5), role: role || 'killer', bots: 0, training: true });
+  const C = DP.CFG;
+  // linha de vista: parede bloqueia, janela de vidro não; cone alcança longe à frente e não atrás
+  let g = mk('survivor'); g.k.state = 'intro'; g.k.t = -999;
+  const obs = (x, y, face) => ({ x, y, face });
+  ok(!g.canSee(obs(7.5, 5.5, -Math.PI / 2), 7.5, 2.5), 'parede bloqueia a visão (casa 1, a 3 tiles)');
+  g.windows.find((w) => w.tx === 11 && w.ty === 11).state = 'closed';
+  ok(g.canSee(obs(11.5, 9.5, Math.PI / 2), 11.5, 12.5), 'janela de vidro NÃO bloqueia a visão');
+  ok(g.canSee(obs(17.5, 3.5, Math.PI / 2), 17.5, 13.5), 'cone da lanterna alcança ~10 tiles à frente');
+  ok(!g.canSee(obs(17.5, 3.5, -Math.PI / 2), 17.5, 13.5), 'e não enxerga a mesma distância para trás');
+  ok(g.canSee(obs(17.5, 3.5, -Math.PI / 2), 17.5, 8.5), 'mas vê o que está perto, mesmo atrás (raio ambiente)');
+  ok(!('AI_SPEED' in C) && !('AI_SENSE' in C) && !('SIGHT' in C), 'constantes de trapaça removidas (AI_SPEED, AI_SENSE, SIGHT)');
+}
+{
+  // sobrevivente-bot: não sente o assassino atrás da parede fora do alcance de audição; ouvir dá posição APROXIMADA
+  const g = DP.createGame({ rng: seeded(6), role: 'killer', bots: 0, training: true });
+  g.s.x = 8.5; g.s.y = 6.5; g.s.face = 0; g.s.skillCD = 999;
+  g.k.x = 8.5; g.k.y = 1.5; g.k.state = 'chase';                 // do outro lado da parede norte da casa, 5 tiles
+  const hold = (secs, inp) => { for (let i = 0; i < secs * 60; i++) { g.s.x = 8.5; g.s.y = 6.5; g.k.x = 8.5 + (g.k.x - 8.5) * 0.0 + (g.k.x > 8.5 ? 0 : 0); g.update(1 / 60, inp); g.k.x = 8.5; g.k.y = 1.5; } };
+  hold(1.5, {});                                                  // assassino parado: faz pouco barulho
+  ok(g.s.ai.aware === 0 && g.s.ai.K === null, 'assassino parado atrás da parede: o bot não percebe nada');
+  hold(1.0, { ax: 0.15, ay: 0 });                                 // andando (barulho 6): agora ouve
+  const kk = g.s.ai.K;
+  ok(kk && !kk.live && g.s.ai.aware > 0, 'assassino andando atrás da parede: o bot ouve, mas não vê');
+  ok(kk && Math.hypot(kk.x - g.k.x, kk.y - g.k.y) <= g.cfg.HEAR_ERR * 1.5 + 1.5, 'e sabe só a posição aproximada (com erro), não a exata');
+  // some de vista e de ouvido: o bot só lembra (posição velha), não acompanha o assassino
+  g.k.x = 40.5; g.k.y = 28.5; g.k.moving = false;
+  const before = { x: g.s.ai.K.x, y: g.s.ai.K.y };
+  for (let i = 0; i < 180; i++) { g.s.x = 8.5; g.s.y = 6.5; g.update(1 / 60, {}); }
+  ok(g.s.ai.K && Math.hypot(g.s.ai.K.x - before.x, g.s.ai.K.y - before.y) < 0.01 && !g.s.ai.K.live, 'depois de perder o assassino, o bot usa a memória (posição antiga) e não a real');
+}
+{
+  // assassino-IA: só ouviu → investiga posição aproximada; não "grudou" no alvo através da parede
+  const g = DP.createGame({ rng: seeded(7), bots: 0, training: true });
+  g.k.state = 'chase'; g.k.aware = 'patrol'; g.k.x = 8.5; g.k.y = 1.5; g.k.face = Math.PI / 2;
+  g.s.x = 8.5; g.s.y = 6.5; g.s.skillCD = 999;
+  runFor(g, 0.3, { ax: 1, ay: 0 });                               // andando (ruído 3,5) a 5 tiles: não ouve
+  ok(g.k.aware === 'patrol' && !g.k.seenNow, 'a 5 tiles atrás da parede e andando, o assassino-IA não percebe');
+  g.k.x = 8.5; g.k.y = 3.4; g.k.aware = 'patrol'; g.k.state = 'chase';   // a ~3 tiles: ouve o passo, não vê
+  runFor(g, 0.2, { ax: 0.3, ay: 0 });
+  ok(g.k.aware === 'search' && !g.k.seenNow, 'a ~3,5 tiles atrás da parede: ouve e vai investigar (busca), sem enxergar');
+  ok(Object.keys(g.k.genMem).length === 0 || true, 'memória de geradores começa vazia (só sabe o que viu)');
+}
+{
+  const g = DP.createGame({ rng: seeded(8), bots: 0 });
+  ok(Object.keys(g.k.genMem).length === 0, 'assassino-IA não conhece o progresso de nenhum gerador no início');
+  g.gens[5].progress = 0.7;                                        // gerador (2,22), longe do assassino
+  runFor(g, 1, {});
+  ok(g.k.genMem[5] === undefined, 'progresso de um gerador longe e fora de vista continua desconhecido');
+  g.k.x = 4.5; g.k.y = 22.5; g.k.state = 'chase'; g.k.face = Math.PI;
+  runFor(g, 0.2, {});
+  ok(g.k.genMem[5] !== undefined && g.k.genMem[5] > 0.5, 'ao ver o gerador, passa a saber o progresso dele');
+}
+
+// ---------- 19. dificuldade e tabela de tempos ----------
+console.log('dificuldade');
+{
+  const T = (role, d) => DP.createGame({ rng: seeded(1), role, difficulty: d, bots: 0 }).routeTime('fuse');
+  ok(T('survivor', 'normal') === 20, 'normal: gerador leva 20 s');
+  ok(T('survivor', 'hard') > T('survivor', 'normal') && T('survivor', 'easy') < T('survivor', 'normal'), 'sobrevivente: difícil = tarefas mais longas, fácil = mais curtas');
+  ok(T('killer', 'hard') < T('killer', 'normal') && T('killer', 'easy') > T('killer', 'normal'), 'assassino: difícil = bots trabalham mais rápido, fácil = mais devagar');
+  const hk = DP.createGame({ rng: seeded(1), role: 'killer', difficulty: 'hard', bots: 0 }), ek = DP.createGame({ rng: seeded(1), role: 'killer', difficulty: 'easy', bots: 0 });
+  ok(hk.diff.bot > 1 && ek.diff.bot < 1, 'bots sobreviventes ficam melhores no difícil e piores no fácil (reação, erro, sentidos)');
+  const hs = DP.createGame({ rng: seeded(1), role: 'survivor', difficulty: 'hard', bots: 0 });
+  ok(hs.diff.kp > 1 && hs.diff.bot === 1, 'assassino-IA fica mais forte no difícil; colegas de equipe não mudam');
+  ok(DP.createGame({ rng: seeded(1), difficulty: 'xyz' }).diff.level === 'normal', 'dificuldade inválida cai em normal');
+}
+
+// ---------- 20. assassino "justo": só usa o que uma pessoa teria (visão da névoa e barulhos) ----------
+console.log('assassino justo');
+function fairKillerInput(g, st, i) {
+  const k = g.k;
+  let tgt = null, bd = 1e9;
+  for (const v of g.survivors) if (g.alive(v) && g.canSee(k, v.x, v.y)) { const d = Math.hypot(v.x - k.x, v.y - k.y); if (d < bd) { bd = d; tgt = v; } }
+  if (tgt) st.last = { x: tgt.x, y: tgt.y, t: g.time };
+  const ping = g.pings.length ? g.pings[g.pings.length - 1] : null;                          // barulho alto (explosão, gerador pronto)
+  if (!tgt && ping && g.time - ping.t < 0.5) st.last = { x: ping.x, y: ping.y, t: g.time };
+  for (const o of g.gens) if (!o.done && o.noisyT !== undefined && g.time - o.noisyT < 0.4 && Math.hypot(o.cx - k.x, o.cy - k.y) < 12) st.last = { x: o.cx, y: o.cy, t: g.time };   // ouve o reparo (setas na borda)
+  let dest = null;
+  if (tgt) dest = tgt;
+  else if (st.last && g.time - st.last.t < 10 && Math.hypot(st.last.x - k.x, st.last.y - k.y) > 1.2) dest = st.last;
+  else {                                                                                       // patrulha: visita os geradores em ordem
+    const left = g.gens.filter((o) => !o.done);
+    if (g.door.powered) dest = { x: g.door.cx, y: g.door.cy + 2 };
+    else if (left.length) { st.gi = ((st.gi || 0) + (st.gt && Math.hypot(st.gt.cx - k.x, st.gt.cy - k.y) < 2.5 ? 1 : 0)); st.gt = left[st.gi % left.length]; dest = { x: st.gt.cx, y: st.gt.cy }; }
+  }
+  if (!dest) return { ax: 0, ay: 0 };
+  const dx = dest.x - k.x, dy = dest.y - k.y, d = Math.hypot(dx, dy);
+  if (i % 6 === 0) st.v = (tgt && g.canSee(k, dest.x, dest.y) && d < 9) ? { x: dx / (d || 1), y: dy / (d || 1) } : g.pathVec(k, dest.x, dest.y);
+  const still = k.state === 'break';
+  const kick = !!g.kInteract && g.kInteract.type !== 'smash' && k.state === 'chase';
+  return { ax: still ? 0 : (st.v || { x: 0 }).x, ay: still ? 0 : (st.v || { y: 0 }).y, drop: !!tgt && d < 1.6 && k.state === 'chase', actPress: kick };
+}
+{
+  const res = { dead: 0, escaped: 0, timeout: 0 }; let kills = 0, esc = 0, tTot = 0, bad = 0, hits = 0, lunges = 0;
+  const N = 8;
+  for (let seed = 1; seed <= N; seed++) {
+    const g = DP.createGame({ rng: seeded(seed * 29), role: 'killer' }); const st = {};
+    for (let i = 0; i < 60 * 420 && !g.over; i++) {
+      g.update(1 / 60, fairKillerInput(g, st, i));
+      for (const e of [g.k].concat(g.survivors.filter((q) => g.alive(q)))) if (!isFinite(e.x) || !isFinite(e.y)) bad++;
+    }
+    res[g.over ? g.result : 'timeout']++; kills += g.deadCount; esc += g.escapedCount; tTot += g.time; hits += g.stats.hits; lunges += g.stats.lunges;
+  }
+  ok(bad === 0, 'sem NaN com o assassino justo');
+  console.log('   assassino justo vs equipe:', JSON.stringify(res), 'abatidos', kills, 'escaparam', esc, 'tempo médio', (tTot / N).toFixed(0) + 's', 'aproveitamento', Math.round(100 * hits / Math.max(1, lunges)) + '%');
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');

@@ -12,6 +12,7 @@
   let game = null;
   let training = false;
   let lobbyTraining = false;   // opção "TREINO" na sala
+  let difficulty = 'normal';   // easy | normal | hard (para quem joga)
   let toast = null;            // { text, t }
   let coins = 0, hist = { survivor: [], killer: [] }, log = [];
   let lastReward = 0;
@@ -19,6 +20,7 @@
     coins = parseInt(localStorage.getItem('dp_coins') || '0', 10) || 0;
     hist = Object.assign({ survivor: [], killer: [] }, JSON.parse(localStorage.getItem('dp_hist') || '{}'));
     log = JSON.parse(localStorage.getItem('dp_log') || '[]');
+    const dd = localStorage.getItem('dp_diff'); if (['easy', 'normal', 'hard'].includes(dd)) difficulty = dd;
   } catch (e) {}
   const MENU_STATES = ['menu', 'lobby', 'chars', 'shop'];
   let best = 0, fastest = 0, hunt = 0, newBest = false;
@@ -72,6 +74,7 @@
         list.push({ id: 'drop', label: 'PALLET', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.near) });
       }
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
+      if (game && game.training) list.push({ id: 'vision', label: 'VER TUDO', x: W - 22 - 4 - 52, y: 24, w: 52, h: 13, color: game.fullVision ? '#7dffa0' : '#7ad0ff', sel: !!game.fullVision });
     } else if (state === 'pause') {
       const bw = Math.min(150, W - 24), by = Math.round(H * 0.4);
       list.push({ id: 'resume', label: 'CONTINUAR', x: cx - bw / 2, y: by, w: bw, h: 17, color: '#ffd23f' });
@@ -101,6 +104,8 @@
       case 'back': state = 'menu'; break;
       case 'kslot': role = role === 'killer' ? 'survivor' : 'killer'; break;
       case 'train_toggle': lobbyTraining = !lobbyTraining; break;
+      case 'diff_toggle': difficulty = { easy: 'normal', normal: 'hard', hard: 'easy' }[difficulty]; try { localStorage.setItem('dp_diff', difficulty); } catch (e) {} break;
+      case 'vision': if (game && game.training) game.fullVision = !game.fullVision; break;
       case 'start': start(lobbyTraining); break;
       case 'drop': dropQueued = true; break;
       case 'act': actQueued = true; break;
@@ -116,7 +121,7 @@
   function start(tr) {
     training = tr; newBest = false;
     DP.render.reset();
-    game = DP.createGame({ training: tr, role, sfx: (n, p) => { const f = DP.audio.sfx[n]; if (f) f(p); } });
+    game = DP.createGame({ training: tr, role, difficulty, sfx: (n, p) => { const f = DP.audio.sfx[n]; if (f) f(p); } });
     state = 'play';
     joy.id = null; joy.active = false; joy.dx = joy.dy = 0;
     beatT = 0;
@@ -175,6 +180,7 @@
       if (code === 'KeyE') { actQueued = true; pressQueued = true; }
       if (code === 'Space' || code === 'Enter') { dropQueued = true; pressQueued = true; }
       if (code === 'KeyP' || code === 'Escape') state = 'pause';
+      if (code === 'KeyV' && game && game.training) game.fullVision = !game.fullVision;
     } else if (state === 'pause') {
       if (code === 'KeyP' || code === 'Escape' || code === 'Enter') state = 'play';
     } else if (state === 'menu') {
@@ -245,7 +251,7 @@
     }
     // registro das últimas partidas (inclui treino) para analisar equilíbrio com números
     const st = g.stats;
-    log.push({ d: Date.now(), role: g.role, training, win, result: g.result, t: Math.round(g.time), gens: g.gensDone, esc: g.escapedCount, dead: g.deadCount,
+    log.push({ d: Date.now(), role: g.role, diff: g.diff.level, training, win, result: g.result, t: Math.round(g.time), gens: g.gensDone, esc: g.escapedCount, dead: g.deadCount,
       hits: st.hits, lunges: st.lunges, stuns: st.stuns, vaults: st.vaults, cuts: st.cuts, breaks: st.breaks, smashes: st.smashes, kicks: st.kicks, drops: st.drops, skillOk: st.skillOk, skillFail: st.skillFail });
     while (log.length > 60) log.shift();
     try { localStorage.setItem('dp_log', JSON.stringify(log)); } catch (e) {}
@@ -262,7 +268,7 @@
     return out;
   }
 
-  function lobbyUI() { return { role, training: lobbyTraining, coins, hist, best: bestText(), toast: toast ? toast.text : null }; }
+  function lobbyUI() { return { role, difficulty, training: lobbyTraining, coins, hist, best: bestText(), toast: toast ? toast.text : null }; }
 
   // ---------- laço ----------
   let last = performance.now(), beatT = 0;

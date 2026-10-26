@@ -1,4 +1,4 @@
-# Dead Pixel — Protótipo 5: A Sala
+# Dead Pixel — Protótipo 6: Visão e Paridade
 
 Jogo 2D em pixel art (HTML + canvas, **sem dependências**, gráficos e áudio gerados por código), pensado para **celular e PC**.
 Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
@@ -9,6 +9,20 @@ Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
 - **JOGAR** → sala de espera com **4 vagas de jogador** (você é o J1; as outras ficam "aguardando" e viram bots) e o **assassino apagado** (IA). Toque no assassino para **jogar com ele** (então os 4 sobreviventes são bots). Opção **TREINO** e **INICIAR PARTIDA**. Teclado: `Enter` inicia, `T` treino, `1`/`2` papel, `Esc` volta.
 - **PERSONAGENS** → só o personagem principal (**Pixel**), andando nas quatro direções, com atributos.
 - **LOJA** → protótipo: 6 cartas "em breve" e o saldo de **fichas** (você ganha fichas ao fim de cada partida, fora do treino).
+
+## Visão curta (névoa de guerra)
+
+Na partida inteira você só vê o que está **perto** (raio de ~6 tiles) ou **na lanterna** (cone de ~11 tiles à frente), sempre com **linha de vista**: paredes bloqueiam, janelas de vidro não. O que você já viu fica "na memória" (mais escuro). **Outros jogadores só aparecem se estiverem à vista**; o HUD mostra o *estado* da equipe, não a *posição*. O assassino enxerga um pouco mais (raio ~7,5, cone ~12).
+No **TREINO** há o interruptor **VER TUDO** (botão no canto ou tecla `V`) para testar mecânicas sem a névoa.
+
+**Os bots usam os mesmos limites que uma pessoa** (paridade de informação): só reagem ao que viram ou ouviram, ouvir dá uma posição **aproximada**, e depois de perder o alvo só lembram da **última posição conhecida**. Não há mais bônus de velocidade para bots.
+
+## Dificuldade
+
+Botão **DIF** na sala (Fácil / Normal / Difícil), sempre "para quem joga":
+- como **sobrevivente**: tarefas 30% mais longas e assassino-IA 6% mais forte no Difícil (30% mais curtas e 6% mais fraco no Fácil); seus colegas não mudam.
+- como **assassino**: os bots sobreviventes ficam 25% melhores no Difícil (reação, erro, visão e audição) e as tarefas deles 25% mais curtas; no Fácil o contrário.
+- Os tempos base ficam numa tabela única (`CFG.ROUTES`: gerador 20 s, porta 3 s).
 
 O jogo guarda no navegador um **histórico** (vitórias/derrotas) e as últimas 60 partidas. Para ver um resumo (aproveitamento de golpes, tempo médio...) abra o console e digite `__dp.report()`.
 
