@@ -33,9 +33,10 @@ Princípios herdados do protótipo anterior:
 | 9 | **Polícia** | Telefone ao lado da estrada (liberado pela energia: 5 de 8 geradores), segurar AGIR 30 s liga, polícia chega em 150 s e **abre o portão por 120 s**; sem sair a tempo, ela vai embora e é preciso ligar de novo. Assassino chuta o telefone e vigia telefone/portão; bots ligam, esperam perto do estacionamento e correm quando abre. |
 | 10 | **Carro e Barco** | 6 peças espalhadas (bateria, chave e combustível do carro; hélice, chave e combustível do barco), carregar 1 peça, instalar segurando AGIR (carro 35 s/peça, barco 40 s/peça), ligar o motor (10 s) ou empurrar o barco (15 s), embarcar (2 lugares) e partir; assassino **sabota** (tira a última peça); bots se dividem entre polícia, carro e barco. Correção de um bug antigo: o campo de destino dos bots era compartilhado. |
 | 11 | **Ajuste fino** | Fusível 45 s, 3 golpes e 20 s de vantagem no acampamento, assassino-IA fácil 12% mais lento, modos da sala (partida / treino / treino na arena), telemetria por rota, legenda e botões da sala nas telas pequenas. |
+| 12 | **Consolidação (v0.1)** | Mapa de campo também para o assassino, viatura da polícia, tela de fim com a rota usada, dicas de pausa, README/Playbook revisados, lista de pendências. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
-Marcos de qualidade: **126 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
+Marcos de qualidade: **225 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
 
 ## 3. Arquitetura (resumo)
 
@@ -192,16 +193,22 @@ Teste visual rápido (Chromium já instalado): carregar o HTML, apertar `T` (tre
 | Sobreviventes-IA mais difíceis | `AI_SPEED`, `AI_FLEE`, `AI_SENSE`, `AI_SKILL_ERR` |
 | Janelas | `WIN_OPEN_T`, `WIN_BREAK_T`, `VAULT_RUN/WALK/CRASH/K`, `NOISE_CRASH` |
 
-## 9. Pendências e ideias
+## 9. Pendências e ideias (estado da v0.1)
 
-- **Em aberto — evolução dos "bits" (16 bits) para skins e qualidade:** *discutir antes de implementar*: o que muda no pixel art, se skins são só troca de paleta ou sprites novos, tamanho do tile (16→24/32 px), custo de arte, e se isso entra antes do multiplayer.
-- **Ainda não validado com pessoas**: equilíbrio da partida de 4 contra o assassino jogado por humano (agora há telemetria para medir); modo "andar" no celular (joystick leve).
-- Dificuldade selecionável (Fácil/Normal) se a taxa de vitória do sobrevivente continuar muito baixa.
-- Ganchos / resgate / sacrifício (hoje quem leva 2 golpes sai da partida).
-- Cura entre sobreviventes; itens; mais um poder de assassino.
-- **Multiplayer de verdade** (objetivo final): sincronizar o `game.js` (já sem DOM) num servidor autoritativo; os bots atuais viram placeholders para jogadores ausentes.
-- Mapa procedural (o protótipo *Retail Nightmare* já tem um gerador), névoa de guerra/luz, mais tipos de janela e obstáculos, 8-bit "de verdade" (paleta fixa) se for o desejo.
-- Dificuldade selecionável (`AI_*`) e placar por semente.
+**Para decidir com o time (nada disso foi implementado):**
+- **Evolução dos "bits" (16 bits) para skins e qualidade** — *discutir antes de implementar*, como combinado. Pontos a decidir: o que muda no pixel art; skins só trocam a paleta ou são sprites novos; tamanho do tile (16 → 24/32 px) e o custo disso para o mapa de 144×96 (a imagem estática passaria de 2304×1536 para até 4608×3072 px); custo de arte; se entra antes do multiplayer.
+- **"Matar o assassino"** (4ª rota do pedido original) muda o gênero: fica para um protótipo à parte.
+- **Multiplayer de verdade**: sincronizar o `game.js` (já sem DOM) num servidor autoritativo; os bots viram placeholders para jogadores ausentes.
+
+**Falta validar com gente de verdade:** tempo de partida (meta 8–12 min), letalidade do assassino-IA, equilíbrio entre as rotas, conforto do joystick e dos botões no celular, legibilidade das árvores (hoje são "blocos"). Use `__dp.report()` no console depois de algumas partidas.
+
+**Dívidas técnicas conhecidas**
+- Arte: árvores e água são tiles simples; vegetação rasteira, reflexos, ambiente sonoro (vento, grilos, água) e passos na água não existem.
+- IA: o assassino-IA conhece os geradores e se um veículo tem algo para sabotar (assimetria declarada); bots não se comunicam (só o que viram) e não montam estratégia de equipe além da divisão de rotas; ninguém usa a mão ocupada para trocar peças com colegas.
+- Veículos: sem skill check, sem dano ao embarcar, sem animação de embarque; o barco só atravessa o lago e some.
+- Telas: o HUD do assassino em telas muito baixas ainda sobrepõe texto da introdução.
+- Rádios e peças não reaparecem; sem inventário além de 1 peça + 1 rádio.
+- Ganchos / resgate / sacrifício, cura entre sobreviventes, mais poderes de assassino (ideias antigas).
 
 ## 10. Em discussão: direção "Friday the 13th" (rascunho, nada implementado)
 
@@ -444,3 +451,22 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 55. **Teste de desempenho instável.** O limite de 25 ms no pior quadro falhou uma vez com a máquina ocupada (rodava ao lado de outra simulação). Solução: limites 60 ms (pior) e 2 ms (média), que ainda pegariam uma regressão real (o problema antigo era 60 ms *e* 3 ms de média).
 
 **O que ainda não foi calibrado com gente de verdade:** o tempo de partida para uma pessoa (que explora devagar), a letalidade do assassino-IA para humanos (que usam pallets melhor ou pior que os bots) e o equilíbrio entre rotas (polícia é a mais lenta; carro e barco dependem de achar peças). Para isso: jogar algumas partidas e abrir `__dp.report()`.
+
+### 11.6 Etapa 12: consolidação — "boa versão" (v0.1)
+
+**Checklist da definição de v0.1 (seção 11):**
+| Item | Estado |
+|---|---|
+| Mapa grande 144×96 (acampamento, floresta, lago, estrada), por semente | ✅ `js/camp.js`, 12 sementes testadas |
+| Visão curta na partida inteira (+ VER TUDO no treino) | ✅ |
+| Detector (rádio) + stealth do assassino | ✅ |
+| Três rotas: polícia, carro, barco | ✅ (fluxos e tempos testados) |
+| Bots com sentidos humanos, exploração, rotas | ✅ (sem trapaças de visão; exceção declarada do assassino-IA) |
+| Tempos maiores (fusível 45 s, peças 35/40 s, polícia 150 s) | ✅ |
+| Dificuldade, telemetria, lobby com modos | ✅ |
+| Testes automáticos | ✅ 225 checagens, ~25 s |
+| Matar o assassino | ⛔ fora da v0.1 (protótipo à parte) |
+
+**Como jogar uma partida típica (bots + você, sobrevivente):** abra o mapa (M), vá às cabanas, segure E nos geradores (acerte os skill checks com Espaço), pegue o rádio se vir um (Q liga), se achar peças leve-as ao carro (estacionamento) ou ao barco (cais). Com 5 geradores a energia liga: ligue no telefone, resista ~2,5 min e corra para o portão quando a polícia abrir.
+
+**Resumo numérico final (mesmos laboratórios da 11.5):** equipe de bots sem assassino ~405 s; assassino justo vs bots 558 s com 5/8 vitórias do assassino; assassino-IA vs "jogador-bot" normal ~290 s com 4/16 fugas; desempenho: 0,1 ms/quadro de simulação (média) e 60 fps no navegador sem placa de vídeo.

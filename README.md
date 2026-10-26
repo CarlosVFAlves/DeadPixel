@@ -1,7 +1,9 @@
 # Dead Pixel — Protótipo 8: Acampamento (mapa grande)
 
 Jogo 2D em pixel art (HTML + canvas, **sem dependências**, gráficos e áudio gerados por código), pensado para **celular e PC**.
-Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
+Inspirado em *Dead by Daylight* e *Friday the 13th* (só na ideia: nomes e cenário são próprios), com foco total em **jogabilidade**.
+
+**Versão 0.1 em uma frase:** você e 3 bots exploram um acampamento grande com visão curta, consertam geradores, ligam para a polícia ou montam o carro/barco, e tentam escapar de um assassino que também pode ser você. Tudo por código, sem dependências; roda no celular e no PC. Fluxo do projeto, números e decisões: [`PLAYBOOK.md`](PLAYBOOK.md).
 
 ## A sala (menu)
 
