@@ -11,6 +11,8 @@ Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
 
 O **pallet** continua sendo a principal defesa (veja abaixo); as **janelas** são a segunda rota de fuga.
 
+> Histórico do projeto, decisões de design e como cada impasse foi resolvido: veja o [`PLAYBOOK.md`](PLAYBOOK.md).
+
 Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celular).
 
 ## Controles
