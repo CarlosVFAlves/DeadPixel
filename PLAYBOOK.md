@@ -254,3 +254,9 @@ Pontos a decidir: a equipe **escolhe** uma rota ou cumpre várias? **Assentos li
 - Detector: item **encontrado** ou habilidade de todos? Só proximidade ou também direção vaga?
 - Mapa: tamanho-alvo e se mantém **um** mapa bem desenhado ou vários.
 - Quais rotas entram na primeira versão (sugestão: Polícia + Carro)?
+
+### 10.8 Decisões da conversa seguinte (aprovadas pelo time)
+- Plano da seção 10.6 **aprovado**. Pedidos novos: **mapa ainda maior** e **tempos de reparo das rotas de fuga maiores**.
+- Proposta para o mapa: **144×96 tiles** (~9× a área atual), com 4 zonas: acampamento (cabanas), floresta densa, lago/cais e estrada. Travessia lado a lado ≈ 36 s a 4 tiles/s.
+- Proposta para tempos: todos os tempos de rota ficam numa tabela única (`ROUTES` em `game.js`) com um **multiplicador global**, para ajustar com a telemetria sem mexer em código espalhado. Valores iniciais na seção "Tempos propostos" abaixo.
+- Como as partidas ficam mais longas e duras, entra também um **seletor de dificuldade** (afeta só reação/erro dos bots e o multiplicador de tempos), já que o sobrevivente ainda não venceu partidas no playtest 1.
