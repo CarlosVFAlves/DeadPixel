@@ -135,7 +135,7 @@
       shake: 0, hitstop: 0, flash: 0,
       near: null, nearList: [], los: false, dist: 99, interact: null, kInteract: null, pInteract: null,
       pings: [], result: null, gensDone: 0, need: map.NEED, gens: [],
-      escapedCount: 0, deadCount: 0
+      escapedCount: 0, deadCount: 0, via: { gate: 0, car: 0, boat: 0 }
     };
 
     function makeAI(i) {
@@ -533,7 +533,7 @@
     }
     function escapeSurvivor(sv) {
       if (!alive(sv)) return;
-      sv.escaped = true; sv.vault = null; g.escapedCount++;
+      sv.escaped = true; sv.vault = null; g.escapedCount++; sv.via = 'gate'; g.via.gate++;
       popup('ESCAPOU!', sv.x, sv.y - 1.4, '#7dffa0');
       sfx('escape');
       checkEnd();
@@ -654,7 +654,7 @@
       if (!alive(sv) || v.seated >= v.seats) return;
       v.seated++; v.pax.push(sv.id);
       if (sv.item) { g.items.splice(g.items.indexOf(sv.item), 1); sv.item = null; }
-      sv.escaped = true; sv.vault = null; g.escapedCount++;
+      sv.escaped = true; sv.vault = null; g.escapedCount++; sv.via = v.kind; g.via[v.kind]++;
       popup('A BORDO!', sv.x, sv.y - 1.4, '#7dffa0'); sfx('escape');
       if (v.leaveT < 0) v.leaveT = CFG.ROUTES.leaveWait;
       if (v.seated >= v.seats) v.leaveT = Math.min(v.leaveT, 1.2);
@@ -1079,16 +1079,17 @@
         return;
       }
 
-      if (role === 'killer') { playerKiller(dt, inp, dx, dy, d); return; }
-      if (!tgt) return;                                 // todos já saíram da partida
-
-      // ---- percepção, com os mesmos limites de uma pessoa: ENXERGA (raio + cone, linha de vista) ou OUVE (ruído, posição aproximada) ----
-      const kvis = diff.kp;
-      g.gens.forEach((o, i) => {          // o gerador é um bloco sólido: olha para a face voltada para ele
+      // o assassino (jogador ou IA) só sabe o progresso dos geradores que viu; o gerador é um bloco sólido: olha para a face voltada para ele
+      const kvis = role === 'killer' ? 1 : diff.kp;
+      g.gens.forEach((o, i) => {
         if (o.done) return;
         const dd = Math.hypot(k.x - o.cx, k.y - o.cy) || 1;
         if (canSee(k.x, k.y, k.face, true, o.cx + (k.x - o.cx) / dd * 0.75, o.cy + (k.y - o.cy) / dd * 0.75, kvis)) k.genMem[i] = o.progress;
       });
+      if (role === 'killer') { playerKiller(dt, inp, dx, dy, d); return; }
+      if (!tgt) return;                                 // todos já saíram da partida
+
+      // ---- percepção, com os mesmos limites de uma pessoa: ENXERGA (raio + cone, linha de vista) ou OUVE (ruído, posição aproximada) ----
       let seen = null, sd = 1e9, heard = null, hd = 1e9;
       for (const v of g.survivors) {
         if (!alive(v)) continue;

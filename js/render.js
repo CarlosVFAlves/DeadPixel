@@ -417,6 +417,26 @@
       if (pg > 0) { px(ctx, '#000', cxp - 12, cyp - 34, 24, 3); px(ctx, v.state === 'ready' ? '#ffd23f' : '#7ad0ff', cxp - 11, cyp - 33, Math.round(22 * pg), 1); }
     }
   }
+  // viatura da polícia: chega pelo portão e estaciona no estacionamento enquanto a janela está aberta
+  function drawPolice(ctx, ph, game, tm) {
+    const el = game.cfg.ROUTES.policeWindow - ph.win, y = el < 2.6 ? -3 + 12.2 * Math.min(1, el / 2.6) : 9.2, x = 66.2;
+    const cx = Math.round(x * TS), cy = Math.round(y * TS), flash = Math.floor(tm * 5) % 2;
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI);
+    px(ctx, 'rgba(0,0,0,.38)', -13, -20, 28, 46);
+    const g = ctx.createLinearGradient(0, -22, 0, -64); g.addColorStop(0, 'rgba(255,255,230,.34)'); g.addColorStop(1, 'rgba(255,255,230,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-9, -22); ctx.lineTo(9, -22); ctx.lineTo(26, -64); ctx.lineTo(-26, -64); ctx.closePath(); ctx.fill();
+    px(ctx, '#101014', -15, -16, 3, 8); px(ctx, '#101014', 12, -16, 3, 8); px(ctx, '#101014', -15, 10, 3, 8); px(ctx, '#101014', 12, 10, 3, 8);
+    px(ctx, '#15171b', -13, -22, 26, 44); px(ctx, '#e8eaf0', -12, -21, 24, 42);
+    px(ctx, '#15171b', -12, -9, 24, 4); px(ctx, '#15171b', -12, 4, 24, 4);         // faixas pretas
+    px(ctx, '#243b4b', -10, -7, 20, 7); px(ctx, '#7fb6d6', -9, -6, 8, 1);
+    px(ctx, '#243b4b', -10, 10, 20, 5);
+    px(ctx, flash ? '#ff3b3b' : '#6a1a1a', -9, -1, 8, 3); px(ctx, flash ? '#2a2a6a' : '#3b6bff', 1, -1, 8, 3);   // giroflex
+    px(ctx, '#fff3b0', -10, -22, 5, 2); px(ctx, '#fff3b0', 5, -22, 5, 2);
+    ctx.restore();
+    const gl = ctx.createRadialGradient(cx, cy, 2, cx, cy, 46);
+    gl.addColorStop(0, flash ? 'rgba(255,60,60,.22)' : 'rgba(70,110,255,.22)'); gl.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gl; ctx.fillRect(cx - 46, cy - 46, 92, 92);
+  }
   function drawPhone(ctx, o, game, tm) {
     const X = o.tx * TS, Y = o.ty * TS;
     const working = game.survivors.some((v) => v.acting && v.acting.obj === o);
@@ -699,6 +719,7 @@
     for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.nearList.some((n) => n.pal === p) ? tm : 0) });
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
     if (game.phone) list.push({ y: game.phone.cy, f: () => drawPhone(ctx, game.phone, game, tm) });
+    if (game.phone && game.phone.state === 'here') list.push({ y: 10, f: () => drawPolice(ctx, game.phone, game, tm) });
     for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
     for (const v of game.survivors) if (!v.dead && !v.escaped && (v === pl || vis(v.x, v.y))) { list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) }); if (v.item) list.push({ y: v.y + 0.02, f: () => drawCarry(ctx, v) }); }
     for (const v of game.vehicles) if (v.state !== 'gone' && (full || vis(v.cx, v.cy) || v.state === 'leaving')) list.push({ y: v.state === 'leaving' ? vehPos(v).y + 1 : v.cy + 0.9, f: () => drawVehicle(ctx, v, game, tm) });
@@ -863,9 +884,10 @@
     if (!R.mapCv) R.mapCv = buildMapCv(game);
     const mw = game.map.W, mh = game.map.H;
     overlay(ctx, W, H, 0.78);
-    const known = game.gens.filter((o) => o.known).length;
-    const legend = DP.font.wrap('GERADORES ACHADOS ' + known + '/' + game.gens.length + ' · PRONTOS ' + game.gensDone + '/' + game.need, Math.floor((W - 8) / 6))
-      .concat(DP.font.wrap('VERDE: JÁ VISTO. CINZA: A EXPLORAR. ROXO: CARRO. AZUL: BARCO. VOCÊ: QUADRADO VERMELHO. M FECHA', Math.floor((W - 8) / 6)));
+    const kr = game.role === 'killer';                                     // o assassino conhece o acampamento: vê todos os geradores
+    const known = game.gens.filter((o) => kr || o.known).length;
+    const legend = DP.font.wrap((kr ? 'GERADORES ' : 'GERADORES ACHADOS ' + known + '/' + game.gens.length + ' · ') + 'PRONTOS ' + game.gensDone + '/' + game.need, Math.floor((W - 8) / 6))
+      .concat(DP.font.wrap(kr ? 'ROXO: CARRO. AZUL: BARCO. VOCÊ: QUADRADO VERMELHO. M FECHA' : 'VERDE: JÁ VISTO. CINZA: A EXPLORAR. ROXO: CARRO. AZUL: BARCO. VOCÊ: QUADRADO VERMELHO. M FECHA', Math.floor((W - 8) / 6)));
     const topPad = 16, botPad = 8 + legend.length * 9;
     const sc = Math.max(1, Math.min((W - 12) / mw, (H - topPad - botPad) / mh));
     const ox = Math.round((W - mw * sc) / 2), oy = topPad;
@@ -876,17 +898,17 @@
     // pallets
     for (const p of game.pallets) px(ctx, p.state === 'up' ? '#ffd9a0' : p.state === 'broken' ? '#5a4a3a' : '#c06a3a', X(p.cx) - 1, Y(p.cy) - 1, 2, 2);
     // pontos de exploração já visitados pela equipe
-    for (const e of game.explore) {
+    if (!kr) for (const e of game.explore) {
       if (e.seen) px(ctx, 'rgba(125,255,160,.8)', X(e.x) - 1, Y(e.y) - 1, 2, 2);
       else px(ctx, 'rgba(255,255,255,.4)', X(e.x) - 1, Y(e.y) - 1, 3, 3);
     }
     // geradores encontrados
-    for (const o of game.gens) {
-      if (!o.known) continue;
-      const c0 = o.done ? '#7dffa0' : '#ffb347';
+    game.gens.forEach((o, gi) => {
+      if (!kr && !o.known) return;
+      const c0 = o.done ? '#7dffa0' : '#ffb347', pr = kr ? (game.k.genMem[gi] || 0) : o.progress;     // o assassino só sabe o progresso do que já viu
       px(ctx, '#000', X(o.cx) - 3, Y(o.cy) - 3, 6, 6); px(ctx, c0, X(o.cx) - 2, Y(o.cy) - 2, 4, 4);
-      if (!o.done && o.progress > 0) px(ctx, '#fff', X(o.cx) - 2, Y(o.cy) + 3, Math.max(1, Math.round(4 * o.progress)), 1);
-    }
+      if (!o.done && pr > 0) px(ctx, '#fff', X(o.cx) - 2, Y(o.cy) + 3, Math.max(1, Math.round(4 * pr)), 1);
+    });
     if (game.phone) {                                                           // telefone: lugar público (guarita ao lado da estrada)
       const ph = game.phone;
       px(ctx, '#000', X(ph.cx) - 3, Y(ph.cy) - 3, 6, 6); px(ctx, ph.state === 'locked' ? '#4a6a8a' : ph.state === 'here' ? '#7dffa0' : '#7ad0ff', X(ph.cx) - 2, Y(ph.cy) - 2, 4, 4);
@@ -976,17 +998,19 @@
     const y0 = Math.round(H * 0.16);
     const esc = game.result === 'escaped', ka = game.role === 'killer';
     const win = ka ? !esc : esc;
-    text(ctx, ka ? (esc ? 'ELES ESCAPARAM...' : 'VITÓRIA!') : (esc ? 'VOCÊ ESCAPOU!' : 'VOCÊ MORREU'), cx, y0, win ? '#7dffa0' : '#e23a3a', { align: 'c' });
+    text(ctx, ka ? (esc ? 'ELES ESCAPARAM...' : 'VITÓRIA!') : (esc ? ({ car: 'VOCÊ ESCAPOU DE CARRO!', boat: 'VOCÊ ESCAPOU DE BARCO!', gate: game.phone ? 'A POLÍCIA TIROU VOCÊ!' : 'VOCÊ ESCAPOU!' }[game.survivors[0].via] || 'VOCÊ ESCAPOU!') : 'VOCÊ MORREU'), cx, y0, win ? '#7dffa0' : '#e23a3a', { align: 'c' });
     const tt = Math.floor(game.time);
     const rows = [
       [ka ? 'DURAÇÃO' : esc ? 'TEMPO DE FUGA' : 'SOBREVIVEU', Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0')],
       ['GERADORES', game.gensDone + '/' + game.need],
       ['ESCAPARAM/ABATIDOS', game.escapedCount + '/' + game.deadCount],
+      game.phone ? ['POLÍCIA/CARRO/BARCO', game.via.gate + '/' + game.via.car + '/' + game.via.boat] : null,
       ka ? ['ACERTOS/BOTES', game.stats.hits + '/' + game.stats.lunges] : ['ATORDOAMENTOS', String(game.stats.stuns)],
       ka ? ['QUEBRAS PALLET/JAN.', game.stats.breaks + '/' + game.stats.smashes] : ['PALLETS DERRUBADOS', String(game.stats.drops)],
       ka ? ['TROPEÇOS', String(game.stats.stuns)] : ['JANELAS PULOS/CORTES', game.stats.vaults + '/' + game.stats.cuts]
     ];
     const tl = Math.max(8, cx - 84), tr = Math.min(W - 8, cx + 84);
+    rows.splice(0, rows.length, ...rows.filter(Boolean));
     rows.forEach((r, i) => {
       const y = y0 + 14 + i * 9;
       text(ctx, r[0], tl, y, '#a9a9b5');

@@ -328,7 +328,7 @@
       if (state === 'pause') {
         DP.render.overlay(ctx, W, H, 0.7);
         text(ctx, 'PAUSADO', Math.round(W / 2), Math.round(H * 0.2), '#fff', { align: 'c' });
-        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. SHIFT (SEGURAR): ESPREITA. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU JANELA, CHUTAR GERADOR. M: MAPA. N: SOM.' : 'WASD/SETAS: MOVER. SHIFT: ANDAR (QUIETO). Q: RÁDIO. SEGURE E: CONSERTAR / ABRIR JANELA / PEGAR. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: MAPA. N: SOM.', Math.floor((W - 16) / 6));
+        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. SHIFT (SEGURAR): ESPREITA. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU JANELA, CHUTAR GERADOR. M: MAPA. N: SOM.' : 'WASD/SETAS: MOVER. SHIFT: ANDAR (QUIETO). SEGURE E: CONSERTAR, ABRIR, PEGAR PEÇA, INSTALAR, LIGAR, ENTRAR. E SEM ALVO: SOLTAR. ESPAÇO: PALLET E SKILL CHECK. Q: RÁDIO. M: MAPA. N: SOM.', Math.floor((W - 16) / 6));
         tips.forEach((l, i) => text(ctx, l, Math.round(W / 2), Math.round(H * 0.2) + 14 + i * 9, '#a9a9b5', { align: 'c' }));
       }
     }
