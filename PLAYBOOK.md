@@ -260,3 +260,15 @@ Pontos a decidir: a equipe **escolhe** uma rota ou cumpre várias? **Assentos li
 - Proposta para o mapa: **144×96 tiles** (~9× a área atual), com 4 zonas: acampamento (cabanas), floresta densa, lago/cais e estrada. Travessia lado a lado ≈ 36 s a 4 tiles/s.
 - Proposta para tempos: todos os tempos de rota ficam numa tabela única (`ROUTES` em `game.js`) com um **multiplicador global**, para ajustar com a telemetria sem mexer em código espalhado. Valores iniciais na seção "Tempos propostos" abaixo.
 - Como as partidas ficam mais longas e duras, entra também um **seletor de dificuldade** (afeta só reação/erro dos bots e o multiplicador de tempos), já que o sobrevivente ainda não venceu partidas no playtest 1.
+
+#### Tempos propostos (1 pessoa trabalhando; multiplicador global ajustável)
+| Ação | Hoje | Proposta | Observação |
+|---|---|---|---|
+| Fusível (antigo gerador) | 20 s | **45 s** | 5 de 8 liga a energia; 4 pessoas juntas rendem ~3,4× |
+| Telefone (ligar para a polícia) | — | **30 s** + chegada em **150 s** | quem estiver vivo na zona de resgate escapa |
+| Carro: 3 peças (bateria, chave, combustível) | — | **35 s** cada (105 s) + ligar o motor 10 s | achar as peças vem antes (mapa grande) |
+| Barco: 3 peças (hélice, combustível, chave) | — | **40 s** cada (120 s) + empurrar até a água 15 s | só em mapa com lago |
+| Porta principal (hoje) | 3 s | vira o **portão da estrada** (carro/polícia passam por ele) | |
+| Janela (abrir) | 0,8 s | 0,8 s | sem mudança |
+
+Meta de duração: **8–12 min** por partida (sem interferência do assassino a rota mais rápida fica em ~5–6 min). Valores iniciais, a calibrar com `__dp.report()`.
