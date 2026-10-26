@@ -1,0 +1,233 @@
+// Telas de menu: início (Dead Pixel), sala de espera (Jogar), Personagens e Loja (protótipo).
+// Cada tela tem layout(W,H) -> retângulos/botões e draw(...). Os cliques são tratados em main.js.
+(function () {
+  'use strict';
+  const DP = window.DP;
+  const text = DP.font.text;
+  const R = () => DP.render;
+  const M = 8;     // margem
+
+  function rect(ctx, c, x, y, w, h) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
+  function frame(ctx, c, x, y, w, h, dashed) {
+    ctx.fillStyle = c;
+    if (!dashed) { ctx.fillRect(x, y, w, 1); ctx.fillRect(x, y + h - 1, w, 1); ctx.fillRect(x, y, 1, h); ctx.fillRect(x + w - 1, y, 1, h); return; }
+    for (let i = 0; i < w; i += 4) { ctx.fillRect(x + i, y, 2, 1); ctx.fillRect(x + i, y + h - 1, 2, 1); }
+    for (let i = 0; i < h; i += 4) { ctx.fillRect(x, y + i, 1, 2); ctx.fillRect(x + w - 1, y + i, 1, 2); }
+  }
+  function coin(ctx, x, y) {
+    rect(ctx, '#7a5a10', x + 1, y, 5, 7); rect(ctx, '#7a5a10', x, y + 1, 7, 5);
+    rect(ctx, '#ffd23f', x + 1, y + 1, 5, 5); rect(ctx, '#fff3a8', x + 2, y + 2, 2, 2);
+  }
+  function title(ctx, W, label, sub) {
+    text(ctx, label, Math.round(W / 2), 6, '#e9e6f0', { align: 'c' });
+    if (sub) text(ctx, sub, Math.round(W / 2), 15, '#8a8a99', { align: 'c' });
+  }
+
+  // ---------- layouts ----------
+  function layout(state, W, H) {
+    const cx = Math.round(W / 2);
+    const L = { buttons: [], box: {} };
+    if (state === 'menu') {
+      const bw = Math.min(170, W - 24), y0 = Math.round(H * 0.5);
+      L.buttons.push({ id: 'go_lobby', label: 'JOGAR', x: cx - bw / 2, y: y0, w: bw, h: 19, color: '#ffd23f' });
+      L.buttons.push({ id: 'go_chars', label: 'PERSONAGENS', x: cx - bw / 2, y: y0 + 24, w: bw, h: 19, color: '#7dffa0' });
+      L.buttons.push({ id: 'go_shop', label: 'LOJA', x: cx - bw / 2, y: y0 + 48, w: bw, h: 19, color: '#7ad0ff' });
+    } else if (state === 'lobby') {
+      const wide = W >= 280, gap = 4, top = 22;
+      let slotH, sw;
+      L.slots = [];
+      if (wide) {
+        sw = Math.floor((W - 2 * M - 3 * gap) / 4); slotH = 62;
+        for (let i = 0; i < 4; i++) L.slots.push({ x: M + i * (sw + gap), y: top, w: sw, h: slotH });
+      } else {
+        sw = Math.floor((W - 2 * M - gap) / 2); slotH = 66;
+        for (let i = 0; i < 4; i++) L.slots.push({ x: M + (i % 2) * (sw + gap), y: top + Math.floor(i / 2) * (slotH + gap), w: sw, h: slotH });
+      }
+      const rows = wide ? 1 : 2;
+      const ky = top + rows * (slotH + gap) + 2, kh = wide ? 38 : 64;
+      L.box.killer = { x: M, y: ky, w: W - 2 * M, h: kh };
+      L.box.legend = { y: ky + kh + 5 };
+      L.buttons.push({ id: 'kslot', ghost: true, x: M, y: ky, w: W - 2 * M, h: kh });
+      if (wide) {
+        const by = H - 24, bh = 18, bw1 = 58, bw2 = 112;
+        L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: by, w: bw1, h: bh, color: '#8a8a99' });
+        L.buttons.push({ id: 'train_toggle', label: '', x: M + bw1 + 4, y: by, w: bw2, h: bh, color: '#7ad0ff', toggle: true });
+        L.buttons.push({ id: 'start', label: 'INICIAR PARTIDA', x: M + bw1 + bw2 + 8, y: by, w: W - 2 * M - bw1 - bw2 - 8, h: bh, color: '#ffd23f' });
+      } else {
+        const bw = W - 2 * M;
+        L.buttons.push({ id: 'start', label: 'INICIAR PARTIDA', x: M, y: H - 66, w: bw, h: 19, color: '#ffd23f' });
+        L.buttons.push({ id: 'train_toggle', label: '', x: M, y: H - 43, w: bw, h: 17, color: '#7ad0ff', toggle: true });
+        L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: bw, h: 17, color: '#8a8a99' });
+      }
+    } else if (state === 'chars') {
+      L.wide = W >= 280;
+      L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 24, w: L.wide ? 70 : W - 2 * M, h: 18, color: '#8a8a99' });
+    } else if (state === 'shop') {
+      const wide = W >= 280, gap = 4, top = 26, cols = wide ? 3 : 2, ch = wide ? 58 : 62;
+      const cw = Math.floor((W - 2 * M - (cols - 1) * gap) / cols);
+      L.cards = [];
+      for (let i = 0; i < 6; i++) {
+        const c = { x: M + (i % cols) * (cw + gap), y: top + Math.floor(i / cols) * (ch + gap), w: cw, h: ch };
+        L.cards.push(c);
+        L.buttons.push({ id: 'card' + i, ghost: true, x: c.x, y: c.y, w: c.w, h: c.h });
+      }
+      L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 24, w: wide ? 70 : W - 2 * M, h: 18, color: '#8a8a99' });
+    }
+    return L;
+  }
+
+  // ---------- desenho ----------
+  function bg(ctx, W, H, tm) {
+    rect(ctx, '#0b0b10', 0, 0, W, H);
+    // chão quadriculado bem escuro, sobe devagar (dá vida ao fundo sem distrair)
+    const off = Math.floor(tm * 4) % 16;
+    ctx.fillStyle = 'rgba(255,255,255,.025)';
+    for (let y = -16 + off; y < H; y += 16) for (let x = ((y / 16) & 1) * 16; x < W; x += 32) ctx.fillRect(x, y, 16, 16);
+    const g = ctx.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.2, W / 2, H * 0.45, Math.max(W, H) * 0.8);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.7)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+
+  function dots(ctx, x, y, arr) {
+    // ● vitória  ○ derrota  (últimas 6)
+    arr.slice(-6).forEach((r, i) => { rect(ctx, r === 'W' ? '#7dffa0' : '#e23a3a', x + i * 6, y, 4, 4); });
+  }
+
+  function drawMenu(ctx, W, H, tm, ui) {
+    bg(ctx, W, H, tm);
+    const cx = Math.round(W / 2), sc = W >= 300 ? 3 : 2;
+    ctx.save(); ctx.translate(cx, Math.round(H * 0.07)); ctx.scale(sc, sc);
+    text(ctx, 'DEAD PIXEL', 0, 0, '#e23a3a', { align: 'c' });
+    ctx.restore();
+    const subY = Math.round(H * 0.07) + 7 * sc + 5;
+    text(ctx, 'PROTÓTIPO 5: A SALA', cx, subY, '#e9c07a', { align: 'c' });
+    // prévia: o personagem principal e o assassino apagado, à espreita
+    const ps = H >= 300 ? 3 : H >= 230 ? 2 : 1;
+    const feet = Math.min(Math.round(H * 0.5) - 10, subY + 14 + 22 * ps);
+    R().uiKiller(ctx, cx + 34 * ps / 1.4, feet - 2, ps, { state: 'recover', alpha: 0.28, tm, face: Math.PI });
+    R().uiSurvivor(ctx, cx - 18 * ps / 1.4, feet, ps, { id: 0, moving: true, walk: tm * 8, face: 0, tm, human: false });
+    // rodapé: fichas e histórico
+    coin(ctx, M, H - 14);
+    text(ctx, String(ui.coins), M + 10, H - 13, '#ffd23f');
+    const hs = ui.hist.survivor, hk = ui.hist.killer;
+    const hx = W >= 280 ? W - 118 : cx - 4;
+    if (hs.length) { text(ctx, 'SOBREV.', hx, H - 13, '#8a8a99'); dots(ctx, hx + 44, H - 12, hs); }
+    if (hk.length) { text(ctx, 'ASSASS.', hx, H - (hs.length ? 22 : 13), '#8a8a99'); dots(ctx, hx + 44, H - (hs.length ? 21 : 12), hk); }
+  }
+
+  function slotBox(ctx, b, state, tm, ui, i) {
+    // state: 'you' | 'bot' | 'empty'
+    const you = state === 'you';
+    rect(ctx, you ? 'rgba(125,255,160,.08)' : 'rgba(255,255,255,.03)', b.x, b.y, b.w, b.h);
+    frame(ctx, you ? '#7dffa0' : '#3b3b47', b.x, b.y, b.w, b.h, !you);
+    text(ctx, 'J' + (i + 1), b.x + 3, b.y + 3, you ? '#7dffa0' : '#4d4d59');
+    const sc = 2, cxs = b.x + Math.round(b.w / 2), feet = b.y + b.h - 20;
+    if (you) R().uiSurvivor(ctx, cxs, feet, sc, { id: 0, moving: false, tm, face: Math.PI / 2 + Math.sin(tm * 1.2) * 0.0, human: false });
+    else R().uiSurvivor(ctx, cxs, feet, sc, { id: i, tm, alpha: 0.16 });
+    if (!you) text(ctx, state === 'bot' ? 'IA' : '?', cxs, feet - 10 * sc, '#4d4d59', { align: 'c' });
+    text(ctx, you ? 'PIXEL' : state === 'bot' ? 'BOT' : 'VAGO', cxs, b.y + b.h - 17, you ? '#fff' : '#5d5d69', { align: 'c' });
+    text(ctx, you ? 'PRONTO' : state === 'bot' ? 'IA JOGA' : 'AGUARDANDO', cxs, b.y + b.h - 8, you ? '#7dffa0' : '#4d4d59', { align: 'c' });
+  }
+
+  function drawLobby(ctx, W, H, tm, ui, L) {
+    bg(ctx, W, H, tm);
+    title(ctx, W, 'SALA DE ESPERA', ui.best || null);
+    const kill = ui.role === 'killer';
+    for (let i = 0; i < 4; i++) slotBox(ctx, L.slots[i], kill ? 'bot' : i === 0 ? 'you' : 'empty', tm, ui, i);
+    // assassino: apagado (IA) — toque para jogar com ele
+    const k = L.box.killer;
+    rect(ctx, kill ? 'rgba(226,58,58,.10)' : 'rgba(255,255,255,.02)', k.x, k.y, k.w, k.h);
+    frame(ctx, kill ? '#ff5c5c' : '#2c2c36', k.x, k.y, k.w, k.h, !kill);
+    const kcx = k.x + 28;
+    R().uiKiller(ctx, kcx, k.y + k.h - 5, k.h >= 56 ? 2 : 1, { state: kill ? 'chase' : 'recover', alpha: kill ? 1 : 0.22, tm, moving: kill, walk: tm * 8, face: Math.PI / 2 });
+    text(ctx, 'ASSASSINO', k.x + 56, k.y + 6, kill ? '#ff5c5c' : '#4a4a55');
+    text(ctx, kill ? 'VOCÊ' : 'IA (APAGADO)', k.x + 56, k.y + 16, kill ? '#fff' : '#3d3d47');
+    const hint = kill ? 'TOQUE P/ VOLTAR' : 'TOQUE P/ JOGAR';
+    text(ctx, hint, k.x + 56, k.y + 26, kill ? '#ffb347' : '#5d5d69');
+    // legenda
+    const ly = L.box.legend.y;
+    DP.font.wrap(kill ? 'OS 4 SOBREVIVENTES SÃO BOTS. CACE TODOS ANTES QUE ESCAPEM.' : 'VAGAS LIVRES VIRAM BOTS QUANDO A PARTIDA COMEÇA. MULTIPLAYER EM BREVE.', Math.floor((W - 16) / 6))
+      .forEach((l, i) => text(ctx, l, Math.round(W / 2), ly + i * 9, '#6f6f7c', { align: 'c' }));
+  }
+
+  function drawChars(ctx, W, H, tm, ui, L) {
+    bg(ctx, W, H, tm);
+    title(ctx, W, 'PERSONAGENS', null);
+    // o personagem principal, grande, andando em todas as direções
+    const faces = [Math.PI / 2, 0, -Math.PI / 2, Math.PI];
+    const face = faces[Math.floor(tm / 2.2) % 4];
+    const sc = L.wide ? (H >= 230 ? 6 : 4) : 5;
+    const px0 = L.wide ? Math.round(W * 0.24) : Math.round(W / 2);
+    const feet = L.wide ? Math.round(H * 0.62) : 22 + 21 * sc;
+    rect(ctx, 'rgba(0,0,0,.35)', px0 - 7 * sc, feet - 1, 14 * sc, 2 * sc);
+    R().uiSurvivor(ctx, px0, feet, sc, { id: 0, moving: true, walk: tm * 6, face, tm });
+    // ficha
+    const tx = L.wide ? Math.round(W * 0.46) : M, ty0 = L.wide ? 26 : feet + 12;
+    const tw = L.wide ? W - tx - M : W - 2 * M;
+    text(ctx, 'PIXEL', tx, ty0, '#ffffff');
+    text(ctx, 'SOBREVIVENTE', tx, ty0 + 10, '#7dffa0');
+    const bio = DP.font.wrap('VENDEDOR DE LOJA QUE ATENDEU MAL A BRUXA. RÁPIDO O BASTANTE PARA FUGIR, TEIMOSO O BASTANTE PARA TENTAR DE NOVO.', Math.floor(tw / 6));
+    bio.forEach((l, i) => text(ctx, l, tx, ty0 + 24 + i * 9, '#a9a9b5'));
+    let y = ty0 + 24 + bio.length * 9 + 6;
+    const C = DP.CFG;
+    const bar = (label, val, max, note) => {
+      text(ctx, label, tx, y, '#8a8a99');
+      const bx = tx + 72;
+      for (let i = 0; i < max; i++) rect(ctx, i < val ? '#ffd23f' : '#33333d', bx + i * 7, y, 5, 6);
+      if (tw > 150) text(ctx, note, bx + max * 7 + 4, y, '#6f6f7c');
+      y += 10;
+    };
+    bar('VELOCIDADE', 4, 5, C.RUN.toFixed(1).replace('.', ',') + ' T/S');
+    bar('FURTIVIDADE', 3, 5, 'ANDA ' + (C.RUN * C.WALK).toFixed(1).replace('.', ','));
+    bar('RESISTÊNCIA', 2, 5, '2 VIDAS');
+    bar('AGILIDADE', 3, 5, 'JANELAS');
+  }
+
+  const SHOP = [
+    { name: 'JAQUETA NEON', price: 150, icon: 'jacket' },
+    { name: 'BONÉ PIXEL', price: 80, icon: 'cap' },
+    { name: 'EFEITO DE CORTE', price: 120, icon: 'slash' },
+    { name: 'MÁSCARA SANGUE', price: 300, icon: 'mask' },
+    { name: 'POSE DE VITÓRIA', price: 200, icon: 'pose' },
+    { name: 'PACOTE 16 BITS', price: 500, icon: 'bits' }
+  ];
+  function shopIcon(ctx, kind, cx, cy, tm) {
+    // cy = base do ícone
+    if (kind === 'jacket') R().uiSurvivor(ctx, cx, cy, 1, { id: 2, tm });
+    else if (kind === 'cap') { R().uiSurvivor(ctx, cx, cy, 1, { id: 0, tm }); rect(ctx, '#e23a3a', cx - 3, cy - 17, 6, 2); rect(ctx, '#b02a2a', cx - 4, cy - 15, 8, 1); }
+    else if (kind === 'slash') { for (let i = 0; i < 3; i++) { ctx.fillStyle = 'rgba(255,255,255,' + (0.9 - i * 0.25) + ')'; for (let j = 0; j < 14; j++) ctx.fillRect(cx - 8 + j + i * 2, cy - 4 - Math.round(Math.sin(j / 14 * Math.PI) * 10) + i * 2, 2, 1); } }
+    else if (kind === 'mask') { R().uiKiller(ctx, cx, cy, 1, { state: 'chase', tm }); rect(ctx, 'rgba(226,58,58,.8)', cx - 3, cy - 20, 6, 6); }
+    else if (kind === 'pose') { R().uiSurvivor(ctx, cx, cy, 1, { id: 1, tm }); rect(ctx, '#d0705b', cx - 6, cy - 19, 2, 6); rect(ctx, '#d0705b', cx + 4, cy - 19, 2, 6); }
+    else {                                                     // 16 bits: o mesmo boneco com pixels menores
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) rect(ctx, (x + y) % 2 ? '#7ad0ff' : '#3d6fb5', cx - 8 + x * 2, cy - 18 + y * 2, 2, 2);
+    }
+  }
+  function drawShop(ctx, W, H, tm, ui, L) {
+    bg(ctx, W, H, tm);
+    title(ctx, W, 'LOJA', 'PROTÓTIPO: COMPRAS EM BREVE');
+    coin(ctx, W - 8 - 7 - String(ui.coins).length * 6 - 3, 6); text(ctx, String(ui.coins), W - 8, 6, '#ffd23f', { align: 'r' });
+    L.cards.forEach((c, i) => {
+      const it = SHOP[i];
+      rect(ctx, 'rgba(255,255,255,.04)', c.x, c.y, c.w, c.h);
+      frame(ctx, '#33333d', c.x, c.y, c.w, c.h);
+      rect(ctx, 'rgba(0,0,0,.25)', c.x + 2, c.y + 2, c.w - 4, c.h - 30);
+      ctx.save(); ctx.beginPath(); ctx.rect(c.x + 2, c.y + 2, c.w - 4, c.h - 30); ctx.clip();
+      shopIcon(ctx, it.icon, c.x + Math.round(c.w / 2), c.y + c.h - 33, tm);
+      ctx.restore();
+      const lines = DP.font.wrap(it.name, Math.floor((c.w - 6) / 6));
+      lines.forEach((l, j) => text(ctx, l, c.x + 3, c.y + c.h - 26 + j * 8 - (lines.length > 1 ? 2 : 0), '#e9e6f0'));
+      coin(ctx, c.x + 3, c.y + c.h - 10); text(ctx, String(it.price), c.x + 13, c.y + c.h - 9, '#ffd23f');
+      text(ctx, 'EM BREVE', c.x + c.w - 3, c.y + c.h - 9, '#6f6f7c', { align: 'r' });
+    });
+    if (ui.toast) text(ctx, ui.toast, Math.round(W / 2), H - 38, '#ffb347', { align: 'c' });
+    const gy = L.cards[L.cards.length - 1].y + L.cards[0].h + 6;
+    if (gy < H - 50) text(ctx, 'GANHE FICHAS JOGANDO PARTIDAS', Math.round(W / 2), gy, '#6f6f7c', { align: 'c' });
+  }
+
+  function labelFor(b, ui) {
+    if (b.id === 'train_toggle') return 'TREINO: ' + (ui.training ? 'LIGADO' : 'DESLIGADO');
+    return b.label;
+  }
+
+  DP.lobby = { layout, drawMenu, drawLobby, drawChars, drawShop, labelFor, SHOP };
+})();

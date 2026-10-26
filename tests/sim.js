@@ -306,7 +306,7 @@ function killerScene(training, seed) { return DP.createGame({ rng: seeded(seed |
   ok(g.role === 'killer' && g.k.state === 'chase', 'começa livre para andar');
   const x0 = g.k.x;
   runFor(g, 1, { ax: 1, ay: 0 });
-  ok(Math.abs((g.k.x - x0) - DP.CFG.K_SPEED) < 0.3, `anda na velocidade do assassino (${(g.k.x - x0).toFixed(2)} tiles/s)`);
+  ok(Math.abs((g.k.x - x0) - DP.CFG.K_SPEED_P) < 0.3, `anda na velocidade do assassino-jogador (${(g.k.x - x0).toFixed(2)} tiles/s)`);
 }
 {
   // atacar: acerta o sobrevivente colado
@@ -515,6 +515,60 @@ console.log('equipe');
   }
   ok(bad === 0, 'ninguém dentro de parede/NaN nas 8 partidas contra a equipe');
   console.log('   assassino-bot vs equipe:', JSON.stringify(res), 'abatidos', kills, 'escaparam', esc, 'tempo médio', (tTot / 8).toFixed(0) + 's', 'cortes', crashes, '/', opens);
+}
+
+// ---------- 16. assassino de pessoa: golpe mais perdoador (playtest 1) ----------
+console.log('golpe perdoador');
+{
+  const C = DP.CFG;
+  ok(C.K_SPEED_P > C.K_SPEED && C.RECOVER_MISS_P < C.RECOVER_MISS && C.RECOVER_HIT_P < C.RECOVER_HIT && C.HIT_R_P > C.HIT_R, 'assassino-jogador: mais rápido, errar custa menos, golpe mais largo');
+  // errar: recuperação curta
+  const g = killerScene(true); g.s.x = 3; g.s.y = 3; g.k.x = 30.5; g.k.y = 28; g.k.face = 0;
+  g.update(1 / 60, { drop: true }); runFor(g, 0.5, {});
+  ok(g.stats.lunges === 1 && g.stats.hits === 0, 'bote contado (1 bote, 0 acertos)');
+  ok(g.k.state === 'recover' && Math.abs(g.k.dur - C.RECOVER_MISS_P) < 1e-9, `errar o golpe: recuperação de ${C.RECOVER_MISS_P}s (antes ${C.RECOVER_MISS}s)`);
+  runFor(g, C.RECOVER_MISS_P + 0.1, {});
+  ok(g.k.state === 'chase', 'volta a andar logo depois de errar');
+}
+{
+  // mira assistida + bote que "puxa": alvo a ~40° da direção do olhar, a 2,4 tiles
+  let hitCount = 0;
+  for (let i = 0; i < 6; i++) {
+    const g = killerScene(true); g.k.x = 30.5; g.k.y = 28.0; g.k.face = -Math.PI / 2; g.k.state = 'chase';
+    const tx = 30.5 + 1.5, ty = 28.0 - 1.9 + i * 0.1;
+    g.s.x = tx; g.s.y = ty;
+    g.update(1 / 60, { drop: true });
+    for (let j = 0; j < 40; j++) { g.s.x = tx; g.s.y = ty; g.update(1 / 60, {}); }
+    if (g.stats.hits > 0) hitCount++;
+  }
+  ok(hitCount >= 5, `acerta alvo fora do eixo graças à mira assistida e ao bote que corrige (${hitCount}/6)`);
+}
+
+// ---------- 17. telas de menu: layout em vários tamanhos ----------
+console.log('telas');
+{
+  const uctx = { console, Math, Date, Array, Object };
+  uctx.window = uctx; uctx.globalThis = uctx; vm.createContext(uctx);
+  for (const f of ['font.js', 'game.js', 'map.js', 'lobby.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), uctx, { filename: f });
+  const lay = uctx.DP.lobby.layout;
+  const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  let bad = 0; const sizes = [[320, 187], [195, 390], [422, 195], [280, 500], [240, 320], [360, 203]];
+  for (const [W, H] of sizes) {
+    for (const st of ['menu', 'lobby', 'chars', 'shop']) {
+      const L = lay(st, W, H);
+      const vis = L.buttons.filter((b) => !b.ghost);
+      for (const b of L.buttons) if (b.x < 0 || b.y < 0 || b.x + b.w > W || b.y + b.h > H) { bad++; console.log('   fora da tela', W + 'x' + H, st, b.id); }
+      for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) if (overlap(vis[i], vis[j])) { bad++; console.log('   sobrepostos', W + 'x' + H, st, vis[i].id, vis[j].id); }
+      if (st === 'lobby') {
+        const k = L.box.killer;
+        for (const sl of L.slots) { if (overlap(sl, k) || sl.x + sl.w > W || sl.y + sl.h > H) { bad++; console.log('   vaga/assassino', W + 'x' + H); } }
+        for (const b of vis) if (overlap(b, k)) { bad++; console.log('   botão sobre o assassino', W + 'x' + H, b.id); }
+        if (L.slots.some((sl) => vis.some((b) => overlap(sl, b)))) { bad++; console.log('   botão sobre vaga', W + 'x' + H); }
+      }
+      if (st === 'shop') for (const c of L.cards) for (const b of vis) if (overlap(c, b)) { bad++; console.log('   botão sobre carta', W + 'x' + H, b.id); }
+    }
+  }
+  ok(bad === 0, `layouts das 4 telas corretos em ${sizes.length} tamanhos de tela (celular/PC/horizontal)`);
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');

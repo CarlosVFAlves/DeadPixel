@@ -21,6 +21,17 @@
     RECOVER_MISS: 0.85,
     RECOVER_HIT: 1.7,
 
+    // assassino controlado por pessoa: mais rápido e mais perdoador (playtest 1: "lento" e "errar custa demais")
+    K_SPEED_P: 4.75,      // velocidade (a da IA continua K_SPEED)
+    K_LUNGE_P: 8.8,
+    WINDUP_P: 0.12,
+    HIT_R_P: 0.92,       // raio do golpe
+    RECOVER_MISS_P: 0.45,
+    RECOVER_HIT_P: 1.2,
+    AIM_CONE: 1.25,      // mira assistida: ângulo (rad) e alcance
+    AIM_RANGE: 2.8,
+    HOMING: 5.0,         // o bote corrige a direção até isto (rad/s) em direção ao alvo
+
     // pallet
     DROP_RANGE: 1.3,     // distância máxima do pallet para derrubar
     FALL_T: 0.22,        // tempo de queda — o atordoamento só vale no impacto
@@ -50,7 +61,7 @@
     // objetivo: 5 de 8 geradores + porta principal
     REPAIR_T: 20,        // segundos segurando AGIR para terminar um gerador (1 pessoa)
     TEAM_BONUS: 0.8,     // cada pessoa extra no mesmo gerador rende isto
-    DOOR_T: 4,           // segundos para abrir a porta principal
+    DOOR_T: 3,           // segundos para abrir a porta principal
     GEN_RANGE: 1.45, DOOR_RANGE: 2.0, WIN_RANGE: 1.3,
     SKILL_EVERY: [3.5, 7],   // intervalo entre skill checks (s)
     SKILL_DELAY: 0.45,       // tempo até o ponteiro começar a girar
@@ -64,7 +75,7 @@
     AI_SENSE: 11,        // sente o assassino por perto (batimento), mesmo sem ver
     AI_SEE: 16,          // vê o assassino com linha de visão até aqui
     AI_FLEE: 14,         // começa a fugir dentro desta distância
-    AI_SPEED: 1.1,       // o sobrevivente-IA corre um pouco mais (compensa não ter olhos humanos)
+    AI_SPEED: 1.05,      // o sobrevivente-IA corre um pouco mais (compensa não ter olhos humanos)
     AI_SKILL_ERR: 0.40,  // erro (rad) no skill check: ~85% de acerto
 
     // percepção do assassino
@@ -92,7 +103,7 @@
     const g = {
       cfg: CFG, map, training, role,
       time: 0, over: false, overT: 0,
-      stats: { stuns: 0, drops: 0, misses: 0, hits: 0, breaks: 0, vaults: 0, gens: 0, kicks: 0, skillOk: 0, skillFail: 0, cuts: 0, smashes: 0, crashes: 0 },
+      stats: { lunges: 0, stuns: 0, drops: 0, misses: 0, hits: 0, breaks: 0, vaults: 0, gens: 0, kicks: 0, skillOk: 0, skillFail: 0, cuts: 0, smashes: 0, crashes: 0 },
       pallets: [], windows: [], popups: [], fx: [], survivors: [],
       shake: 0, hitstop: 0, flash: 0,
       near: null, nearList: [], los: false, dist: 99, interact: null, kInteract: null, pInteract: null,
@@ -101,7 +112,7 @@
     };
 
     function makeAI() {
-      return { mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, zoneT: 0 };
+      return { mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, zoneT: 0, planAge: 0, dx: 0, dy: 0 };
     }
     const nSurv = 1 + bots;
     for (let i = 0; i < nSurv; i++) {
@@ -697,14 +708,14 @@
       if (len > 1) { ax /= len; ay /= len; }
       if (len > 0.12) {
         const ox = k.x, oy = k.y;
-        moveBy(k, ax * CFG.K_SPEED * dt, ay * CFG.K_SPEED * dt, CFG.R_K);
+        moveBy(k, ax * CFG.K_SPEED_P * dt, ay * CFG.K_SPEED_P * dt, CFG.R_K);
         k.face = Math.atan2(ay, ax);
         if (Math.hypot(k.x - ox, k.y - oy) > 0.0005) { k.moving = true; k.walk += dt * 11; }
         if (tryKillerVault(ax, ay, len)) return;
       }
       if (inp.drop) {                                  // ATACAR (com um pouco de mira assistida)
         let lx = Math.cos(k.face), ly = Math.sin(k.face);
-        if (s && d < CFG.ATTACK_RANGE * 1.5 && hasLOS(k, s) && Math.abs(angDiff(Math.atan2(dy, dx), k.face)) < 1.0) { lx = dx / (d || 1); ly = dy / (d || 1); }
+        if (s && d < CFG.AIM_RANGE && hasLOS(k, s) && Math.abs(angDiff(Math.atan2(dy, dx), k.face)) < CFG.AIM_CONE) { lx = dx / (d || 1); ly = dy / (d || 1); }
         k.ldx = lx; k.ldy = ly; k.face = Math.atan2(ly, lx);
         k.state = 'windup'; k.t = 0;
         sfx('windup', pan(k.x));
@@ -776,23 +787,36 @@
         if (p >= 1) { k.state = 'chase'; k.t = 0; k.vault = null; v.win.usedT = g.time; }
         return;
       }
+      const P = role === 'killer';                        // assassino de pessoa: números mais generosos
       if (k.state === 'windup') {
         k.t += dt;
-        if (k.t >= CFG.WINDUP) { k.state = 'lunge'; k.t = 0; k.hitDone = false; sfx('lunge', pan(k.x)); }
+        if (k.t >= (P ? CFG.WINDUP_P : CFG.WINDUP)) { k.state = 'lunge'; k.t = 0; k.hitDone = false; g.stats.lunges++; sfx('lunge', pan(k.x)); }
         return;
       }
       if (k.state === 'lunge') {
         k.t += dt;
-        moveBy(k, k.ldx * CFG.K_LUNGE * dt, k.ldy * CFG.K_LUNGE * dt, CFG.R_K);
+        if (P) {                                          // o bote "puxa" um pouco para o alvo mais perto da mira
+          const tv = nearestAlive(k);
+          if (tv) {
+            const ddx = tv.x - k.x, ddy = tv.y - k.y;
+            if (Math.hypot(ddx, ddy) < 3.2) {
+              const cur = Math.atan2(k.ldy, k.ldx), diff = angDiff(Math.atan2(ddy, ddx), cur);
+              if (Math.abs(diff) < 0.9) { const na = cur + clamp(diff, -CFG.HOMING * dt, CFG.HOMING * dt); k.ldx = Math.cos(na); k.ldy = Math.sin(na); }
+            }
+          }
+        }
+        const lsp = P ? CFG.K_LUNGE_P : CFG.K_LUNGE;
+        moveBy(k, k.ldx * lsp * dt, k.ldy * lsp * dt, CFG.R_K);
         k.moving = true; k.walk += dt * 16;
         if (!k.hitDone) {
           for (const v of g.survivors) {
-            if (!alive(v) || v.invuln > 0 || Math.hypot(v.x - k.x, v.y - k.y) >= CFG.HIT_R) continue;
+            if (!alive(v) || v.invuln > 0 || Math.hypot(v.x - k.x, v.y - k.y) >= (P ? CFG.HIT_R_P : CFG.HIT_R)) continue;
             use(v); k.hitDone = true; hurt(); break;
           }
         }
         if (k.t >= CFG.LUNGE_T) {
-          k.state = 'recover'; k.t = 0; k.dur = k.hitDone ? CFG.RECOVER_HIT : CFG.RECOVER_MISS;
+          k.state = 'recover'; k.t = 0;
+          k.dur = k.hitDone ? (P ? CFG.RECOVER_HIT_P : CFG.RECOVER_HIT) : (P ? CFG.RECOVER_MISS_P : CFG.RECOVER_MISS);
         }
         return;
       }
@@ -935,7 +959,35 @@
     }
 
     // ---------- IA do sobrevivente ----------
-    const fS = new Float32Array(W * H), fK = new Float32Array(W * H), fT = new Float32Array(W * H);
+    const fS = new Float32Array(W * H), fK = new Float32Array(W * H), fT = new Float32Array(W * H), fTc = new Float32Array(W * H);
+
+    // compromisso: só troca o plano de fuga se o atual deixou de valer ou depois de ~1,6 s (evita "barata tonta")
+    function adoptPlan(cand) {
+      const cur = ai.plan;
+      let invalid = !cur;
+      if (cur) {
+        if (cur.pal) invalid = cur.pal.state !== 'up';
+        else if (cur.T) {
+          const j = clamp(Math.floor(cur.T.y), 0, H - 1) * W + clamp(Math.floor(cur.T.x), 0, W - 1);
+          invalid = Math.hypot(cur.T.x - s.x, cur.T.y - s.y) < 0.5 || fS[j] / CFG.RUN + 0.1 > fK[j] / CFG.K_SPEED;
+        } else invalid = true;
+      }
+      if (invalid || ai.planAge > 1.6) { ai.plan = cand; fT.set(fTc); ai.planAge = 0; }
+    }
+    // giro suave: o bot não inverte a direção de um quadro para o outro
+    function smoothOut(out, dt) {
+      const l = Math.hypot(out.ax, out.ay);
+      if (l < 0.01) { ai.dx = 0; ai.dy = 0; return out; }
+      const tx = out.ax / l, ty = out.ay / l;
+      if (!ai.dx && !ai.dy) { ai.dx = tx; ai.dy = ty; }
+      else {
+        const f = Math.min(1, dt * 9);
+        ai.dx += (tx - ai.dx) * f; ai.dy += (ty - ai.dy) * f;
+        const m = Math.hypot(ai.dx, ai.dy) || 1; ai.dx /= m; ai.dy /= m;
+      }
+      out.ax = ai.dx; out.ay = ai.dy;
+      return out;
+    }
 
     function steer(arr, out, goal) {
       // já no tile do destino: vai direto ao ponto (senão o campo empurra para fora do tile)
@@ -975,8 +1027,8 @@
         if (ts < bs) { bs = ts; best = p; bT = T; }
       }
       if (best) {
-        dijkstra(fT, bT.x, bT.y, true);
-        ai.plan = { pal: best, T: bT, err: (rnd() - 0.5) * 0.6, react: rnd() * 0.22 };
+        dijkstra(fTc, bT.x, bT.y, true);
+        adoptPlan({ pal: best, T: bT, err: (rnd() - 0.5) * 0.6, react: rnd() * 0.22 });
         winPass = k0;
         return;
       }
@@ -994,13 +1046,14 @@
       }
       if (bt !== null) {
         const T = { x: (bt % W) + 0.5, y: ((bt / W) | 0) + 0.5 };
-        dijkstra(fT, T.x, T.y, true);
-        ai.plan = { pal: null, T, err: 0, react: 0 };
-      } else ai.plan = { pal: null, T: null, err: 0, react: 0 };
+        dijkstra(fTc, T.x, T.y, true);
+        adoptPlan({ pal: null, T, err: 0, react: 0 });
+      } else adoptPlan({ pal: null, T: null, err: 0, react: 0 });
       winPass = k0;
     }
 
-    function aiSurvivor(dt) {
+    function aiSurvivor(dt) { return smoothOut(aiSurvivorRaw(dt), dt); }
+    function aiSurvivorRaw(dt) {
       const out = { ax: 0, ay: 0, act: false, drop: false, press: false, actPress: false, walk: false };
       const kdx = k.x - s.x, kdy = k.y - s.y, kd = Math.hypot(kdx, kdy);
       const sensed = kd < CFG.AI_SENSE || (kd < CFG.AI_SEE && hasLOS(s, k));
@@ -1019,6 +1072,7 @@
       const nearest = nearestAlive(k) === s;
       const fleeing = ai.aware > 0 && (kd < 7 || (kMoving && kd < CFG.AI_FLEE && nearest) || s.burst > 0);
       ai.mode = fleeing ? 'flee' : (g.door.powered ? 'exit' : 'repair');
+      if (!fleeing) ai.plan = null; else ai.planAge += dt;
 
       if (ai.mode === 'flee') {
         ai.thinkT -= dt;

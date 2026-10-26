@@ -633,24 +633,7 @@
   // ---------- telas ----------
   function overlay(ctx, W, H, a) { ctx.fillStyle = 'rgba(5,5,8,' + a + ')'; ctx.fillRect(0, 0, W, H); }
 
-  function drawMenu(ctx, W, H, tm, best, role) {
-    ctx.fillStyle = '#0b0b10'; ctx.fillRect(0, 0, W, H);
-    const cx = Math.round(W / 2);
-    const title = 'DEAD PIXEL';
-    const sc = W >= 300 ? 3 : 2;
-    ctx.save();
-    ctx.translate(cx, Math.round(H * 0.16)); ctx.scale(sc, sc);
-    text(ctx, title, 0, 0, '#e23a3a', { align: 'c' });
-    ctx.restore();
-    text(ctx, 'PROTÓTIPO 4: JANELAS E EQUIPE', cx, Math.round(H * 0.16) + 7 * sc + 6, '#e9c07a', { align: 'c' });
-    if (best) text(ctx, best, cx, Math.round(H * 0.36), '#8a8a99', { align: 'c' });
-    const lines = DP.font.wrap(role === 'killer'
-      ? 'CACE OS 4 SOBREVIVENTES. QUEBRE PALLETS E JANELAS, CHUTE GERADORES. LEVOU PALLET, TROPEÇA!'
-      : 'CONSERTE 5 DE 8 GERADORES COM SEUS 3 AMIGOS E ESCAPE PELA PORTA PRINCIPAL. USE PALLETS E JANELAS.', Math.floor((W - 16) / 6));
-    lines.forEach((l, i) => text(ctx, l, cx, Math.round(H * 0.82) + i * 9, '#a9a9b5', { align: 'c' }));
-  }
-
-  function drawOver(ctx, game, W, H, tm, best, newBest) {
+  function drawOver(ctx, game, W, H, tm, best, newBest, reward) {
     const a = Math.min(0.82, game.overT * 0.9);
     overlay(ctx, W, H, a);
     if (game.overT < 0.8) return;
@@ -661,22 +644,45 @@
     text(ctx, ka ? (esc ? 'ELES ESCAPARAM...' : 'VITÓRIA!') : (esc ? 'VOCÊ ESCAPOU!' : 'VOCÊ MORREU'), cx, y0, win ? '#7dffa0' : '#e23a3a', { align: 'c' });
     const tt = Math.floor(game.time);
     const rows = [
-      [ka ? 'DURAÇÃO DA CAÇADA' : esc ? 'TEMPO DE FUGA' : 'SOBREVIVEU', Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0')],
+      [ka ? 'DURAÇÃO' : esc ? 'TEMPO DE FUGA' : 'SOBREVIVEU', Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0')],
       ['GERADORES', game.gensDone + '/' + game.need],
-      ['ESCAPARAM / ABATIDOS', game.escapedCount + ' / ' + game.deadCount],
-      ka ? ['TROPEÇOS', String(game.stats.stuns)] : ['ATORDOAMENTOS', String(game.stats.stuns)],
-      ka ? ['GOLPES CERTEIROS', String(game.stats.hits)] : ['PALLETS DERRUBADOS', String(game.stats.drops)],
-      ka ? ['QUEBROU PALLETS / JANELAS', game.stats.breaks + ' / ' + game.stats.smashes] : ['JANELAS: PULOS / CORTES', game.stats.vaults + ' / ' + game.stats.cuts]
+      ['ESCAPARAM/ABATIDOS', game.escapedCount + '/' + game.deadCount],
+      ka ? ['ACERTOS/BOTES', game.stats.hits + '/' + game.stats.lunges] : ['ATORDOAMENTOS', String(game.stats.stuns)],
+      ka ? ['QUEBRAS PALLET/JAN.', game.stats.breaks + '/' + game.stats.smashes] : ['PALLETS DERRUBADOS', String(game.stats.drops)],
+      ka ? ['TROPEÇOS', String(game.stats.stuns)] : ['JANELAS PULOS/CORTES', game.stats.vaults + '/' + game.stats.cuts]
     ];
+    const tl = Math.max(8, cx - 84), tr = Math.min(W - 8, cx + 84);
     rows.forEach((r, i) => {
       const y = y0 + 14 + i * 9;
-      text(ctx, r[0], Math.max(8, cx - 62), y, '#a9a9b5');
-      text(ctx, r[1], Math.min(W - 8, cx + 62), y, '#fff', { align: 'r' });
+      text(ctx, r[0], tl, y, '#a9a9b5');
+      text(ctx, r[1], tr, y, '#fff', { align: 'r' });
     });
-    if (newBest) text(ctx, 'NOVO RECORDE!', cx, y0 + 16 + rows.length * 10 + 4, '#ffd23f', { align: 'c' });
+    const by = y0 + 14 + rows.length * 9 + 3;
+    if (reward) text(ctx, '+' + reward + ' FICHAS', cx, by, '#ffd23f', { align: 'c' });
+    if (newBest) text(ctx, 'NOVO RECORDE!', cx, by + 9, '#7dffa0', { align: 'c' });
+  }
+
+  // ---------- sprites para as telas de menu (mesmo pixel art do jogo, ampliado) ----------
+  const UI_GAME = { role: 'survivor', cfg: { VAULT_T: 0.5, WINDUP: 0.16 } };
+  // cx,cy = pés; sc = ampliação inteira; o = { id, face, moving, tm, alpha, hp, human }
+  function uiSurvivor(ctx, cx, cy, sc, o) {
+    o = o || {};
+    const fake = { x: 0, y: -5 / TS, face: o.face === undefined ? Math.PI / 2 : o.face, hp: o.hp || 2, invuln: 0, vault: null, id: o.id || 0, walk: o.walk || 0, moving: !!o.moving, human: !!o.human };
+    ctx.save(); ctx.translate(Math.round(cx), Math.round(cy)); ctx.scale(sc, sc);
+    ctx.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
+    drawSurvivor(ctx, fake, UI_GAME, o.tm || 0);
+    ctx.restore();
+  }
+  function uiKiller(ctx, cx, cy, sc, o) {
+    o = o || {};
+    const fake = { x: 0, y: -6 / TS, face: o.face === undefined ? Math.PI / 2 : o.face, state: o.state || 'recover', t: 0, trip: 0, ph: 0, walk: o.walk || 0, moving: !!o.moving };
+    ctx.save(); ctx.translate(Math.round(cx), Math.round(cy)); ctx.scale(sc, sc);
+    ctx.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
+    drawKiller(ctx, fake, UI_GAME, o.tm || 0);
+    ctx.restore();
   }
 
   function reset() { R.staticCv = null; }
 
-  DP.render = { drawWorld, drawHUD, drawSkill, drawButton, drawJoystick, drawMenu, drawOver, overlay, reset, text };
+  DP.render = { uiSurvivor, uiKiller, drawWorld, drawHUD, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
 })(typeof window !== 'undefined' ? window : globalThis);

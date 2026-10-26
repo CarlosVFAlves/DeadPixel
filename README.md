@@ -1,9 +1,18 @@
-# Dead Pixel — Protótipo 4: Janelas e Equipe
+# Dead Pixel — Protótipo 5: A Sala
 
 Jogo 2D em pixel art (HTML + canvas, **sem dependências**, gráficos e áudio gerados por código), pensado para **celular e PC**.
 Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
 
-**Dois papéis** (escolha no menu, ou teclas `1` / `2`):
+## A sala (menu)
+
+**Dead Pixel** abre numa tela com três entradas:
+- **JOGAR** → sala de espera com **4 vagas de jogador** (você é o J1; as outras ficam "aguardando" e viram bots) e o **assassino apagado** (IA). Toque no assassino para **jogar com ele** (então os 4 sobreviventes são bots). Opção **TREINO** e **INICIAR PARTIDA**. Teclado: `Enter` inicia, `T` treino, `1`/`2` papel, `Esc` volta.
+- **PERSONAGENS** → só o personagem principal (**Pixel**), andando nas quatro direções, com atributos.
+- **LOJA** → protótipo: 6 cartas "em breve" e o saldo de **fichas** (você ganha fichas ao fim de cada partida, fora do treino).
+
+O jogo guarda no navegador um **histórico** (vitórias/derrotas) e as últimas 60 partidas. Para ver um resumo (aproveitamento de golpes, tempo médio...) abra o console e digite `__dp.report()`.
+
+**Dois papéis** (escolha na sala):
 - **SOBREVIVENTE:** você + **3 bots** (cores diferentes) contra o assassino (IA). Conserte geradores e escape pela porta principal.
 - **ASSASSINO:** você caça **4 sobreviventes controlados por IA**. Eles consertam geradores juntos, fogem, usam pallets e janelas e tentam escapar.
 
