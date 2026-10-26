@@ -6,7 +6,7 @@
   const DP = root.DP = root.DP || {};
 
   const W = 144, H = 96;
-  const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2, T_GEN = 3, T_GATE = 4, T_WIN = 5, T_TREE = 6, T_WATER = 7, T_VEH = 8;
+  const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2, T_GEN = 3, T_GATE = 4, T_WIN = 5, T_TREE = 6, T_WATER = 7, T_VEH = 8, T_LOCKER = 9;
   const G_GRASS = 0, G_DIRT = 1, G_SAND = 2, G_PLANK = 3, G_GRAVEL = 4;
   const PLAZA = { x: 71, y: 47 };
 
@@ -53,7 +53,7 @@
         const n = vnoise(x, y, 16) * 0.6 + vnoise(x, y, 5) * 0.4;
         const dc = Math.hypot((x - PLAZA.x) / 52, (y - PLAZA.y) / 34);
         const f = 0.3 + 0.7 * clamp(dc, 0, 1);              // mais aberto perto do centro
-        const dens = (0.16 + 0.58 * n) * f;
+        const dens = (0.08 + 0.46 * n) * f;
         if (h2(x, y, 99) < dens) t[idx(x, y)] = T_TREE;
       }
     }
@@ -201,7 +201,7 @@
       wallGap(x, y, 7, 3, v); placed++;
     }
     placed = 0;
-    for (let tries = 0; tries < 800 && placed < 24; tries++) {
+    for (let tries = 0; tries < 800 && placed < 12; tries++) {
       const w = ri(1, 3), h = w === 1 ? ri(1, 3) : 1, x = ri(6, W - 10), y = ri(6, H - 10);
       if (!freeForProp(x, y, w, h)) continue;
       clearRect(x - 1, y - 1, w + 2, h + 2, G_GRASS);
@@ -227,6 +227,30 @@
     }
     for (const g of gens) { t[idx(g.tx, g.ty)] = T_GEN; }
 
+    // ---------- armários para se esconder: 1 ou 2 por cabana, encostados na parede, de frente para o interior ----------
+    const lockers = [];
+    for (const s of specs) {
+      const m = s.m, cand = [];
+      const nearSpecial = (x, y) => [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+        const v = t[idx(x + dx, y + dy)];
+        return v === T_WIN || pallets.some((q) => q.tx === x + dx && q.ty === y + dy) || v === T_GEN;
+      });
+      for (let yy = 1; yy < m.h - 1; yy++) for (let xx = 1; xx < m.w - 1; xx++) {
+        let nx = 0, ny = 0;
+        if (xx === 1) nx = 1; else if (xx === m.w - 2) nx = -1; else if (yy === 1) ny = 1; else if (yy === m.h - 2) ny = -1;
+        if (!nx && !ny) continue;
+        const a = tr(s, xx, yy), b = tr(s, xx + nx, yy + ny);
+        const dnx = s.fx ? -nx : nx, dny = s.fy ? -ny : ny;
+        if (t[idx(a.x, a.y)] !== T_FLOOR || t[idx(b.x, b.y)] !== T_FLOOR || nearSpecial(a.x, a.y) || nearSpecial(b.x, b.y)) continue;
+        cand.push({ x: a.x, y: a.y, nx: dnx, ny: dny });
+      }
+      for (let n = 0, want = 1 + (rng() < 0.5 ? 1 : 0); n < want && cand.length; n++) {
+        const c = cand.splice(Math.floor(rng() * cand.length), 1)[0];
+        t[idx(c.x, c.y)] = T_LOCKER; lockers.push({ tx: c.x, ty: c.y, nx: c.nx, ny: c.ny, cabin: s.n });
+        for (let i = cand.length - 1; i >= 0; i--) if (Math.abs(cand[i].x - c.x) + Math.abs(cand[i].y - c.y) < 3) cand.splice(i, 1);   // não um colado no outro
+      }
+    }
+
     // ---------- telefone (guarita ao lado da estrada) ----------
     const phone = { tx: 75, ty: 30 };
     clearRect(phone.tx - 2, phone.ty - 2, 5, 5, G_DIRT);
@@ -250,6 +274,8 @@
     clearRect(kc[0] - 2, kc[1] - 2, 5, 5, G_DIRT);
     const spawnKiller = { x: kc[0] + 0.5, y: kc[1] + 0.5 };
     pois.push({ kind: 'killer', x: spawnKiller.x, y: spawnKiller.y, r: 5 });
+    clearRect(PLAZA.x - 2, PLAZA.y + 14, 5, 5, G_DIRT);                                  // assassino-jogador: nasce perto do acampamento (a ~15 tiles da fogueira)
+    const spawnKillerP = { x: PLAZA.x + 0.5, y: PLAZA.y + 16.5 };
 
     // ---------- conectividade ----------
     const seen = new Uint8Array(W * H), q = new Int32Array(W * H);
@@ -285,10 +311,12 @@
           if (seen[j]) { hit = j; break; }
         }
       }
-      for (let j = hit; j >= 0 && j !== s0; j = prev[j]) if (t[j] === T_TREE) { t[j] = T_FLOOR; ground[j] = G_DIRT; }
+      for (let j = hit; j >= 0 && j !== s0; j = prev[j]) {                 // túnel de 2 tiles de largura (no celular, 1 tile prende o dedo)
+        for (const o of [0, 1, W, W + 1]) if (inner((j + o) % W, ((j + o) / W) | 0) && t[j + o] === T_TREE) { t[j + o] = T_FLOOR; ground[j + o] = G_DIRT; }
+      }
       if (t[s0] === T_TREE) t[s0] = T_FLOOR;
     }
-    const pts = keys.concat(sp.map((p) => ({ x: Math.floor(p.x), y: Math.floor(p.y) })), [{ x: Math.floor(spawnKiller.x), y: Math.floor(spawnKiller.y) }, { x: Math.floor(dockEnd.x), y: Math.floor(dockEnd.y) }]);
+    const pts = keys.concat(sp.map((p) => ({ x: Math.floor(p.x), y: Math.floor(p.y) })), [{ x: Math.floor(spawnKillerP.x), y: Math.floor(spawnKillerP.y) }, { x: Math.floor(spawnKiller.x), y: Math.floor(spawnKiller.y) }, { x: Math.floor(dockEnd.x), y: Math.floor(dockEnd.y) }]);
     for (const g of gens.concat([phone])) for (const d of [[0, 1], [1, 0], [-1, 0], [0, -1]]) { const x = g.tx + d[0], y = g.ty + d[1]; if (t[idx(x, y)] === T_FLOOR || t[idx(x, y)] === T_TREE) { pts.push({ x, y }); break; } }
     flood(root0);
     for (const p of pts) { if (!seen[idx(p.x, p.y)]) { carveTo(p.x, p.y); flood(root0); } }
@@ -322,13 +350,13 @@
     explore.forEach((e, i) => { e.id = i; });
 
     return {
-      kind: 'camp', W, H, t, ground, indoor, pallets, gens, phone, vehicles, door, windows, NEED: 5,
+      kind: 'camp', W, H, t, ground, indoor, pallets, gens, phone, vehicles, lockers, door, windows, NEED: 5,
       itemSpots, radios: 4, pois, explore, lake: LAKE, dock: { x: dockX, y: dockY, endX: dockEnd.x, endY: dockEnd.y },
       cabins: specs.map((s) => ({ x: s.x, y: s.y, w: s.m.w, h: s.m.h, id: s.n })),
-      spawnSurvivors: sp, spawnKiller
+      spawnSurvivors: sp, spawnKiller, spawnKillerP
     };
   }
 
   DP.buildCamp = buildCamp;
-  DP.CAMP = { W, H, T_TREE, T_WATER, T_VEH, G_GRASS, G_DIRT, G_SAND, G_PLANK, G_GRAVEL };
+  DP.CAMP = { W, H, T_TREE, T_WATER, T_VEH, T_LOCKER, G_GRASS, G_DIRT, G_SAND, G_PLANK, G_GRAVEL };
 })(typeof window !== 'undefined' ? window : globalThis);

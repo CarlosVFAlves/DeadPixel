@@ -22,7 +22,7 @@
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS, r = hash(x, y);
-        const fl = t[i] === 0 || t[i] === 3 || t[i] === 6 || t[i] === 7 || t[i] === 8;
+        const fl = t[i] === 0 || t[i] === 3 || t[i] === 6 || t[i] === 7 || t[i] === 8 || t[i] === 9;
         const gk = ground ? ground[i] : 0;
         if (indoor[i] && fl) {
           // piso de tábuas
@@ -447,6 +447,26 @@
     gl.addColorStop(0, flash ? 'rgba(255,60,60,.22)' : 'rgba(70,110,255,.22)'); gl.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = gl; ctx.fillRect(cx - 46, cy - 46, 92, 92);
   }
+  // armário metálico: a porta fica do lado (nx,ny); aberto quando alguém entra/sai ou o assassino o revira
+  function drawLocker(ctx, l, game, tm) {
+    const X = l.tx * TS, Y = l.ty * TS;
+    const opening = game.k.state === 'break' && game.k.pal === l;
+    const open = opening || l.t < 0.25;
+    const shake = l.occ && Math.hypot(game.k.x - l.cx, game.k.y - l.cy) < 7 && Math.floor(tm * 9) % 7 === 0 ? 1 : 0;
+    const ox = shake * (Math.floor(tm * 20) % 2 ? 1 : -1);
+    px(ctx, 'rgba(0,0,0,.4)', X + 1, Y + 13, 15, 3);
+    px(ctx, '#1d222b', X + 1 + ox, Y + 1, 14, 14);
+    px(ctx, '#566170', X + 2 + ox, Y + 2, 12, 12);
+    px(ctx, '#7a8798', X + 2 + ox, Y + 2, 12, 1);
+    const fx = l.nx, fy = l.ny;                                       // lado da porta
+    const dx0 = fx > 0 ? X + 10 : fx < 0 ? X + 2 : X + 2, dy0 = fy > 0 ? Y + 10 : fy < 0 ? Y + 2 : Y + 2;
+    const dw = fx !== 0 ? 4 : 12, dh = fy !== 0 ? 4 : 12;
+    px(ctx, open ? '#0b0d12' : '#3f4958', dx0 + ox, dy0, dw, dh);
+    if (!open) {
+      for (let i = 0; i < 3; i++) { if (fx !== 0) px(ctx, '#1d222b', dx0 + ox, dy0 + 2 + i * 3, dw, 1); else px(ctx, '#1d222b', dx0 + 2 + i * 3 + ox, dy0, 1, dh); }   // venezianas
+      px(ctx, '#c9a46a', fx > 0 ? X + 11 + ox : fx < 0 ? X + 4 + ox : X + 11 + ox, fy > 0 ? Y + 11 : fy < 0 ? Y + 4 : Y + 7, 1, 2);   // maçaneta
+    } else if (opening && l.occ) { px(ctx, '#e0b48a', dx0 + 1 + ox, dy0 + 1, 2, 2); }
+  }
   function drawPhone(ctx, o, game, tm) {
     const X = o.tx * TS, Y = o.ty * TS;
     const working = game.survivors.some((v) => v.acting && v.acting.obj === o);
@@ -643,7 +663,7 @@
     const mw = game.map.W, mh = game.map.H;
     if (!R.seen || R.seen.length !== mw * mh) R.seen = new Uint8Array(mw * mh);
     if (!R.fog || R.fog.width !== W || R.fog.height !== H) { R.fog = document.createElement('canvas'); R.fog.width = W; R.fog.height = H; R.fogCtx = R.fog.getContext('2d'); }
-    const f = R.fogCtx, pl = game.pl, V = pl === game.k ? game.cfg.VIS_K : game.cfg.VIS_S;
+    const f = R.fogCtx, pl = game.pl, V = pl === game.k ? (game.role === 'killer' ? game.cfg.VIS_KP : game.cfg.VIS_K) : game.cfg.VIS_S;
     const ox = pl.x * TS - cx, oy = pl.y * TS - cy;
     f.globalCompositeOperation = 'source-over';
     f.clearRect(0, 0, W, H);
@@ -728,10 +748,11 @@
     const list = [];
     for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.nearList.some((n) => n.pal === p) ? tm : 0) });
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
+    for (const l of game.lockers) list.push({ y: l.cy, f: () => drawLocker(ctx, l, game, tm) });
     if (game.phone) list.push({ y: game.phone.cy, f: () => drawPhone(ctx, game.phone, game, tm) });
     if (game.phone && game.phone.state === 'here') list.push({ y: 10, f: () => drawPolice(ctx, game.phone, game, tm) });
     for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
-    for (const v of game.survivors) if (!v.dead && !v.escaped && (v === pl || vis(v.x, v.y))) { list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) }); if (v.item) list.push({ y: v.y + 0.02, f: () => drawCarry(ctx, v) }); }
+    for (const v of game.survivors) if (!v.dead && !v.escaped && !v.hidden && (v === pl || vis(v.x, v.y))) { list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) }); if (v.item) list.push({ y: v.y + 0.02, f: () => drawCarry(ctx, v) }); }
     for (const v of game.vehicles) if (v.state !== 'gone' && (full || vis(v.cx, v.cy) || v.state === 'leaving')) list.push({ y: v.state === 'leaving' ? vehPos(v).y + 1 : v.cy + 0.9, f: () => drawVehicle(ctx, v, game, tm) });
     if (game.k === pl || full || game.canSeeKiller(pl)) list.push({ y: game.k.y, f: () => { ctx.globalAlpha = game.k.stealth ? 0.55 : 1; drawKiller(ctx, game.k, game, tm); ctx.globalAlpha = 1; } });
     list.sort((a, b) => a.y - b.y);
@@ -752,8 +773,8 @@
       const it = game.pInteract;
       if (it && !(game.role === 'survivor' && game.s.acting)) {
         const label = { gen: 'SEGURE E', item: 'SEGURE E: PEGAR', door: 'SEGURE E: ABRIR PORTA', window: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', smash: 'E: QUEBRAR JANELA', kick: 'E: CHUTAR',
-          phone: 'SEGURE E: LIGAR PARA A POLÍCIA', install: 'SEGURE E: INSTALAR', start: it.obj.kind === 'boat' ? 'SEGURE E: EMPURRAR' : 'SEGURE E: LIGAR O MOTOR', board: 'SEGURE E: ENTRAR', sabotage: 'E: SABOTAR' }[it.type];
-        const bad = it.type === 'break' || it.type === 'kick' || it.type === 'smash' || it.type === 'sabotage';
+          phone: 'SEGURE E: LIGAR PARA A POLÍCIA', hide: 'SEGURE E: ESCONDER-SE', locker: 'E: ABRIR ARMÁRIO', install: 'SEGURE E: INSTALAR', start: it.obj.kind === 'boat' ? 'SEGURE E: EMPURRAR' : 'SEGURE E: LIGAR O MOTOR', board: 'SEGURE E: ENTRAR', sabotage: 'E: SABOTAR' }[it.type];
+        const bad = it.type === 'break' || it.type === 'kick' || it.type === 'smash' || it.type === 'sabotage' || it.type === 'locker';
         const lift = it.obj.range ? 34 : it.type === 'gen' ? 14 : it.type === 'phone' ? 22 : 18;
         text(ctx, label, it.obj.cx * TS, it.obj.cy * TS - lift + bob, bad ? '#ff9d5c' : '#7dffa0', { align: 'c' });
       }
@@ -800,6 +821,12 @@
       for (let i = 0; i < game.hpMax; i++) text(ctx, '♥', 32 + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
     }
     drawTeam(ctx, game, W);
+    if (!ka && s.hidden) {                                                        // dentro do armário: vista estreita e escura
+      ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(0,0,0,.82)'; ctx.fillRect(0, 0, W, Math.round(H * 0.36)); ctx.fillRect(0, Math.round(H * 0.64), W, H);
+      text(ctx, 'ESCONDIDO', Math.round(W / 2), Math.round(H * 0.3), '#9bd3f0', { align: 'c' });
+      text(ctx, 'E OU MOVER: SAIR', Math.round(W / 2), Math.round(H * 0.3) + 10, '#a9a9b5', { align: 'c' });
+    }
     let ly = 44;
     const phs = game.phone, mm = (v) => { v = Math.max(0, Math.ceil(v)); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
     if (phs && game.door.powered) {
@@ -810,7 +837,7 @@
     }
     if (game.vehicles.length) {
       const vs = game.vehicles.map((v) => (v.kind === 'car' ? 'CARRO ' : 'BARCO ') + (v.state === 'gone' || v.state === 'leaving' ? 'SAIU' : v.state === 'started' ? 'LIGADO' : v.state === 'ready' ? 'PRONTO' : v.order.length + '/' + v.need.length));
-      text(ctx, vs.join('  '), 4, ly, '#cfd3e0'); ly += 10;
+      text(ctx, vs.join(W < 260 ? ' ' : '  '), 4, ly, '#cfd3e0'); ly += 10;
     }
     if (!ka && s.item && s.item.part) { text(ctx, 'LEVANDO: ' + game.partName(s.item), 4, ly + (s.tool ? 10 : 0), '#9bd3f0'); }
     if (!ka && s.tool) {                                                       // rádio: 3 faixas de proximidade + pilha
@@ -837,22 +864,22 @@
     if (game.training) text(ctx, game.fullVision ? 'TREINO: VÊ TUDO' : 'TREINO', W - 4, 14, '#7ad0ff', { align: 'r' });
 
     if (ka) {
-      const y0 = Math.max(60, Math.round(H * 0.2));
+      const y0 = msgY(game, W, H);
       if (game.k.state === 'stumble' || game.k.state === 'stun') {
         const lines = game.k.state === 'stun' ? 'ATORDOADO!' : 'TROPEÇANDO!';
         text(ctx, lines, W / 2, y0, '#ff9d5c', { align: 'c' });
         const f = game.k.state === 'stun' ? 1 : 1 - game.k.t / game.cfg.STUMBLE_T;
         px(ctx, 'rgba(0,0,0,.6)', W / 2 - 25, y0 + 10, 50, 4);
         px(ctx, '#ff9d5c', W / 2 - 24, y0 + 11, Math.round(48 * f), 2);
-      } else if (game.time < 7) {
-        DP.font.wrap('CACE OS 4 SOBREVIVENTES. SETAS NA BORDA = BARULHO', Math.floor((W - 8) / 6)).forEach((l, i) =>
+      } else if (game.time < 12) {
+        DP.font.wrap(game.explore.length ? 'CACE OS 4 SOBREVIVENTES. SETAS NA BORDA = BARULHO. O MINIMAPA (TOQUE OU M) MOSTRA GERADORES, TELEFONE, CARRO E BARCO' : 'CACE OS 4 SOBREVIVENTES. SETAS NA BORDA = BARULHO', Math.floor((W - 8) / 6)).forEach((l, i) =>
           text(ctx, l, W / 2, y0 + i * 9, '#ffb347', { align: 'c' }));
       }
     } else if (game.k.state === 'intro') {
       const left = Math.ceil(game.introT - game.k.t);
-      text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, Math.max(60, Math.round(H * 0.2)), '#ff5c5c', { align: 'c' });
+      text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, msgY(game, W, H), '#ff5c5c', { align: 'c' });
       DP.font.wrap(game.explore.length ? 'ESCAPE PELA POLÍCIA (' + game.need + ' GERADORES + TELEFONE), PELO CARRO OU PELO BARCO. M ABRE O MAPA' : 'CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELA PORTA PRINCIPAL', Math.floor((W - 8) / 6)).forEach((l, i) =>
-        text(ctx, l, W / 2, Math.max(60, Math.round(H * 0.2)) + 10 + i * 9, '#ffb347', { align: 'c' }));
+        text(ctx, l, W / 2, msgY(game, W, H) + 10 + i * 9, '#ffb347', { align: 'c' }));
     }
     const arrowTo = !ka && !game.over && game.explore.length ? (game.door.opened ? { x: game.door.cx, y: game.door.cy, label: 'SAÍDA' } : ph && ph.state === 'ready' ? { x: ph.cx, y: ph.cy, label: 'TELEFONE' } : null) : null;
     if (arrowTo) {                                                              // seta para o portão aberto ou para o telefone
@@ -865,11 +892,11 @@
         text(ctx, arrowTo.label + ' ' + Math.round(d), Math.round(ax), Math.round(ay) + 8, '#7dffa0', { align: 'c', shadow: 'rgba(0,0,0,.9)' });
       }
     }
-    if (!(ka && (game.k.state === 'stumble' || game.k.state === 'stun' || game.time < 7)) && gd && game.time % 6 < 3 && !game.over) {
+    if (!(ka && (game.k.state === 'stumble' || game.k.state === 'stun' || game.time < 12)) && gd && game.time % 6 < 3 && !game.over) {
       DP.font.wrap(ph ? (ka ? 'ENERGIA LIGADA! PROTEJA O TELEFONE' : 'ENERGIA LIGADA! LIGUE PARA A POLÍCIA') : ka ? 'PORTA LIBERADA! IMPEÇA A FUGA' : 'PORTA LIBERADA! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
-        text(ctx, l, W / 2, Math.max(60, Math.round(H * 0.2)) + i * 9, '#7dffa0', { align: 'c' }));
+        text(ctx, l, W / 2, msgY(game, W, H) + i * 9, '#7dffa0', { align: 'c' }));
     } else if (!ka && game.k.hesitate) {
-      text(ctx, 'ELE HESITA...', W / 2, Math.max(60, Math.round(H * 0.2)), '#ff9d5c', { align: 'c' });
+      text(ctx, 'ELE HESITA...', W / 2, msgY(game, W, H), '#ff9d5c', { align: 'c' });
     }
   }
 
@@ -890,6 +917,30 @@
     return cv;
   }
 
+  // minimapa no canto (só no acampamento): toque nele (ou M) para abrir o mapa grande
+  function miniRect(game, W, H) {
+    if (!game.explore.length) return null;
+    const mw = game.map.W, mh = game.map.H, sc = Math.max(0.4, Math.min(0.85, W * 0.36 / mw, H * 0.25 / mh));
+    const w = Math.round(mw * sc);
+    return { x: W - w - 4, y: 42, w, h: Math.round(mh * sc), sc };           // canto superior direito, abaixo dos botões
+  }
+  const msgY = (game, W, H) => { const m = miniRect(game, W, H); return Math.max(60, Math.round(H * 0.2), m ? m.y + m.h + 8 : 0); };
+  function drawMini(ctx, game, W, H, tm) {
+    const m = miniRect(game, W, H);
+    if (!m) return;
+    if (!R.mapCv) R.mapCv = buildMapCv(game);
+    const kr = game.role === 'killer';
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(m.x - 1, m.y - 1, m.w + 2, m.h + 2);
+    ctx.globalAlpha = 0.75; ctx.imageSmoothingEnabled = false; ctx.drawImage(R.mapCv, m.x, m.y, m.w, m.h); ctx.globalAlpha = 1;
+    const X = (x) => Math.round(m.x + x * m.sc), Y = (y) => Math.round(m.y + y * m.sc);
+    game.gens.forEach((o) => { if (kr || o.known) { px(ctx, o.done ? '#7dffa0' : (game.time - (o.noisyT || -99) < 1.5 ? '#ffffff' : '#ffb347'), X(o.cx) - 1, Y(o.cy) - 1, 3, 3); } });
+    if (game.phone) px(ctx, game.phone.state === 'locked' ? '#4a6a8a' : '#7ad0ff', X(game.phone.cx) - 1, Y(game.phone.cy) - 1, 3, 3);
+    for (const v of game.vehicles) if (v.state !== 'gone') px(ctx, v.kind === 'car' ? '#c9a0ff' : '#4aa3e8', X(v.cx) - 1, Y(v.cy) - 1, 3, 3);
+    px(ctx, game.door.opened ? '#7dffa0' : '#ffd23f', X(game.door.cx) - 2, Y(0), 4, 2);
+    if (kr) for (const q of game.pings) if (game.time - q.t < 6 && Math.floor(tm * 4) % 2) px(ctx, '#ff4d4d', X(q.x) - 1, Y(q.y) - 1, 3, 3);
+    const me = game.pl;
+    if (Math.floor(tm * 3) % 2 || true) { px(ctx, '#000', X(me.x) - 2, Y(me.y) - 2, 5, 5); px(ctx, '#ff4d4d', X(me.x) - 1, Y(me.y) - 1, 3, 3); }
+  }
   function drawMap(ctx, game, W, H, tm) {
     if (!R.mapCv) R.mapCv = buildMapCv(game);
     const mw = game.map.W, mh = game.map.H;
@@ -1053,5 +1104,5 @@
 
   function reset() { R.staticCv = null; R.seen = null; R.mapCv = null; }
 
-  DP.render = { uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
+  DP.render = { uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawMini, miniRect, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -34,9 +34,10 @@ Princípios herdados do protótipo anterior:
 | 10 | **Carro e Barco** | 6 peças espalhadas (bateria, chave e combustível do carro; hélice, chave e combustível do barco), carregar 1 peça, instalar segurando AGIR (carro 35 s/peça, barco 40 s/peça), ligar o motor (10 s) ou empurrar o barco (15 s), embarcar (2 lugares) e partir; assassino **sabota** (tira a última peça); bots se dividem entre polícia, carro e barco. Correção de um bug antigo: o campo de destino dos bots era compartilhado. |
 | 11 | **Ajuste fino** | Fusível 45 s, 3 golpes e 20 s de vantagem no acampamento, assassino-IA fácil 12% mais lento, modos da sala (partida / treino / treino na arena), telemetria por rota, legenda e botões da sala nas telas pequenas. |
 | 12 | **Consolidação (v0.1)** | Mapa de campo também para o assassino, viatura da polícia, tela de fim com a rota usada, dicas de pausa, README/Playbook revisados, lista de pendências. |
+| 12.1 | **Playtest 2** | Feedback do assassino no mapa grande: minimapa, visão maior, bots mais lentos, stealth menos lento, árvores sem "grudar", **armários** para se esconder, assassino-jogador nasce perto. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
-Marcos de qualidade: **226 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
+Marcos de qualidade: **242 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
 
 ## 3. Arquitetura (resumo)
 
@@ -464,9 +465,29 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 | Bots com sentidos humanos, exploração, rotas | ✅ (sem trapaças de visão; exceção declarada do assassino-IA) |
 | Tempos maiores (fusível 45 s, peças 35/40 s, polícia 150 s) | ✅ |
 | Dificuldade, telemetria, lobby com modos | ✅ |
-| Testes automáticos | ✅ 226 checagens, ~30 s |
+| Testes automáticos | ✅ 242 checagens, ~30 s |
 | Matar o assassino | ⛔ fora da v0.1 (protótipo à parte) |
 
 **Como jogar uma partida típica (bots + você, sobrevivente):** abra o mapa (M), vá às cabanas, segure E nos geradores (acerte os skill checks com Espaço), pegue o rádio se vir um (Q liga), se achar peças leve-as ao carro (estacionamento) ou ao barco (cais). Com 5 geradores a energia liga: ligue no telefone, resista ~2,5 min e corra para o portão quando a polícia abrir.
 
 **Resumo numérico final (mesmos laboratórios da 11.5):** equipe de bots sem assassino ~405 s; assassino justo vs bots 558 s com 5/8 vitórias do assassino; assassino-IA vs "jogador-bot" normal ~290 s com 4/16 fugas; desempenho: 0,1 ms/quadro de simulação (média) e 60 fps no navegador sem placa de vídeo.
+
+### 11.7 Playtest 2 (assassino no mapa grande) — feedback e o que mudou
+
+**O que a pessoa disse (primeira partida como assassino, no celular):** o mapa enorme é ótimo ("muito mais suspense"), mas: (1) o assassino não sabia onde ficam geradores e rotas; (2) a espreita deixa lento demais enquanto os bots fazem geradores rápido demais; (3) o assassino enxerga muito mal; (4) no celular "bate em algo" o tempo todo; (5) faltam armários para se esconder; (6) os bots "não quiseram fugir". Ainda não jogou de sobrevivente.
+
+| Queixa | Causa | Mudança |
+|---|---|---|
+| Não sabia onde estavam as coisas | O mapa existia (M), mas ninguém o abre por conta própria; no celular o botão ficava pequeno | **Minimapa permanente** no canto superior direito (toque nele ou M abre o grande): geradores (todos, para o assassino; só os achados, para o sobrevivente), telefone, carro, barco, portão, você e, para o assassino, os barulhos recentes piscando. A mensagem inicial do assassino explica o minimapa. O assassino agora também guarda o progresso dos geradores que viu (`genMem` também para o jogador). |
+| Espreita lenta | `STEALTH_SPEED` 0,6 | 0,8; energia dura ~14 s (antes ~10 s). |
+| Bots rápidos demais | Tarefas iguais às do jogo sobrevivente | `KILLER_TASK` 1,5: com assassino-jogador todos os tempos dos bots ×1,5 (fusível ≈ 68 s). |
+| Visão ruim | Mesmo raio/cone da IA (7,5 / 12) num mapa de 144×96 | `VIS_KP`: raio 10, cone 18, abertura 0,72 (só para o assassino-jogador; a IA continua com `VIS_K`). Velocidade no acampamento 5,1 (antes 4,75). O assassino-jogador nasce a ~16 tiles da fogueira (a IA continua nascendo longe). |
+| Bate em tudo | Árvore = tile quadrado sólido; floresta densa e túneis de 1 tile | Árvore agora tem **tronco redondo** (`TREE_R` 0,45: o corpo desliza nas quinas); densidade ~30% menor; túneis de conexão de 2 tiles; caixotes pela metade. |
+| Sem armários | Não existia | **Armários** (T_LOCKER): 1–2 por cabana, 13–17 por mapa. Entrar: segurar AGIR 0,6 s de frente para ele; dentro, o sobrevivente é invisível, silencioso e não é atacado; E ou mover sai. O assassino abre (E, ~1 s): quem estiver dentro é arrancado e **leva um golpe**; o assassino-IA vai direto ao armário onde viu o alvo entrar e confere armários perto do último ponto onde perdeu a pista (70% de chance por parada). Bots: alguns (`hideLike < 0,7`) se escondem quando perdem o assassino de vista com ele perto; saem depois de 8–18 s (cooldown de 30 s). |
+| Bots não fugiram | Investigado: quando **veem** o assassino, 99% fogem (691 de 695 amostras). Com espreita (visto só a 3,5 tiles, ruído ×0,25) e vista curta eles só percebem quando já é tarde — é a paridade de informação funcionando | Sem mudança de regra; o armário dá uma saída a mais, e a espreita mais rápida faz o assassino chegar antes de ser notado... mais ou menos. A conferir com mais partidas. |
+
+**Impasses**
+56. **Bot preso para sempre no mapa grande (1 de 8 partidas não terminava).** Ao arredondar o tronco com `TREE_R` 0,4, o corpo podia ficar no canto de um tile de árvore (o tile "sólido" para o bot), e o campo de navegação o empurrava para atravessar a árvore. Solução: `TREE_R` 0,45 (raio do corpo + tronco cobrem o tile inteiro; ninguém fica dentro de um tile sólido) e, por segurança, `steer()` tira o bot de um tile sólido para o vizinho livre mais próximo.
+57. **Bot "assustado" para sempre por um assassino parado.** No teste com assassino imóvel, um bot entrava em fuga, chegava ao destino e ficava. Solução: um assassino parado a mais de 3,5 tiles não dispara a fuga.
+58. **Armário sobrescrito pelo gerador da cabana.** Os armários eram colocados antes dos geradores; o gerador caía no mesmo tile (teste de 12 sementes). Solução: gerar os armários depois dos geradores e evitar vizinhança de gerador/porta/janela.
+59. **Teste de energia da espreita** assumia drenagem de ~10 s; a conta real é `DRAIN` líquido (0,07/s ≈ 14 s). O teste foi corrigido para o valor novo.

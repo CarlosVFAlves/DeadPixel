@@ -16,6 +16,9 @@ Inspirado em *Dead by Daylight* e *Friday the 13th* (só na ideia: nomes e cená
 
 Cada partida gera um mapa novo por **semente**: estrada e estacionamento ao norte (com o **portão** de saída), a **fogueira** no centro, ~10 **cabanas** (4 modelos, espelhadas), **muros com vão** e caixotes, um **lago** com **cais** a leste e **floresta densa** em volta (árvores bloqueiam a vista; água não). São 36+ pallets, 20 janelas e 8 geradores (5 dentro de cabanas, 3 ao ar livre); 5 deles ligam o portão.
 - Ninguém sabe onde ficam os geradores: **a equipe descobre vendo**. Os bots também **exploram** (cabanas primeiro) e só escolhem um gerador depois de o ter visto. Pressione **M** (ou o botão **MAPA**) para ver o mapa: o que já foi visitado, os geradores **achados** (laranja; verde = pronto), o portão e você.
+- **Minimapa** no canto superior direito (toque nele ou tecla `M` para o mapa grande). Para o assassino ele mostra todos os geradores (com o progresso dos que já viu), telefone, carro, barco e os barulhos recentes.
+- **Armários** dentro das cabanas: segure AGIR de frente para um para se esconder (ninguém vê nem ouve você); AGIR ou mover sai. O assassino pode abrir armários (AGIR, ~1 s): quem estiver dentro leva um golpe.
+- Árvores têm tronco redondo (dá para passar rente). Com assassino-jogador, os bots trabalham mais devagar e o assassino enxerga mais longe e nasce perto do acampamento.
 - Com o portão liberado, uma seta verde na borda da tela aponta a **saída**.
 - **Rota da polícia**: 5 geradores ligam a energia → vá ao **telefone** (guarita ao lado da estrada) e segure AGIR ~30 s → a polícia chega em ~2 min e **abre o portão por 2 min**: corra para ele. O assassino pode chutar o telefone e vai vigiar o telefone e o portão. Sem sair a tempo, ela vai embora e é preciso ligar de novo.
 - **Rota do carro e do barco**: 6 peças espalhadas pelo mapa (bateria, chave e combustível do carro; hélice, chave e combustível do barco; a maioria dentro de cabanas). Pegue **uma por vez** (segure E), leve ao veículo e **instale** segurando E (35–40 s). Com as três: ligue o motor (carro, 10 s) ou empurre o barco (15 s) e **entre** (2 lugares). O assassino pode **sabotar** (tira a última peça): proteja o veículo. O carro está no estacionamento; o barco, na ponta do cais.
@@ -62,7 +65,7 @@ Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celula
 | **RÁDIO** (aparece ao pegar) | **Q** | liga/desliga o rádio detector (3 faixas de proximidade do assassino; ele não aparece se estiver em espreita de longe) |
 | II | P / Esc | pausar |
 | — | R | reiniciar |
-| botão **MAPA** | **M** ou **Tab** | abre/fecha o mapa de campo |
+| botão **MAPA** ou o minimapa | **M** ou **Tab** | abre/fecha o mapa de campo |
 | — | N | liga/desliga som |
 
 Modos: **JOGAR** (2 acertos e cai; nada volta) e **TREINO** (ninguém morre; pallets e janelas voltam sozinhos, para repetir as mecânicas à vontade).

@@ -78,6 +78,8 @@
         if (game && game.s.tool) { const r3 = Math.round(r * 0.62); list.push({ id: 'radio', label: 'RÁDIO', round: true, x: W - 2 * r - 8 - 2 * r2 - 6 - 2 * r3 - 5, y: H - 2 * r3 - 10, w: 2 * r3, h: 2 * r3, active: !!game.s.tool.on, hot: '#9bd3f0' }); }
       }
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
+      const mr = game && DP.render.miniRect(game, W, H);
+      if (mr && !showMap) list.push({ id: 'map', ghost: true, x: mr.x, y: mr.y, w: mr.w, h: mr.h });
       list.push({ id: 'map', label: 'MAPA', x: W - 22 - 4 - 30, y: 24, w: 30, h: 13, color: '#ffd23f', sel: showMap });
       if (game && game.training) list.push({ id: 'vision', label: 'VER TUDO', x: W - 22 - 4 - 30 - 4 - 52, y: 24, w: 52, h: 13, color: game.fullVision ? '#7dffa0' : '#7ad0ff', sel: !!game.fullVision });
     } else if (state === 'pause') {
@@ -322,6 +324,7 @@
       DP.render.drawWorld(ctx, game, W, H, tm);
       DP.render.drawHUD(ctx, game, W, H, tm);
       if (showMap && state === 'play') DP.render.drawMap(ctx, game, W, H, tm);
+      else if (state === 'play' || state === 'pause') DP.render.drawMini(ctx, game, W, H, tm);
       DP.render.drawSkill(ctx, game, W, H, tm);
       if (state === 'over') DP.render.drawOver(ctx, game, W, H, tm, best, newBest, lastReward);
       else if (game.over) DP.render.overlay(ctx, W, H, Math.min(0.6, game.overT * 0.5));
