@@ -91,6 +91,7 @@
     const door = { tx: 70, ty: 0, w: 2 };
     for (let x = 0; x < 2; x++) t[idx(door.tx + x, 0)] = T_GATE;
     t[idx(69, 0)] = T_WALL; t[idx(72, 0)] = T_WALL;
+    for (let x = 69; x <= 72; x++) { t[idx(x, 1)] = T_FLOOR; ground[idx(x, 1)] = G_DIRT; }          // a estrada chega até o portão
     pois.push({ kind: 'gate', x: 71, y: 2.5, r: 6 });
     pois.push({ kind: 'parking', x: 71, y: 10.5, r: 12 });
     pois.push({ kind: 'plaza', x: PLAZA.x + 0.5, y: PLAZA.y + 0.5, r: 9 });
@@ -226,6 +227,13 @@
     }
     for (const g of gens) { t[idx(g.tx, g.ty)] = T_GEN; }
 
+    // ---------- telefone (guarita ao lado da estrada) ----------
+    const phone = { tx: 75, ty: 30 };
+    clearRect(phone.tx - 2, phone.ty - 2, 5, 5, G_DIRT);
+    mark(phone.tx - 2, phone.ty - 2, 5, 5);
+    t[idx(phone.tx, phone.ty)] = T_GEN;
+    pois.push({ kind: 'phone', x: phone.tx + 0.5, y: phone.ty + 0.5, r: 5 });
+
     // ---------- pontos de partida ----------
     const sp = [[-6, -3], [6, -3], [-5, 4], [5, 4]].map((o) => ({ x: PLAZA.x + o[0] + 0.5, y: PLAZA.y + o[1] + 0.5 }));
     const kc = pick([[20, 84], [26, 88]]);
@@ -271,7 +279,7 @@
       if (t[s0] === T_TREE) t[s0] = T_FLOOR;
     }
     const pts = keys.concat(sp.map((p) => ({ x: Math.floor(p.x), y: Math.floor(p.y) })), [{ x: Math.floor(spawnKiller.x), y: Math.floor(spawnKiller.y) }, { x: Math.floor(dockEnd.x), y: Math.floor(dockEnd.y) }]);
-    for (const g of gens) for (const d of [[0, 1], [1, 0], [-1, 0], [0, -1]]) { const x = g.tx + d[0], y = g.ty + d[1]; if (t[idx(x, y)] === T_FLOOR || t[idx(x, y)] === T_TREE) { pts.push({ x, y }); break; } }
+    for (const g of gens.concat([phone])) for (const d of [[0, 1], [1, 0], [-1, 0], [0, -1]]) { const x = g.tx + d[0], y = g.ty + d[1]; if (t[idx(x, y)] === T_FLOOR || t[idx(x, y)] === T_TREE) { pts.push({ x, y }); break; } }
     flood(root0);
     for (const p of pts) { if (!seen[idx(p.x, p.y)]) { carveTo(p.x, p.y); flood(root0); } }
     // buracos isolados viram mata
@@ -304,7 +312,7 @@
     explore.forEach((e, i) => { e.id = i; });
 
     return {
-      kind: 'camp', W, H, t, ground, indoor, pallets, gens, door, windows, NEED: 5,
+      kind: 'camp', W, H, t, ground, indoor, pallets, gens, phone, door, windows, NEED: 5,
       itemSpots, radios: 4, pois, explore, lake: LAKE, dock: { x: dockX, y: dockY, endX: dockEnd.x, endY: dockEnd.y },
       cabins: specs.map((s) => ({ x: s.x, y: s.y, w: s.m.w, h: s.m.h, id: s.n })),
       spawnSurvivors: sp, spawnKiller

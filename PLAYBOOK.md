@@ -30,6 +30,7 @@ Princípios herdados do protótipo anterior:
 | 6 | **Visão e paridade** | Névoa de guerra (raio + cone de lanterna + memória), bots e assassino-IA com os mesmos sentidos de uma pessoa (sem trapaças), seletor de dificuldade, tabela de tempos `ROUTES`, interruptor de visão no treino. |
 | 7 | **Itens, rádio e stealth** | Sistema genérico de itens no chão (segurar E para pegar), **rádio detector** (pilha de 120 s, 3 faixas de proximidade, sem direção), **stealth do assassino** (Shift / botão ESPR., barra de energia, mais lento e silencioso, invisível ao rádio), bots que usam o rádio. |
 | 8 | **Mapa grande** | `js/camp.js`: acampamento 144×96 gerado por semente (floresta, lago + cais, cabanas, estrada, portão), conectividade garantida; navegação otimizada (fila em arrays tipados, busca limitada); equipe **descobre** geradores e bots **exploram**; **mapa de campo** (M); seta para a saída. |
+| 9 | **Polícia** | Telefone ao lado da estrada (liberado pela energia: 5 de 8 geradores), segurar AGIR 30 s liga, polícia chega em 150 s e **abre o portão por 120 s**; sem sair a tempo, ela vai embora e é preciso ligar de novo. Assassino chuta o telefone e vigia telefone/portão; bots ligam, esperam perto do estacionamento e correm quando abre. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
 Marcos de qualidade: **126 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
@@ -351,7 +352,7 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 **Números (medidos em Node, 4 bots + assassino justo, 60 quadros/s)**
 | Medida | Antes das otimizações (144×96) | Depois |
 |---|---|---|
-| Dijkstra no mapa inteiro | ~3,4 ms | ~1,5 ms (heap tipado, entradas velhas ignoradas) |
+| Dijkstra no mapa inteiro | ~3,4 ms | ~1,25 ms (heap tipado, entradas velhas ignoradas) |
 | Média por quadro (partida inteira) | 0,17–0,36 ms | 0,07–0,13 ms |
 | Pico por quadro (fora o 1º quadro, que inclui a compilação JIT) | 26–60 ms | ≤ 8 ms |
 | Geração do mapa | — | 46 ms no pior caso (12 sementes) |
@@ -366,3 +367,21 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 - O assassino justo ainda vence muito rápido (4 mortos em 2–4 min na maior parte das sementes): com o mapa grande a busca é mais lenta, mas os bots ainda ficam parados consertando. Calibrar na etapa 11 junto com os tempos de reparo (fusível 45 s).
 - O assassino-IA **conhece** a posição dos geradores (ele é o "dono" do acampamento); os bots só conhecem o que viram. Assimetria intencional.
 - Árvores são tiles sólidos de 1×1; o visual é de "blocos de mata" (legível, mas rígido). Pode melhorar na fase de arte.
+\n
+### 11.3 Etapa 9 entregue: rota da polícia
+
+**Fluxo (mapa grande)**
+1. **Energia**: 5 de 8 geradores → `g.door.powered` (agora significa "energia") e o telefone passa de `locked` para `ready`. O portão **não** abre só com a energia (na arena continua o comportamento antigo: segurar AGIR na porta).
+2. **Ligar**: segurar AGIR no telefone por `ROUTES.phone` (30 s × `diff.time`; mais gente no mesmo telefone rende ×0,8 por pessoa extra, como nos geradores). Faz barulho (`NOISE_PHONE` 11) e a chamada **denuncia** a posição ao assassino. Sem skill check nesta versão.
+3. **Esperar**: `coming` com contagem `ROUTES.policeEta` (150 s) visível a todos (HUD "POLÍCIA EM m:ss").
+4. **Chegada**: `here`: o portão abre (animação existente) por `ROUTES.policeWindow` (120 s); quem chegar à linha do portão escapa (mesma regra da porta antiga).
+5. **Fim da janela**: sem ninguém sair, a polícia vai embora, o portão fecha e o telefone volta a `ready` com progresso 0.
+- O assassino pode **chutar** o telefone enquanto está em `ready` com progresso (−15%), igual aos geradores; o assassino-IA patrulha o telefone com energia ligada e o **portão** enquanto a polícia não chega.
+- Bots: com energia, vão ao telefone; chamada feita, esperam num ponto de encontro do estacionamento (um por bot, espalhados); com o portão aberto vão correndo.
+
+**Medida (assassino parado, 4 bots, fusível 20 s):** energia aos 172–223 s, chamada aos 189–245 s, chegada ~150 s depois, todos fora por volta de **340–400 s**. Com fusível de 45 s (etapa 11) a partida passa de ~10 min sem interferência, dentro da meta.
+
+**Impasses**
+46. **Bots chegavam ao portão e não escapavam.** A estrada parava na linha 2 (a borda de floresta de 2 tiles impedia o desenho da linha 1), e a regra de saída exige `y < 1,7`. Solução: o gerador de mapa abre explicitamente a linha 1 sob o portão. O teste "3/3 equipes de bots escapam" pegou o problema.
+47. **Teste não chegava ao gerador** (a posição "1 tile à esquerda" caía numa árvore/caixote). Solução: o teste escolhe o primeiro vizinho livre.
+48. **HUD:** a linha "POLÍCIA EM…" ficou na altura das mensagens centrais; as mensagens desceram (`y ≥ 60`) e rádio/espreita foram para a linha de baixo quando há telefone.

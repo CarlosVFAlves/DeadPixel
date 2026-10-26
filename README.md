@@ -15,6 +15,7 @@ Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
 Cada partida gera um mapa novo por **semente**: estrada e estacionamento ao norte (com o **portão** de saída), a **fogueira** no centro, ~10 **cabanas** (4 modelos, espelhadas), **muros com vão** e caixotes, um **lago** com **cais** a leste e **floresta densa** em volta (árvores bloqueiam a vista; água não). São 36+ pallets, 20 janelas e 8 geradores (5 dentro de cabanas, 3 ao ar livre); 5 deles ligam o portão.
 - Ninguém sabe onde ficam os geradores: **a equipe descobre vendo**. Os bots também **exploram** (cabanas primeiro) e só escolhem um gerador depois de o ter visto. Pressione **M** (ou o botão **MAPA**) para ver o mapa: o que já foi visitado, os geradores **achados** (laranja; verde = pronto), o portão e você.
 - Com o portão liberado, uma seta verde na borda da tela aponta a **saída**.
+- **Rota da polícia**: 5 geradores ligam a energia → vá ao **telefone** (guarita ao lado da estrada) e segure AGIR ~30 s → a polícia chega em ~2 min e **abre o portão por 2 min**: corra para ele. O assassino pode chutar o telefone e vai vigiar o telefone e o portão. Sem sair a tempo, ela vai embora e é preciso ligar de novo.
 - O mapa antigo de 48×32 continua como `map: 'arena'` (usado nos testes).
 
 ## Visão curta (névoa de guerra)

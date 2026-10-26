@@ -878,5 +878,77 @@ console.log('mapa grande');
   ok(!g.canSee({ x: tx - 1.5, y: ty + 0.5, face: 0 }, tx + 3.5, ty + 0.5) || true, 'checagem de visão roda sobre árvores');
 }
 
+// ---------- 23. rota da polícia (etapa 9) ----------
+console.log('polícia');
+{
+  const mk = (seed, o) => DP.createGameAny(Object.assign({ map: 'camp', rng: seeded(seed), bots: 0, training: true }, o));
+  const g = mk(31);
+  ok(g.phone && g.phone.state === 'locked' && g.solid(g.phone.tx, g.phone.ty), 'o telefone existe, é sólido e começa bloqueado (sem energia)');
+  ok(g.map.pallets.length > 30 && g.map.phone.tx === 75, 'o telefone fica ao lado da estrada');
+  g.k.state = 'intro'; g.k.t = -999; g.s.skillCD = 999;
+  g.s.x = g.phone.cx - 1; g.s.y = g.phone.cy; g.update(1 / 60, {});
+  ok(!g.interact || g.interact.type !== 'phone', 'sem energia não dá para usar o telefone');
+  // liga a energia: 5 geradores quase prontos, um depois do outro
+  for (let i = 0; i < 5; i++) {
+    const o = g.gens[i]; o.progress = 0.999;
+    const nb = [[-1, 0], [1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !g.solid(o.tx + dx, o.ty + dy));
+    g.s.x = o.cx + nb[0]; g.s.y = o.cy + nb[1]; g.s.face = 0;
+    for (let n = 0; n < 6 && !o.done; n++) g.update(1 / 60, { act: true });
+  }
+  ok(g.gensDone === 5 && g.door.powered && g.phone.state === 'ready', 'cinco geradores = energia ligada e telefone liberado');
+  ok(!g.door.opened, 'o portão continua fechado: a energia não abre a saída no mapa grande');
+  const pnb = [[-1, 0], [1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !g.solid(g.phone.tx + dx, g.phone.ty + dy));
+  g.s.x = g.phone.cx + pnb[0]; g.s.y = g.phone.cy + pnb[1]; g.s.face = 0;
+  g.update(1 / 60, {});
+  ok(g.interact && g.interact.type === 'phone', 'com energia, perto do telefone há ação de ligar');
+  runFor(g, 10, { act: true });
+  ok(g.phone.progress > 0.3 && g.phone.progress < 0.36, `ligar leva ~30 s (10 s = ${(g.phone.progress * 100).toFixed(0)}%)`);
+  ok(g.s.noise >= g.cfg.NOISE_PHONE - 0.01, 'a chamada faz barulho (denuncia a posição)');
+  runFor(g, 21, { act: true });
+  ok(g.phone.state === 'coming' && g.phone.calls === 1, 'a chamada termina e a polícia está a caminho');
+  const eta0 = g.phone.eta;
+  runFor(g, 50, {});
+  ok(Math.abs((eta0 - g.phone.eta) - 50) < 0.1 && !g.door.opened, 'a contagem da chegada anda e o portão segue fechado');
+  runFor(g, 100.5, {});
+  ok(g.phone.state === 'here' && g.door.opened, 'a polícia chega: o portão abre');
+  g.s.x = 71; g.s.y = 3.0; runFor(g, 1.5, { ay: -1 });
+  ok(g.s.escaped, 'quem atravessa o portão aberto escapa');
+  const g2 = mk(32);
+  g2.k.state = 'intro'; g2.k.t = -999; g2.s.skillCD = 999;
+  g2.phone.state = 'coming'; g2.phone.eta = 0.2; g2.door.powered = true;
+  runFor(g2, 0.5, {});
+  ok(g2.phone.state === 'here', 'chegada no fim da contagem');
+  runFor(g2, 121, {});
+  ok(g2.phone.state === 'ready' && g2.phone.progress === 0 && !g2.door.opened, 'a polícia vai embora depois da janela: o portão fecha e é preciso ligar de novo');
+}
+{
+  // assassino: chutar o telefone desfaz parte da chamada; o assassino-IA patrulha o telefone e depois o portão
+  const g = DP.createGameAny({ map: 'camp', rng: seeded(33), role: 'killer', bots: 0, training: true });
+  g.door.powered = true; g.phone.state = 'ready'; g.phone.progress = 0.5;
+  g.k.x = g.phone.cx - 1.2; g.k.y = g.phone.cy; g.k.state = 'chase';
+  g.update(1 / 60, {});
+  ok(g.kInteract && g.kInteract.type === 'kick' && g.kInteract.obj === g.phone, 'assassino pode chutar o telefone enquanto há progresso');
+  g.update(1 / 60, { actPress: true });
+  ok(Math.abs(g.phone.progress - (0.5 - g.cfg.KICK)) < 1e-6, 'chutar o telefone reduz a chamada');
+  const a = DP.createGameAny({ map: 'camp', rng: seeded(34), role: 'survivor', training: true });
+  a.door.powered = true; a.phone.state = 'ready';
+  a.k.goal = null; a.k.state = 'chase'; a.k.aware = 'patrol'; a.s.x = 3; a.s.y = 3; a.s.skillCD = 999;
+  let goalPhone = false; for (let i = 0; i < 30; i++) { a.update(1 / 60, {}); if (a.k.goal === a.phone) goalPhone = true; }
+  ok(goalPhone, 'assassino-IA vai vigiar o telefone quando há energia');
+  a.phone.state = 'coming'; a.k.goal = null;
+  let goalGate = false; for (let i = 0; i < 30; i++) { a.update(1 / 60, {}); if (a.k.goal === a.door) goalGate = true; }
+  ok(goalGate, 'e vigia o portão enquanto a polícia não chega');
+}
+{
+  // equipe de bots sem assassino: liga a energia, chama a polícia e todos escapam pelo portão
+  let allOut = 0, calls = 0, t0 = 0;
+  for (let seed = 1; seed <= 3; seed++) {
+    const g = DP.createGameAny({ map: 'camp', rng: seeded(seed * 7), role: 'killer' });
+    for (let i = 0; i < 60 * 800 && !g.over; i++) g.update(1 / 60, {});
+    if (g.escapedCount === 4) allOut++; calls += g.phone.calls; t0 += g.time;
+  }
+  ok(allOut === 3 && calls === 3, `3/3 equipes de bots escapam pela polícia sem ninguém atrapalhando (média ${(t0 / 3).toFixed(0)} s, ${calls} chamadas)`);
+}
+
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
 process.exit(fails ? 1 : 0);

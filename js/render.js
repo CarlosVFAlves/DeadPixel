@@ -360,6 +360,22 @@
       px(ctx, '#ffb347', X + 2, Y - 3, Math.round(o.progress * 12), 1);
     }
   }
+  function drawPhone(ctx, o, game, tm) {
+    const X = o.tx * TS, Y = o.ty * TS;
+    const working = game.survivors.some((v) => v.acting && v.acting.obj === o);
+    const sh = working ? (Math.floor(tm * 30) % 2) : 0;
+    px(ctx, 'rgba(0,0,0,.4)', X + 2, Y + 13, 13, 3);
+    px(ctx, '#162a40', X + 3 + sh, Y - 2, 10, 15);                      // cabine
+    px(ctx, '#2f5d8a', X + 4 + sh, Y - 1, 8, 13);
+    px(ctx, '#7fb6e6', X + 4 + sh, Y - 1, 8, 2);                         // teto
+    px(ctx, '#0b0f16', X + 5 + sh, Y + 2, 6, 5);                         // visor
+    px(ctx, '#cfe8ff', X + 6 + sh, Y + 3, 4, 1);
+    px(ctx, '#e8e6ef', X + 7 + sh, Y + 8, 2, 3);                         // fone
+    const lit = o.state === 'ready' ? (Math.floor(tm * 2) % 2 ? '#ffd23f' : '#7a6420') : o.state === 'locked' ? '#3a3f4a' : o.state === 'here' ? '#7dffa0' : (Math.floor(tm * 4) % 2 ? '#ff4d4d' : '#4d7bff');
+    px(ctx, lit, X + 7 + sh, Y - 3, 2, 2);
+    if (working) for (let i = 0; i < 3; i++) px(ctx, '#ffe27a', X + 3 + ((Math.random() * 11) | 0), Y + 1 + ((Math.random() * 6) | 0) - 2, 1, 1);
+    if (o.state === 'ready' && o.progress > 0) { px(ctx, '#000', X + 1, Y - 7, 14, 3); px(ctx, '#7ad0ff', X + 2, Y - 6, Math.round(o.progress * 12), 1); }
+  }
   // janela: 'h' = em parede horizontal (vidro atravessa x); 'v' = em parede vertical
   const FR = '#7a5530', FRD = '#4d3420', GL = '#a9dcf2', GLD = '#6fb4dc', DARK = '#0d0d13';
   function drawWindow(ctx, w, game, tm) {
@@ -601,6 +617,7 @@
     const list = [];
     for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.nearList.some((n) => n.pal === p) ? tm : 0) });
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
+    if (game.phone) list.push({ y: game.phone.cy, f: () => drawPhone(ctx, game.phone, game, tm) });
     for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
     for (const v of game.survivors) if (!v.dead && !v.escaped && (v === pl || vis(v.x, v.y))) list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) });
     if (game.k === pl || full || game.canSeeKiller(pl)) list.push({ y: game.k.y, f: () => { ctx.globalAlpha = game.k.stealth ? 0.55 : 1; drawKiller(ctx, game.k, game, tm); ctx.globalAlpha = 1; } });
@@ -670,17 +687,25 @@
     drawTeam(ctx, game, W);
     if (!ka && s.tool) {                                                       // rádio: 3 faixas de proximidade + pilha
       const on = s.tool.on, col = ['#4d4d59', '#7dffa0', '#ffd23f', '#ff4d4d'][on ? s.det : 0];
-      text(ctx, 'RÁDIO', 4, 44, on ? '#cfe8ff' : '#6f6f7c');
-      for (let i = 0; i < 3; i++) px(ctx, on && s.det > i ? col : '#2a2a33', 36 + i * 7, 44, 5, 6);
-      px(ctx, '#2a2a33', 60, 45, 24, 4); px(ctx, s.tool.batt > 20 ? '#7ad0ff' : '#ff9d5c', 61, 46, Math.round(22 * s.tool.batt / game.cfg.RADIO_BATT), 2);
+      const ry = game.phone ? 54 : 44;
+      text(ctx, 'RÁDIO', 4, ry, on ? '#cfe8ff' : '#6f6f7c');
+      for (let i = 0; i < 3; i++) px(ctx, on && s.det > i ? col : '#2a2a33', 36 + i * 7, ry, 5, 6);
+      px(ctx, '#2a2a33', 60, ry + 1, 24, 4); px(ctx, s.tool.batt > 20 ? '#7ad0ff' : '#ff9d5c', 61, ry + 2, Math.round(22 * s.tool.batt / game.cfg.RADIO_BATT), 2);
       if (on && s.det === 3 && Math.floor(tm * 6) % 2) { ctx.fillStyle = 'rgba(255,60,60,.16)'; ctx.fillRect(0, 0, W, H); }
     }
     if (ka) {                                                                  // energia da espreita
       const k = game.k;
-      text(ctx, 'ESPREITA', 4, 44, k.stealth ? '#9bd3f0' : '#8a8a99');
-      px(ctx, '#2a2a33', 52, 45, 30, 4); px(ctx, k.stealth ? '#9bd3f0' : (k.energy < 0.15 ? '#ff9d5c' : '#5d7a8a'), 53, 46, Math.round(28 * k.energy), 2);
+      const ey = game.phone ? 54 : 44;
+      text(ctx, 'ESPREITA', 4, ey, k.stealth ? '#9bd3f0' : '#8a8a99');
+      px(ctx, '#2a2a33', 52, ey + 1, 30, 4); px(ctx, k.stealth ? '#9bd3f0' : (k.energy < 0.15 ? '#ff9d5c' : '#5d7a8a'), 53, ey + 2, Math.round(28 * k.energy), 2);
     }
     const gd = game.door.powered;
+    const ph = game.phone, mmss = (v) => { v = Math.max(0, Math.ceil(v)); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
+    if (ph && gd) {
+      if (ph.state === 'ready') text(ctx, 'TELEFONE ' + Math.round(ph.progress * 100) + '%', 4, 44, '#7ad0ff');
+      else if (ph.state === 'coming') text(ctx, 'POLÍCIA EM ' + mmss(ph.eta), 4, 44, Math.floor(tm * 3) % 2 ? '#ff6b6b' : '#6b8bff');
+      else if (ph.state === 'here') text(ctx, 'PORTÃO ABERTO ' + mmss(ph.win), 4, 44, '#7dffa0');
+    }
     text(ctx, 'GERADORES ' + game.gensDone + '/' + game.need, 4, 14, gd ? '#7dffa0' : '#ffb347');
     text(ctx, 'PALLETS ' + game.standing() + '/' + game.pallets.length, 4, 24, '#e9c07a');
     text(ctx, (ka ? 'TROPEÇOU ' : 'ATORDOADO ') + game.stats.stuns + 'X', 4, 34, ka ? '#ff9d5c' : '#ffd23f');
@@ -689,7 +714,7 @@
     if (game.training) text(ctx, game.fullVision ? 'TREINO: VÊ TUDO' : 'TREINO', W - 4, 14, '#7ad0ff', { align: 'r' });
 
     if (ka) {
-      const y0 = Math.max(46, Math.round(H * 0.2));
+      const y0 = Math.max(60, Math.round(H * 0.2));
       if (game.k.state === 'stumble' || game.k.state === 'stun') {
         const lines = game.k.state === 'stun' ? 'ATORDOADO!' : 'TROPEÇANDO!';
         text(ctx, lines, W / 2, y0, '#ff9d5c', { align: 'c' });
@@ -702,25 +727,26 @@
       }
     } else if (game.k.state === 'intro') {
       const left = Math.ceil(game.cfg.INTRO - game.k.t);
-      text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, Math.max(46, Math.round(H * 0.2)), '#ff5c5c', { align: 'c' });
+      text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, Math.max(60, Math.round(H * 0.2)), '#ff5c5c', { align: 'c' });
       DP.font.wrap(game.explore.length ? 'EXPLORE: ACHE E CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELO PORTÃO. M ABRE O MAPA' : 'CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELA PORTA PRINCIPAL', Math.floor((W - 8) / 6)).forEach((l, i) =>
-        text(ctx, l, W / 2, Math.max(46, Math.round(H * 0.2)) + 10 + i * 9, '#ffb347', { align: 'c' }));
+        text(ctx, l, W / 2, Math.max(60, Math.round(H * 0.2)) + 10 + i * 9, '#ffb347', { align: 'c' }));
     }
-    if (!ka && gd && !game.over && game.explore.length) {                      // seta para o portão liberado
-      const dx = game.door.cx - s.x, dy = game.door.cy - s.y, d = Math.hypot(dx, dy);
+    const arrowTo = !ka && !game.over && game.explore.length ? (game.door.opened ? { x: game.door.cx, y: game.door.cy, label: 'SAÍDA' } : ph && ph.state === 'ready' ? { x: ph.cx, y: ph.cy, label: 'TELEFONE' } : null) : null;
+    if (arrowTo) {                                                              // seta para o portão aberto ou para o telefone
+      const dx = arrowTo.x - s.x, dy = arrowTo.y - s.y, d = Math.hypot(dx, dy);
       if (d > 7) {
         const ax = W / 2 + dx / d * Math.min(W, H) * 0.36, ay = H / 2 + dy / d * Math.min(W, H) * 0.36, an = Math.atan2(dy, dx);
         ctx.save(); ctx.translate(Math.round(ax), Math.round(ay)); ctx.rotate(an);
         ctx.fillStyle = Math.floor(tm * 3) % 2 ? '#7dffa0' : '#3fbf6a'; ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-4, -5); ctx.lineTo(-2, 0); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill();
         ctx.restore();
-        text(ctx, 'SAÍDA ' + Math.round(d), Math.round(ax), Math.round(ay) + 8, '#7dffa0', { align: 'c', shadow: 'rgba(0,0,0,.9)' });
+        text(ctx, arrowTo.label + ' ' + Math.round(d), Math.round(ax), Math.round(ay) + 8, '#7dffa0', { align: 'c', shadow: 'rgba(0,0,0,.9)' });
       }
     }
     if (!(ka && (game.k.state === 'stumble' || game.k.state === 'stun' || game.time < 7)) && gd && game.time % 6 < 3 && !game.over) {
-      DP.font.wrap(ka ? 'PORTA LIBERADA! IMPEÇA A FUGA' : 'PORTA LIBERADA! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
-        text(ctx, l, W / 2, Math.max(46, Math.round(H * 0.2)) + i * 9, '#7dffa0', { align: 'c' }));
+      DP.font.wrap(ph ? (ka ? 'ENERGIA LIGADA! PROTEJA O TELEFONE' : 'ENERGIA LIGADA! LIGUE PARA A POLÍCIA') : ka ? 'PORTA LIBERADA! IMPEÇA A FUGA' : 'PORTA LIBERADA! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
+        text(ctx, l, W / 2, Math.max(60, Math.round(H * 0.2)) + i * 9, '#7dffa0', { align: 'c' }));
     } else if (!ka && game.k.hesitate) {
-      text(ctx, 'ELE HESITA...', W / 2, Math.max(46, Math.round(H * 0.2)), '#ff9d5c', { align: 'c' });
+      text(ctx, 'ELE HESITA...', W / 2, Math.max(60, Math.round(H * 0.2)), '#ff9d5c', { align: 'c' });
     }
   }
 
@@ -769,12 +795,16 @@
       px(ctx, '#000', X(o.cx) - 3, Y(o.cy) - 3, 6, 6); px(ctx, c0, X(o.cx) - 2, Y(o.cy) - 2, 4, 4);
       if (!o.done && o.progress > 0) px(ctx, '#fff', X(o.cx) - 2, Y(o.cy) + 3, Math.max(1, Math.round(4 * o.progress)), 1);
     }
+    if (game.phone) {                                                           // telefone: lugar público (guarita ao lado da estrada)
+      const ph = game.phone;
+      px(ctx, '#000', X(ph.cx) - 3, Y(ph.cy) - 3, 6, 6); px(ctx, ph.state === 'locked' ? '#4a6a8a' : ph.state === 'here' ? '#7dffa0' : '#7ad0ff', X(ph.cx) - 2, Y(ph.cy) - 2, 4, 4);
+    }
     // portão e lugares conhecidos
     const dr = game.door;
     px(ctx, dr.opened ? '#7dffa0' : '#ffd23f', X(dr.cx) - 4, Y(0) - 1, 8, 3);
     for (const p of game.map.pois || []) {
-      const lab = { parking: sc < 3 ? 'ESTAC.' : 'ESTACIONAMENTO', plaza: 'FOGUEIRA', dock: 'CAIS', lake: 'LAGO' }[p.kind];
-      if (lab) text(ctx, lab, X(p.x), Y(p.y) + (p.kind === 'dock' ? 5 : p.kind === 'plaza' ? 12 : -3), '#fff', { align: 'c', shadow: 'rgba(0,0,0,.95)' });
+      const lab = { parking: sc < 3 ? 'ESTAC.' : 'ESTACIONAMENTO', plaza: 'FOGUEIRA', dock: 'CAIS', lake: 'LAGO', phone: 'TELEFONE' }[p.kind];
+      if (lab) text(ctx, lab, X(p.x), Y(p.y) + (p.kind === 'dock' ? 5 : p.kind === 'plaza' ? 12 : p.kind === 'phone' ? 4 : -3), '#fff', { align: 'c', shadow: 'rgba(0,0,0,.95)' });
     }
     // você
     const me = game.pl;

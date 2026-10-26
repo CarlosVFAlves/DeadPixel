@@ -70,7 +70,7 @@
     KICK: 0.15,              // progresso que o assassino destrói ao chutar um gerador
 
     // tempos base (s) das tarefas de rota; multiplicados pela dificuldade (ver createGame)
-    ROUTES: { fuse: 20, door: 3 },
+    ROUTES: { fuse: 20, door: 3, phone: 30, policeEta: 150, policeWindow: 120 },
 
     // visão — a MESMA para pessoas e bots (paridade de informação): raio ambiente + cone de lanterna, com linha de vista
     VIS_S: { r: 6, cone: 11, half: 0.55 },      // sobrevivente
@@ -93,7 +93,7 @@
     TRACK: 2.5,          // segue o rastro por mais tempo depois de perder você
     SEARCH_WAIT: 2.5,
     PATROL_SPEED: 0.88,  // multiplicador de velocidade enquanto patrulha/procura
-    NOISE_MOVE: 3.5, NOISE_REPAIR: 9, NOISE_GATE: 8, NOISE_VAULT: 5,
+    NOISE_MOVE: 3.5, NOISE_REPAIR: 9, NOISE_GATE: 8, NOISE_PHONE: 11, NOISE_VAULT: 5,
     RESPAWN: 8           // só no TREINO: pallets/janelas voltam
   };
 
@@ -190,6 +190,8 @@
       for (let i = 0; i < map.radios && spots.length; i++) { const j = (rnd() * spots.length) | 0; const p0 = spots.splice(j, 1)[0]; spawnItem('radio', p0.x, p0.y); }
     }
     g.spawnItem = spawnItem;
+    // telefone (só no mapa grande): com energia ligada, segurar AGIR liga para a polícia; ela chega depois de um tempo e abre o portão por uma janela
+    g.phone = map.phone ? { tx: map.phone.tx, ty: map.phone.ty, cx: map.phone.tx + 0.5, cy: map.phone.ty + 0.5, progress: 0, state: 'locked', visited: -99, w: 0, eta: 0, win: 0, calls: 0, noisyT: -99 } : null;
     g.door = { tx: map.door.tx, ty: map.door.ty, w: map.door.w, cx: map.door.tx + map.door.w / 2, cy: 0.5, progress: 0, powered: false, opened: false, t: 99, visited: -99 };
 
     const k = g.k;
@@ -539,8 +541,13 @@
         const d = Math.hypot(s.x - o.cx, s.y - o.cy);
         if (d < CFG.GEN_RANGE && d < bd) { bd = d; best = { type: 'gen', obj: o }; }
       }
+      const ph = g.phone;
+      if (ph && ph.state === 'ready') {
+        const d = Math.hypot(s.x - ph.cx, s.y - ph.cy);
+        if (d < CFG.GEN_RANGE && d < bd) { bd = d; best = { type: 'phone', obj: ph }; }
+      }
       const dr = g.door;
-      if (dr.powered && !dr.opened) {
+      if (dr.powered && !dr.opened && !g.phone) {
         const d = Math.hypot(s.x - dr.cx, s.y - dr.cy);
         if (d < CFG.DOOR_RANGE && d < bd) { bd = d; best = { type: 'door', obj: dr }; }
       }
@@ -603,8 +610,33 @@
       alert(o.cx, o.cy);               // a explosão de luz denuncia o gerador
       if (g.gensDone >= g.need && !g.door.powered) {
         g.door.powered = true;
-        popup('PORTA PRINCIPAL LIBERADA!', g.door.cx, 3, '#ffd23f');
-        sfx('gates');
+        if (g.phone) { g.phone.state = 'ready'; popup('ENERGIA LIGADA! USE O TELEFONE', g.phone.cx, g.phone.cy - 2.2, '#ffd23f'); sfx('gates'); }
+        else { popup('PORTA PRINCIPAL LIBERADA!', g.door.cx, 3, '#ffd23f'); sfx('gates'); }
+      }
+    }
+    function callPolice(ph) {
+      ph.state = 'coming'; ph.eta = CFG.ROUTES.policeEta; ph.calls++;
+      for (const v of g.survivors) if (v.acting && v.acting.obj === ph) v.acting = null;
+      popup('A POLÍCIA FOI CHAMADA!', ph.cx, ph.cy - 2.2, '#7ad0ff');
+      sfx('siren', pan(ph.cx)); g.shake = Math.max(g.shake, 2);
+      alert(ph.cx, ph.cy);
+    }
+    function policeTick(dt) {
+      const ph = g.phone;
+      if (!ph) return;
+      if (ph.state === 'coming') {
+        ph.eta -= dt;
+        if (ph.eta <= 0) {
+          ph.state = 'here'; ph.win = CFG.ROUTES.policeWindow;
+          g.door.opened = true; g.door.t = 0; sfx('doorOpen'); sfx('siren');
+          popup('A POLÍCIA CHEGOU! CORRA PARA O PORTÃO', g.door.cx, 4, '#7ad0ff');
+        }
+      } else if (ph.state === 'here') {
+        ph.win -= dt;
+        if (ph.win <= 0) {
+          ph.state = 'ready'; ph.progress = 0; g.door.opened = false; g.door.t = 0;
+          popup('A POLÍCIA FOI EMBORA... LIGUE DE NOVO', g.door.cx, 4, '#ff9d5c');
+        }
       }
     }
     function act(dt) {
@@ -616,6 +648,12 @@
         o.w++;
         if (s.tick <= 0) { s.tick = 0.55; if (s.human || Math.hypot(o.cx - g.pl.x, o.cy - g.pl.y) < 12) sfx('repair', pan(o.cx)); }
         if (o.progress >= 1) finishGen(o);
+      } else if (tg.type === 'phone') {
+        s.noise = CFG.NOISE_PHONE; o.noisyT = g.time;
+        o.progress = Math.min(1, o.progress + dt / routeT('phone') * (o.w === 0 ? 1 : CFG.TEAM_BONUS));
+        o.w++;
+        if (s.tick <= 0) { s.tick = 0.5; sfx('click', pan(o.cx)); }
+        if (o.progress >= 1) callPolice(o);
       } else if (tg.type === 'door') {
         s.noise = CFG.NOISE_GATE;
         o.progress = Math.min(1, o.progress + dt / routeT('door'));
@@ -765,7 +803,7 @@
         if (d < 1.35 && d < bd) { bd = d; best = { type: 'smash', obj: w }; }
       }
       if (best) return best;
-      for (const o of g.gens) {
+      for (const o of g.phone && g.phone.state === 'ready' ? g.gens.concat([g.phone]) : g.gens) {
         if (o.done || o.progress <= 0) continue;
         const d = Math.hypot(k.x - o.cx, k.y - o.cy);
         if (d < 1.7 && d < bd) { bd = d; best = { type: 'kick', obj: o }; }
@@ -1005,7 +1043,7 @@
         gx = o.cx; gy = o.cy;
         if (Math.hypot(k.x - gx, k.y - gy) < 1.7) {
           o.visited = g.time; k.goal = null;
-          if (o.progress > 0 && !o.done && g.gens.includes(o)) { kickGen(o); return; }
+          if (o.progress > 0 && !o.done && (g.gens.includes(o) || o === g.phone)) { kickGen(o); return; }
           k.state = 'recover'; k.t = 0; k.dur = 1.2;
           return;
         }
@@ -1062,7 +1100,8 @@
 
     // próximo gerador (ou a porta) a patrulhar: prefere os que já têm progresso e os que não visitou há pouco
     function pickGoal() {
-      const list = g.door.powered ? [g.door] : g.gens.filter((o) => !o.done);
+      const ph = g.phone;
+      const list = !g.door.powered ? g.gens.filter((o) => !o.done) : ph ? (ph.state === 'ready' ? [ph] : [g.door]) : [g.door];
       if (!list.length) return null;
       const w = list.map((o) => {
         const d = Math.hypot(k.x - o.cx, k.y - o.cy);
@@ -1275,6 +1314,14 @@
       if (ai.fetch && (ai.fetch.holder || s.tool)) ai.fetch = null;
       if (ai.wary > 0 && !fleeing) { out.walk = true; winPass = k0; return out; }          // quieto: não trabalha nem anda
       if (ai.fetch) tg = ai.fetch;
+      else if (g.phone && ai.mode === 'exit') {
+        // energia ligada: telefone; depois de chamar, espera a polícia perto do portão (longe do meio do mapa)
+        if (g.phone.state === 'ready') tg = g.phone;
+        else {
+          tg = { cx: g.door.cx + (s.id - 1.5) * 3.2, cy: 13.5 - (s.id % 2) * 3, rally: true };
+          if (Math.hypot(s.x - tg.cx, s.y - tg.cy) < 1.6) { out.walk = true; winPass = k0; return out; }
+        }
+      }
       else if (ai.mode === 'exit') tg = g.door;
       else {
         if ((!ai.target || !g.gens.includes(ai.target) || ai.target.done) && g.gens.some((o) => o.known && !o.done)) {
@@ -1353,6 +1400,8 @@
       }
 
       for (const o of g.gens) o.w = 0;
+      if (g.phone) g.phone.w = 0;
+      policeTick(dt);
       for (const sv of g.survivors) {
         if (!alive(sv)) continue;
         use(sv);
