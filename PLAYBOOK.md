@@ -35,9 +35,10 @@ Princípios herdados do protótipo anterior:
 | 11 | **Ajuste fino** | Fusível 45 s, 3 golpes e 20 s de vantagem no acampamento, assassino-IA fácil 12% mais lento, modos da sala (partida / treino / treino na arena), telemetria por rota, legenda e botões da sala nas telas pequenas. |
 | 12 | **Consolidação (v0.1)** | Mapa de campo também para o assassino, viatura da polícia, tela de fim com a rota usada, dicas de pausa, README/Playbook revisados, lista de pendências. |
 | 12.1 | **Playtest 2** | Feedback do assassino no mapa grande: minimapa, visão maior, bots mais lentos, stealth menos lento, árvores sem "grudar", **armários** para se esconder, assassino-jogador nasce perto. |
+| 12.2 | **Playtest 2b** | Botões claros (tecla em cada botão, legenda da ação, dica do skill check), tela COMO JOGAR, marcador "você" no minimapa deixa de ser vermelho, correção da saída do armário, armário redesenhado. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
-Marcos de qualidade: **242 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
+Marcos de qualidade: **243 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
 
 ## 3. Arquitetura (resumo)
 
@@ -465,7 +466,7 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 | Bots com sentidos humanos, exploração, rotas | ✅ (sem trapaças de visão; exceção declarada do assassino-IA) |
 | Tempos maiores (fusível 45 s, peças 35/40 s, polícia 150 s) | ✅ |
 | Dificuldade, telemetria, lobby com modos | ✅ |
-| Testes automáticos | ✅ 242 checagens, ~30 s |
+| Testes automáticos | ✅ 243 checagens, ~30 s |
 | Matar o assassino | ⛔ fora da v0.1 (protótipo à parte) |
 
 **Como jogar uma partida típica (bots + você, sobrevivente):** abra o mapa (M), vá às cabanas, segure E nos geradores (acerte os skill checks com Espaço), pegue o rádio se vir um (Q liga), se achar peças leve-as ao carro (estacionamento) ou ao barco (cais). Com 5 geradores a energia liga: ligue no telefone, resista ~2,5 min e corra para o portão quando a polícia abrir.
@@ -491,3 +492,27 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 57. **Bot "assustado" para sempre por um assassino parado.** No teste com assassino imóvel, um bot entrava em fuga, chegava ao destino e ficava. Solução: um assassino parado a mais de 3,5 tiles não dispara a fuga.
 58. **Armário sobrescrito pelo gerador da cabana.** Os armários eram colocados antes dos geradores; o gerador caía no mesmo tile (teste de 12 sementes). Solução: gerar os armários depois dos geradores e evitar vizinhança de gerador/porta/janela.
 59. **Teste de energia da espreita** assumia drenagem de ~10 s; a conta real é `DRAIN` líquido (0,07/s ≈ 14 s). O teste foi corrigido para o valor novo.
+
+### 11.8 Playtest 2b — botões confusos, minimapa "mostrando o assassino", armários "bugados"
+
+**Feedback:** (1) o minimapa dos sobreviventes "mostra o assassino"; (2) armários e minimapa "bugados"; (3) no PC os botões são confusos: não se sabe o que faz o quê nem qual é o do skill check; (4) elogio: o visual atual está bonito; (5) uma imagem de referência de estilo (hospital, lanterna, pixel art mais detalhado) e a pergunta "de quantos bits é isso?" — ver 10.10, nada foi implementado.
+
+| Queixa | Causa real | Mudança |
+|---|---|---|
+| Minimapa "mostra o assassino" | O marcador de **você** era um quadrado vermelho; o único vermelho do mapa lembra o assassino. (Para sobreviventes o minimapa nunca desenhou o assassino: a simulação confirma.) | Sobrevivente: quadrado branco/azul piscante; vermelho só para o assassino-jogador. Legenda explica. |
+| Armário "bugado" | (a) **Sair não funcionava logo após entrar:** a saída exigia 0,6 s dentro (o jogador aperta E de novo em ~0,3 s e nada acontecia); (b) o sprite era um bloco escuro quase invisível; (c) a tela ficava preta demais; (d) a mensagem de introdução (20 s) cobria o aviso "SEGURE E: ESCONDER-SE". | (a) saída liberada após 0,25 s (a entrada é por segurar, a saída por apertar de novo); (b) sprite novo 3/4 com tampo claro, venezianas e puxador, com o rosto aparecendo quando alguém o abre; (c) escurecimento mais leve; (d) a instrução inicial dura só 10 s. A legenda do botão AGIR passa a dizer "SAIR DO ARMÁRIO" quando escondido. |
+| Botões confusos | Rótulos genéricos (AGIR, PALLET) e o skill check sem dica de tecla (Espaço ou E no PC, toque no celular) | **Cada botão mostra sua tecla** (E, ESPAÇO, Q, SHIFT, M, V) para quem usa teclado; o botão AGIR ganha uma **legenda da ação** (CONSERTAR, PEGAR, INSTALAR, LIGAR O MOTOR, ESCONDER-SE, ENTRAR, SOLTAR PEÇA; assassino: QUEBRAR, CHUTAR, SABOTAR, ABRIR ARMÁRIO) e PALLET diz DERRUBAR PALLET quando há um ao alcance; o skill check mostra **"AGORA! APERTE ESPAÇO"** (ou "TOQUE NA TELA") e o círculo também aceita toque. Nova tela **COMO JOGAR** (menu, pausa ou tecla H), com a tecla e o toque lado a lado, em páginas que se adaptam ao tamanho da tela. |
+
+**Impasse 60:** a ajuda estourava em telas estreitas (nove linhas por item). Solução: monta blocos de texto e **pagina pelo espaço disponível** (de 2 a 5 páginas conforme a tela), com teste em 7 tamanhos.
+**Impasse 61:** a dica de teclado só faz sentido para quem usa teclado: `DP.ui.keys` começa ligado em telas sem toque e liga/desliga conforme a última entrada (tecla ou toque).
+
+### 10.10 Referência de estilo: "de quantos bits é isso?" (para discussão, nada implementado)
+
+"Bits" é só um apelido de época; o que muda o visual é (1) **resolução do sprite/tile**, (2) **quantidade de cores/sombreamento** e (3) **iluminação e pós-processamento**.
+- **Hoje:** tiles de 16×16 px, personagem de ~8×16 px, 4 a 8 cores por sprite, cores chapadas: aparência de **8/16 bits (NES–SNES)**.
+- **Na imagem:** personagem de ~40 px de altura (≈2,5× o nosso), tiles de ~32–48 px, centenas de tons por sprite, texturas (rachaduras, sujeira), sombras suaves, **luz dinâmica da lanterna**, vinheta e granulado. É o que se chama hoje de **pixel art "HD" / moderna** (detalhe de sprite na faixa dos 32 bits de PS1/PS2, só que com iluminação de hoje). Não é "mais bits" de cor: é mais **pixels por objeto** e **luz**.
+- **Três caminhos, do mais barato ao mais caro:**
+  1. **Mesma grade de 16 px, mais luz** (1–2 etapas): cone de lanterna suave e colorido, correção de cor, granulado, partículas de poeira, texturas variadas no chão/paredes, sombras projetadas. Mantém tudo o que já funciona e é o que mais aproxima da referência.
+  2. **Tile de 32 px (2×)**: todo o desenho por código (~1.000 linhas de pixel art) precisaria ser refeito com o dobro de detalhe; o mapa estático de 144×96 passaria de 2304×1536 para 4608×3072 px (precisa ser dividido em blocos para não pesar no celular). Dá para fazer, mas é caro e o resultado depende do detalhe que eu consiga "desenhar" em código.
+  3. **Sprites prontos (PNG)** de um artista/pacote: a melhor qualidade, mas quebra a regra "tudo gerado por código" (os arquivos viram dados embutidos no artefato).
+- **Perguntas para decidir:** qual caminho? A regra "tudo por código" pode ser relaxada? A ambientação continua o acampamento ou muda (hospital, como na imagem)? Skins só trocam paleta ou são sprites novos?

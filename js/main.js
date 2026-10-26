@@ -24,7 +24,12 @@
     log = JSON.parse(localStorage.getItem('dp_log') || '[]');
     const dd = localStorage.getItem('dp_diff'); if (['easy', 'normal', 'hard'].includes(dd)) difficulty = dd;
   } catch (e) {}
-  const MENU_STATES = ['menu', 'lobby', 'chars', 'shop'];
+  const MENU_STATES = ['menu', 'lobby', 'chars', 'shop', 'help'];
+  let helpPage = 0, helpFrom = 'menu';
+  // dicas de teclado nos botões: só para quem usa teclado (ou tela sem toque)
+  let touchDevice = false, usedKeys = false;
+  try { touchDevice = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window; } catch (e) {}
+  DP.ui = { keys: !touchDevice };
   let best = 0, fastest = 0, hunt = 0, newBest = false;
   try { best = parseFloat(localStorage.getItem('dp_best') || '0') || 0; fastest = parseFloat(localStorage.getItem('dp_esc') || '0') || 0; hunt = parseFloat(localStorage.getItem('dp_hunt') || '0') || 0; } catch (e) {}
   const fmt = (v) => Math.floor(v / 60) + ':' + String(Math.floor(v % 60)).padStart(2, '0');
@@ -67,26 +72,33 @@
       for (const b of DP.lobby.layout(state, W, H).buttons) list.push(Object.assign({}, b, { label: DP.lobby.labelFor(b, lobbyUI()) }));
     } else if (state === 'play') {
       const r = Math.max(22, Math.min(30, Math.round(Math.min(W, H) * 0.16))), r2 = Math.round(r * 0.8);
+      const kk = DP.ui.keys;
       if (role === 'killer') {
         const close = !!(game && !game.over && game.dist < 2.4 && game.k.state === 'chase');
-        list.push({ id: 'drop', label: 'ATACAR', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: close, hot: '#ff5c5c' });
-        list.push({ id: 'act', label: 'AGIR', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.kInteract), hot: '#ff9d5c' });
-        list.push({ id: 'stealth', label: 'ESPR.', round: true, x: W - 2 * r - 8 - 4 * r2 - 12, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.k.stealth), hot: '#9bd3f0' });
+        const kit = game && game.kInteract;
+        list.push({ id: 'drop', label: 'ATACAR', key: 'ESPAÇO', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: close, hot: '#ff5c5c' });
+        list.push({ id: 'act', label: 'AGIR', key: 'E', cap: kit ? ({ break: 'QUEBRAR PALLET', smash: 'QUEBRAR JANELA', kick: 'CHUTAR GERADOR', sabotage: 'SABOTAR', locker: 'ABRIR ARMÁRIO' }[kit.type] || '') : '', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!kit, hot: '#ff9d5c' });
+        list.push({ id: 'stealth', label: 'ESPR.', key: 'SHIFT', round: true, x: W - 2 * r - 8 - 4 * r2 - 12, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.k.stealth), hot: '#9bd3f0' });
       } else {
-        list.push({ id: 'act', label: 'AGIR', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: !!(game && game.interact) });
-        list.push({ id: 'drop', label: 'PALLET', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.near) });
-        if (game && game.s.tool) { const r3 = Math.round(r * 0.62); list.push({ id: 'radio', label: 'RÁDIO', round: true, x: W - 2 * r - 8 - 2 * r2 - 6 - 2 * r3 - 5, y: H - 2 * r3 - 10, w: 2 * r3, h: 2 * r3, active: !!game.s.tool.on, hot: '#9bd3f0' }); }
+        const sit = game && game.interact, hid = !!(game && game.s.hidden);
+        const capTxt = hid ? 'SAIR DO ARMÁRIO' : sit ? ({ gen: 'CONSERTAR', item: 'PEGAR', door: 'ABRIR PORTA', window: 'ABRIR JANELA', phone: 'LIGAR PARA A POLÍCIA', install: 'INSTALAR PEÇA', start: sit.obj.kind === 'boat' ? 'EMPURRAR BARCO' : 'LIGAR O MOTOR', board: 'ENTRAR', hide: 'ESCONDER-SE' }[sit.type] || '') : (game && game.s.item ? 'SOLTAR PEÇA' : '');
+        list.push({ id: 'act', label: 'AGIR', key: 'E', cap: capTxt, round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: !!sit || hid || !!(game && game.s.item) });
+        list.push({ id: 'drop', label: 'PALLET', key: 'ESPAÇO', cap: game && game.near ? 'DERRUBAR PALLET' : '', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.near) });
+        if (game && game.s.tool) { const r3 = Math.round(r * 0.62); list.push({ id: 'radio', label: 'RÁDIO', key: 'Q', round: true, x: W - 2 * r - 8 - 2 * r2 - 6 - 2 * r3 - 5, y: H - 2 * r3 - 10, w: 2 * r3, h: 2 * r3, active: !!game.s.tool.on, hot: '#9bd3f0' }); }
+        if (game && game.s.skill && !game.s.hidden) list.push({ id: 'skill', ghost: true, x: Math.round(W / 2) - 30, y: Math.round(H / 2) - 46 - 30, w: 60, h: 60 });     // toque no círculo do skill check
       }
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
       const mr = game && DP.render.miniRect(game, W, H);
       if (mr && !showMap) list.push({ id: 'map', ghost: true, x: mr.x, y: mr.y, w: mr.w, h: mr.h });
-      list.push({ id: 'map', label: 'MAPA', x: W - 22 - 4 - 30, y: 24, w: 30, h: 13, color: '#ffd23f', sel: showMap });
-      if (game && game.training) list.push({ id: 'vision', label: 'VER TUDO', x: W - 22 - 4 - 30 - 4 - 52, y: 24, w: 52, h: 13, color: game.fullVision ? '#7dffa0' : '#7ad0ff', sel: !!game.fullVision });
+      const mw = kk ? 38 : 30, vw = kk ? 62 : 52;
+      list.push({ id: 'map', label: kk ? 'MAPA M' : 'MAPA', x: W - 22 - 4 - mw, y: 24, w: mw, h: 13, color: '#ffd23f', sel: showMap });
+      if (game && game.training) list.push({ id: 'vision', label: kk ? 'VER TUDO V' : 'VER TUDO', x: W - 22 - 4 - mw - 4 - vw, y: 24, w: vw, h: 13, color: game.fullVision ? '#7dffa0' : '#7ad0ff', sel: !!game.fullVision });
     } else if (state === 'pause') {
       const bw = Math.min(150, W - 24), by = Math.round(H * 0.4);
       list.push({ id: 'resume', label: 'CONTINUAR', x: cx - bw / 2, y: by, w: bw, h: 17, color: '#ffd23f' });
-      list.push({ id: 'restart', label: 'REINICIAR', x: cx - bw / 2, y: by + 23, w: bw, h: 17 });
-      list.push({ id: 'menu', label: 'MENU', x: cx - bw / 2, y: by + 46, w: bw, h: 17, color: '#8a8a99' });
+      list.push({ id: 'restart', label: 'REINICIAR', x: cx - bw / 2, y: by + 22, w: bw, h: 17 });
+      list.push({ id: 'help', label: 'COMO JOGAR', x: cx - bw / 2, y: by + 44, w: bw, h: 17, color: '#ffffff' });
+      list.push({ id: 'menu', label: 'MENU', x: cx - bw / 2, y: by + 66, w: bw, h: 17, color: '#8a8a99' });
     } else if (state === 'over') {
       const bw = Math.min(150, W - 24), by = Math.round(H * 0.74);
       list.push({ id: 'restart', label: 'TENTAR DE NOVO', x: cx - bw / 2, y: by, w: bw, h: 17, color: '#ffd23f' });
@@ -108,7 +120,11 @@
       case 'go_lobby': state = 'lobby'; break;
       case 'go_chars': state = 'chars'; break;
       case 'go_shop': state = 'shop'; break;
-      case 'back': state = 'menu'; break;
+      case 'go_help': helpFrom = 'menu'; state = 'help'; break;
+      case 'help': helpFrom = 'pause'; state = 'help'; break;
+      case 'help_next': helpPage = (helpPage + 1) % (DP.lobby.helpCount || 3); break;
+      case 'skill': pressQueued = true; break;
+      case 'back': state = state === 'help' ? helpFrom : 'menu'; break;
       case 'kslot': role = role === 'killer' ? 'survivor' : 'killer'; break;
       case 'train_toggle': lobbyMode = (lobbyMode + 1) % 3; break;
       case 'diff_toggle': difficulty = { easy: 'normal', normal: 'hard', hard: 'easy' }[difficulty]; try { localStorage.setItem('dp_diff', difficulty); } catch (e) {} break;
@@ -145,6 +161,7 @@
 
   canvas.addEventListener('pointerdown', (e) => {
     focusGame();
+    if (e.pointerType === 'touch') DP.ui.keys = false;
     DP.audio.init();
     const p = toLocal(e);
     if (state === 'play' && game && game.role === 'survivor' && game.s.skill) pressQueued = true;
@@ -181,6 +198,7 @@
   window.addEventListener('keydown', (e) => {
     const code = codeOf(e);
     if (!code) return;
+    DP.ui.keys = true;
     if (BLOCK.includes(code)) e.preventDefault();
     if (e.repeat) return;
     keys[code] = true;
@@ -197,12 +215,17 @@
       if (code === 'Enter' || code === 'Space') state = 'lobby';
       if (code === 'KeyP') state = 'chars';
       if (code === 'KeyL') state = 'shop';
+      if (code === 'KeyH') { helpFrom = 'menu'; state = 'help'; }
     } else if (state === 'lobby') {
       if (code === 'Enter' || code === 'Space') { curMap = lobbyMode === 2 ? 'arena' : 'camp'; start(lobbyMode > 0); }
       if (code === 'KeyT') lobbyMode = (lobbyMode + 1) % 3;
       if (code === 'Digit1') role = 'survivor';
       if (code === 'Digit2') role = 'killer';
       if (code === 'Escape') state = 'menu';
+    } else if (state === 'help') {
+      if (code === 'Escape' || code === 'Enter') state = helpFrom;
+      if (code === 'ArrowRight' || code === 'Space' || code === 'KeyD') helpPage = (helpPage + 1) % (DP.lobby.helpCount || 3);
+      if (code === 'ArrowLeft' || code === 'KeyA') helpPage = (helpPage + (DP.lobby.helpCount || 3) - 1) % (DP.lobby.helpCount || 3);
     } else if (state === 'chars' || state === 'shop') {
       if (code === 'Escape' || code === 'Enter') state = 'menu';
     } else if (state === 'over') {
@@ -281,7 +304,7 @@
     return out;
   }
 
-  function lobbyUI() { return { role, difficulty, training: lobbyMode > 0, mode: lobbyMode, coins, hist, best: bestText(), toast: toast ? toast.text : null }; }
+  function lobbyUI() { return { helpPage, touch: !DP.ui.keys, role, difficulty, training: lobbyMode > 0, mode: lobbyMode, coins, hist, best: bestText(), toast: toast ? toast.text : null }; }
 
   // ---------- laço ----------
   let last = performance.now(), beatT = 0, radioT = 0;
@@ -319,6 +342,7 @@
       if (state === 'menu') DP.lobby.drawMenu(ctx, W, H, tm, ui);
       else if (state === 'lobby') DP.lobby.drawLobby(ctx, W, H, tm, ui, L);
       else if (state === 'chars') DP.lobby.drawChars(ctx, W, H, tm, ui, L);
+      else if (state === 'help') DP.lobby.drawHelp(ctx, W, H, tm, ui, L);
       else DP.lobby.drawShop(ctx, W, H, tm, ui, L);
     } else if (game) {
       DP.render.drawWorld(ctx, game, W, H, tm);
@@ -331,8 +355,7 @@
       if (state === 'pause') {
         DP.render.overlay(ctx, W, H, 0.7);
         text(ctx, 'PAUSADO', Math.round(W / 2), Math.round(H * 0.2), '#fff', { align: 'c' });
-        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. SHIFT (SEGURAR): ESPREITA. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU JANELA, CHUTAR GERADOR. M: MAPA. N: SOM.' : 'WASD/SETAS: MOVER. SHIFT: ANDAR (QUIETO). SEGURE E: CONSERTAR, ABRIR, PEGAR PEÇA, INSTALAR, LIGAR, ENTRAR. E SEM ALVO: SOLTAR. ESPAÇO: PALLET E SKILL CHECK. Q: RÁDIO. M: MAPA. N: SOM.', Math.floor((W - 16) / 6));
-        tips.forEach((l, i) => text(ctx, l, Math.round(W / 2), Math.round(H * 0.2) + 14 + i * 9, '#a9a9b5', { align: 'c' }));
+        text(ctx, 'M: MAPA   N: SOM   P: PAUSA', Math.round(W / 2), Math.round(H * 0.2) + 14, '#8a8a99', { align: 'c' });
       }
     }
     // botões e joystick
@@ -344,7 +367,7 @@
     requestAnimationFrame(frame);
   }
 
-  window.__dp = { buttons, report, get log() { return log; }, get coins() { return coins; }, get role() { return role; }, set role(v) { role = v; }, get game() { return game; }, set game(v) { game = v; }, start, get state() { return state; }, set state(v) { state = v; }, keys };
+  window.__dp = { get showMap() { return showMap; }, buttons, report, get log() { return log; }, get coins() { return coins; }, get role() { return role; }, set role(v) { role = v; }, get game() { return game; }, set game(v) { game = v; }, start, get state() { return state; }, set state(v) { state = v; }, keys };
   resize();
   requestAnimationFrame(frame);
 })();

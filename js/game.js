@@ -884,7 +884,7 @@
       s.noise = 0; s.acting = null;
       if (s.hidden) {                                                   // dentro do armário: quieto; E (ou empurrar o direcional) sai
         s.hideT += dt; s.moving = false; s.walk = 0;
-        if (s.hideT > 0.6 && (inp.actPress || Math.hypot(inp.ax || 0, inp.ay || 0) > 0.6)) exitLocker(s, false);
+        if (s.hideT > 0.25 && (inp.actPress || Math.hypot(inp.ax || 0, inp.ay || 0) > 0.6)) exitLocker(s, false);
         return;
       }
       if (!s.vault) unstick(s, CFG.R_S);

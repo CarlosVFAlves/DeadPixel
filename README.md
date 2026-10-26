@@ -56,6 +56,8 @@ Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celula
 
 ## Controles
 
+Dentro do jogo: menu → **COMO JOGAR** (ou tecla `H`; também no menu de pausa). Os botões na tela mostram a tecla correspondente quando você usa teclado, e o botão AGIR escreve a ação do momento. **Skill check:** `Espaço` (ou `E`) no PC, toque na tela no celular.
+
 | Celular | Teclado | Ação |
 |---|---|---|
 | Arrastar na tela (joystick flutuante; **arraste pouco = andar**) | WASD / setas · **Shift = andar** (devagar e quieto) | mover |

@@ -30,8 +30,9 @@
     if (state === 'menu') {
       const bw = Math.min(170, W - 24), y0 = Math.round(H * 0.5);
       L.buttons.push({ id: 'go_lobby', label: 'JOGAR', x: cx - bw / 2, y: y0, w: bw, h: 19, color: '#ffd23f' });
-      L.buttons.push({ id: 'go_chars', label: 'PERSONAGENS', x: cx - bw / 2, y: y0 + 24, w: bw, h: 19, color: '#7dffa0' });
-      L.buttons.push({ id: 'go_shop', label: 'LOJA', x: cx - bw / 2, y: y0 + 48, w: bw, h: 19, color: '#7ad0ff' });
+      L.buttons.push({ id: 'go_help', label: 'COMO JOGAR', x: cx - bw / 2, y: y0 + 22, w: bw, h: 17, color: '#ffffff' });
+      L.buttons.push({ id: 'go_chars', label: 'PERSONAGENS', x: cx - bw / 2, y: y0 + 43, w: bw, h: 17, color: '#7dffa0' });
+      L.buttons.push({ id: 'go_shop', label: 'LOJA', x: cx - bw / 2, y: y0 + 64, w: bw, h: 17, color: '#7ad0ff' });
     } else if (state === 'lobby') {
       const wide = W >= 280, gap = 4, top = 22;
       let slotH, sw;
@@ -61,6 +62,10 @@
         L.buttons.push({ id: 'train_toggle', label: '', x: M, y: H - 43, w: bw, h: 17, color: '#7ad0ff', toggle: true });
         L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: bw, h: 17, color: '#8a8a99' });
       }
+    } else if (state === 'help') {
+      const bw = Math.min(90, Math.floor((W - 2 * M - 4) / 2));
+      L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: bw, h: 17, color: '#8a8a99' });
+      L.buttons.push({ id: 'help_next', label: 'PÁGINA', x: W - M - bw, y: H - 22, w: bw, h: 17, color: '#ffd23f' });
     } else if (state === 'chars') {
       L.wide = W >= 280;
       L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 24, w: L.wide ? 70 : W - 2 * M, h: 18, color: '#8a8a99' });
@@ -157,6 +162,68 @@
     pick.forEach((l2, i) => text(ctx, l2, Math.round(W / 2), ly + i * 9, '#6f6f7c', { align: 'c' }));
   }
 
+  // tela "Como jogar": 3 páginas (sobrevivente, assassino, rotas de fuga); mostra a tecla E o toque lado a lado
+  const HELP = [
+    { t: 'SOBREVIVENTE', rows: [
+      ['MOVER', 'WASD/SETAS', 'JOYSTICK (ARRASTE)'],
+      ['ANDAR QUIETO', 'SHIFT', 'ARRASTE POUCO'],
+      ['AGIR: CONSERTAR, ABRIR, PEGAR, INSTALAR, ESCONDER, ENTRAR', 'SEGURE E', 'SEGURE O BOTÃO AGIR'],
+      ['SOLTAR O QUE CARREGA (SEM ALVO)', 'E', 'AGIR'],
+      ['SKILL CHECK (SÓ CONSERTANDO GERADOR: APERTE QUANDO O PONTEIRO CRUZAR A ZONA)', 'ESPAÇO', 'TOQUE NA TELA'],
+      ['DERRUBAR O PALLET NA FRENTE DO ASSASSINO', 'ESPAÇO', 'BOTÃO PALLET'],
+      ['LIGAR/DESLIGAR O RÁDIO (BIPES = ASSASSINO PERTO)', 'Q', 'BOTÃO RÁDIO'],
+      ['MAPA GRANDE', 'M OU TAB', 'MINIMAPA OU MAPA'],
+      ['SAIR DO ARMÁRIO', 'E OU MOVER', 'AGIR OU MOVER']] },
+    { t: 'ASSASSINO', rows: [
+      ['MOVER', 'WASD/SETAS', 'JOYSTICK'],
+      ['ATACAR (GOLPE COM BOTE)', 'ESPAÇO', 'BOTÃO ATACAR'],
+      ['ESPREITAR: MAIS SILENCIOSO E QUASE INVISÍVEL, MAS MAIS LENTO', 'SEGURE SHIFT', 'SEGURE ESPR.'],
+      ['QUEBRAR PALLET/JANELA, CHUTAR GERADOR, SABOTAR VEÍCULO, ABRIR ARMÁRIO', 'E', 'AGIR'],
+      ['MAPA GRANDE (VÊ OS GERADORES)', 'M OU TAB', 'MINIMAPA OU MAPA'],
+      ['SETAS NA BORDA DA TELA = BARULHO FORA DE VISTA', '', ''] ] },
+    { t: 'COMO ESCAPAR', rows: [
+      ['POLÍCIA: 5 DE 8 GERADORES LIGAM A ENERGIA. DEPOIS SEGURE AGIR NO TELEFONE (~30 S). A POLÍCIA CHEGA EM ~2,5 MIN E ABRE O PORTÃO POR 2 MIN: CORRA PARA ELE.', '', ''],
+      ['CARRO (ESTACIONAMENTO): ACHE BATERIA, CHAVE E COMBUSTÍVEL; CARREGUE UMA PEÇA POR VEZ, INSTALE, LIGUE O MOTOR E ENTRE (2 LUGARES).', '', ''],
+      ['BARCO (CAIS): HÉLICE, CHAVE E COMBUSTÍVEL; DEPOIS EMPURRE E ENTRE (2 LUGARES).', '', ''],
+      ['ARMÁRIOS NAS CABANAS: ESCONDA-SE; O ASSASSINO PODE ABRIR.', '', '']] }
+  ];
+  // monta blocos de texto e reparte em páginas que cabem na tela (a quantidade de páginas depende do tamanho)
+  function helpPages(W, H, touch) {
+    const cols = Math.floor((W - 2 * M) / 6), room = H - 26 - 30;
+    const blocks = [];
+    for (const g of HELP) {
+      blocks.push({ head: g.t, lines: [] });
+      for (const r of g.rows) {
+        const lines = DP.font.wrap(r[0], cols).map((s) => ({ s, c: '#cfd3e0', x: 0 }));
+        if (r[1] || r[2]) {
+          const kb = touch ? r[2] : (r[1] + (r[2] ? '  /  ' + r[2] : ''));
+          if (kb) DP.font.wrap((touch ? 'TOQUE: ' : 'TECLA: ') + kb, cols - 1).forEach((s) => lines.push({ s, c: touch ? '#7dffa0' : '#ffd23f', x: 6 }));
+        }
+        blocks.push({ head: null, lines });
+      }
+    }
+    const pages = [[]]; let used = 0;
+    for (const b of blocks) {
+      const h = (b.head ? 10 : b.lines.length * 9 + 4);
+      if (used + h > room && pages[pages.length - 1].length) { pages.push([]); used = 0; }
+      pages[pages.length - 1].push(b); used += h;
+    }
+    return pages;
+  }
+  function drawHelp(ctx, W, H, tm, ui, L) {
+    bg(ctx, W, H, tm);
+    const pages = helpPages(W, H, !!ui.touch);
+    DP.lobby.helpCount = pages.length;
+    const pg = pages[(ui.helpPage || 0) % pages.length];
+    title(ctx, W, 'COMO JOGAR', null);
+    let y = 18;
+    for (const b of pg) {
+      if (b.head) { text(ctx, b.head, M, y, '#ff9d5c'); y += 10; continue; }
+      b.lines.forEach((ln, i) => text(ctx, ln.s, M + ln.x, y + i * 9, ln.c));
+      y += b.lines.length * 9 + 4;
+    }
+  }
+
   function drawChars(ctx, W, H, tm, ui, L) {
     bg(ctx, W, H, tm);
     title(ctx, W, 'PERSONAGENS', null);
@@ -236,9 +303,10 @@
       const long = ['MODO: PARTIDA (ACAMPAMENTO)', 'MODO: TREINO (ACAMPAMENTO)', 'MODO: TREINO (ARENA PEQUENA)'][ui.mode || 0], mid = ['MODO: PARTIDA', 'MODO: TREINO', 'MODO: ARENA'][ui.mode || 0], short = ['PARTIDA', 'TREINO', 'ARENA'][ui.mode || 0];
       return long.length * 6 + 8 <= b.w ? long : mid.length * 6 + 8 <= b.w ? mid : short;
     }
+    if (b.id === 'help_next') { const n = DP.lobby.helpCount || 3; return 'PÁGINA ' + (((ui.helpPage || 0) % n) + 1) + '/' + n; }
     if (b.id === 'diff_toggle') { const n = { easy: 'FÁCIL', normal: 'NORMAL', hard: 'DIFÍCIL' }[ui.difficulty]; return b.w < 100 ? 'DIF: ' + n : 'DIFICULDADE: ' + n; }
     return b.label;
   }
 
-  DP.lobby = { layout, drawMenu, drawLobby, drawChars, drawShop, labelFor, SHOP };
+  DP.lobby = { layout, drawMenu, drawLobby, drawChars, drawShop, drawHelp, helpPages, labelFor, SHOP };
 })();

@@ -1200,5 +1200,29 @@ console.log('armários');
   ok(k.cfg.VIS_KP.cone > k.cfg.VIS_K.cone && k.cfg.VIS_KP.r > k.cfg.VIS_K.r, 'visão do assassino-jogador é maior que a do assassino-IA');
 }
 
+// ---------- 28. ajuda, botões e dicas de teclado ----------
+console.log('ajuda');
+{
+  const uctx = { console, Math, Date, Array, Object };
+  uctx.window = uctx; uctx.globalThis = uctx; vm.createContext(uctx);
+  for (const f of ['font.js', 'camp.js', 'game.js', 'map.js', 'lobby.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), uctx, { filename: f });
+  let bad = 0, pagesMin = 99, pagesMax = 0;
+  for (const [W, H] of [[320, 187], [195, 390], [422, 195], [280, 500], [240, 320], [180, 320], [480, 270]]) {
+    for (const touch of [false, true]) {
+      const pages = uctx.DP.lobby.helpPages(W, H, touch);
+      pagesMin = Math.min(pagesMin, pages.length); pagesMax = Math.max(pagesMax, pages.length);
+      const room = H - 26 - 30;
+      for (const pg of pages) { const h = pg.reduce((a, b) => a + (b.head ? 10 : b.lines.length * 9 + 4), 0); if (h > room + 14) { bad++; console.log('   página alta demais', W + 'x' + H, h, room); } }
+      const text = pages.map((pg) => pg.map((b) => (b.head || '') + b.lines.map((l) => l.s).join(' ')).join(' ')).join(' ');
+      if ((!touch && !/ESPAÇO/.test(text)) || !/SKILL CHECK/.test(text) || !/ARMÁRIO/.test(text) || !/CARRO/.test(text)) { bad++; console.log('   ajuda incompleta', W + 'x' + H); }
+    }
+    const L = uctx.DP.lobby.layout('help', W, H);
+    if (!L.buttons.some((b) => b.id === 'back') || L.buttons.some((b) => b.y + b.h > H)) { bad++; console.log('   botões da ajuda fora da tela', W, H); }
+    const M2 = uctx.DP.lobby.layout('menu', W, H);
+    if (M2.buttons.some((b) => b.y + b.h > H)) { bad++; console.log('   menu estoura a tela', W, H); }
+  }
+  ok(bad === 0, `ajuda "como jogar" cabe em 7 tamanhos de tela (${pagesMin} a ${pagesMax} páginas) e cobre skill check, armários e rotas`);
+}
+
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
 process.exit(fails ? 1 : 0);

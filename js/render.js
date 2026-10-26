@@ -447,25 +447,31 @@
     gl.addColorStop(0, flash ? 'rgba(255,60,60,.22)' : 'rgba(70,110,255,.22)'); gl.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = gl; ctx.fillRect(cx - 46, cy - 46, 92, 92);
   }
-  // armário metálico: a porta fica do lado (nx,ny); aberto quando alguém entra/sai ou o assassino o revira
+  // armário metálico (visão de cima, 3/4): tampo claro + frente com venezianas e puxador. A frente fica do lado (nx,ny).
   function drawLocker(ctx, l, game, tm) {
     const X = l.tx * TS, Y = l.ty * TS;
     const opening = game.k.state === 'break' && game.k.pal === l;
     const open = opening || l.t < 0.25;
-    const shake = l.occ && Math.hypot(game.k.x - l.cx, game.k.y - l.cy) < 7 && Math.floor(tm * 9) % 7 === 0 ? 1 : 0;
-    const ox = shake * (Math.floor(tm * 20) % 2 ? 1 : -1);
-    px(ctx, 'rgba(0,0,0,.4)', X + 1, Y + 13, 15, 3);
-    px(ctx, '#1d222b', X + 1 + ox, Y + 1, 14, 14);
-    px(ctx, '#566170', X + 2 + ox, Y + 2, 12, 12);
-    px(ctx, '#7a8798', X + 2 + ox, Y + 2, 12, 1);
-    const fx = l.nx, fy = l.ny;                                       // lado da porta
-    const dx0 = fx > 0 ? X + 10 : fx < 0 ? X + 2 : X + 2, dy0 = fy > 0 ? Y + 10 : fy < 0 ? Y + 2 : Y + 2;
-    const dw = fx !== 0 ? 4 : 12, dh = fy !== 0 ? 4 : 12;
-    px(ctx, open ? '#0b0d12' : '#3f4958', dx0 + ox, dy0, dw, dh);
-    if (!open) {
-      for (let i = 0; i < 3; i++) { if (fx !== 0) px(ctx, '#1d222b', dx0 + ox, dy0 + 2 + i * 3, dw, 1); else px(ctx, '#1d222b', dx0 + 2 + i * 3 + ox, dy0, 1, dh); }   // venezianas
-      px(ctx, '#c9a46a', fx > 0 ? X + 11 + ox : fx < 0 ? X + 4 + ox : X + 11 + ox, fy > 0 ? Y + 11 : fy < 0 ? Y + 4 : Y + 7, 1, 2);   // maçaneta
-    } else if (opening && l.occ) { px(ctx, '#e0b48a', dx0 + 1 + ox, dy0 + 1, 2, 2); }
+    const shake = l.occ && Math.hypot(game.k.x - l.cx, game.k.y - l.cy) < 7 && Math.floor(tm * 9) % 7 === 0 ? (Math.floor(tm * 20) % 2 ? 1 : -1) : 0;
+    const TOP = '#9aa8bd', FR = '#6a788e', FRD = '#46526a', EDGE = '#1d222b', LOUV = '#2b3446';
+    px(ctx, 'rgba(0,0,0,.45)', X + 1, Y + 12, 15, 4);
+    const bx = X + 1 + shake;
+    if (l.ny > 0) {                                       // de frente para baixo: vê-se o tampo e a porta inteira
+      px(ctx, EDGE, bx - 1, Y - 3, 16, 18); px(ctx, TOP, bx, Y - 2, 14, 5);
+      px(ctx, open ? '#0b0d12' : FR, bx, Y + 3, 14, 9); if (!open) { px(ctx, FRD, bx, Y + 3, 14, 1); for (let n = 0; n < 4; n++) px(ctx, LOUV, bx + 2, Y + 5 + n * 2, 10, 1); px(ctx, '#d7b66a', bx + 11, Y + 8, 2, 2); }
+      else if (l.occ) { px(ctx, '#e0b48a', bx + 5, Y + 5, 4, 3); px(ctx, '#fff', bx + 6, Y + 6, 1, 1); px(ctx, '#fff', bx + 8, Y + 6, 1, 1); }
+    } else if (l.ny < 0) {                                // de frente para cima: vê-se o tampo e as costas (porta do outro lado, só uma faixa)
+      px(ctx, EDGE, bx - 1, Y - 3, 16, 18); px(ctx, TOP, bx, Y - 2, 14, 5);
+      px(ctx, FRD, bx, Y + 3, 14, 9); px(ctx, FR, bx, Y + 3, 14, 2);
+      px(ctx, open ? '#0b0d12' : '#d7b66a', bx + 5, Y - 1, open ? 5 : 2, 2);
+      if (open && l.occ) px(ctx, '#e0b48a', bx + 6, Y - 1, 2, 2);
+    } else {                                              // lateral: tampo + lado com a porta voltada para (nx)
+      px(ctx, EDGE, bx - 1, Y - 3, 16, 18); px(ctx, TOP, bx, Y - 2, 14, 5); px(ctx, FRD, bx, Y + 3, 14, 9);
+      const dx0 = l.nx > 0 ? bx + 8 : bx, dw = 6;
+      px(ctx, open ? '#0b0d12' : FR, dx0, Y + 3, dw, 9);
+      if (!open) { for (let n = 0; n < 4; n++) px(ctx, LOUV, dx0 + 1, Y + 5 + n * 2, dw - 2, 1); px(ctx, '#d7b66a', l.nx > 0 ? dx0 + 4 : dx0 + 1, Y + 8, 1, 2); }
+      else if (l.occ) px(ctx, '#e0b48a', dx0 + 2, Y + 5, 2, 3);
+    }
   }
   function drawPhone(ctx, o, game, tm) {
     const X = o.tx * TS, Y = o.ty * TS;
@@ -748,7 +754,7 @@
     const list = [];
     for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.nearList.some((n) => n.pal === p) ? tm : 0) });
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
-    for (const l of game.lockers) list.push({ y: l.cy, f: () => drawLocker(ctx, l, game, tm) });
+    for (const l of game.lockers) if (full || vis(l.cx, l.cy)) list.push({ y: l.cy + 0.4, f: () => drawLocker(ctx, l, game, tm) });
     if (game.phone) list.push({ y: game.phone.cy, f: () => drawPhone(ctx, game.phone, game, tm) });
     if (game.phone && game.phone.state === 'here') list.push({ y: 10, f: () => drawPolice(ctx, game.phone, game, tm) });
     for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
@@ -878,7 +884,7 @@
     } else if (game.k.state === 'intro') {
       const left = Math.ceil(game.introT - game.k.t);
       text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, msgY(game, W, H), '#ff5c5c', { align: 'c' });
-      DP.font.wrap(game.explore.length ? 'ESCAPE PELA POLÍCIA (' + game.need + ' GERADORES + TELEFONE), PELO CARRO OU PELO BARCO. M ABRE O MAPA' : 'CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELA PORTA PRINCIPAL', Math.floor((W - 8) / 6)).forEach((l, i) =>
+      if (game.k.t < 10) DP.font.wrap(game.explore.length ? 'ESCAPE PELA POLÍCIA (' + game.need + ' GERADORES + TELEFONE), PELO CARRO OU PELO BARCO. M ABRE O MAPA' : 'CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELA PORTA PRINCIPAL', Math.floor((W - 8) / 6)).forEach((l, i) =>
         text(ctx, l, W / 2, msgY(game, W, H) + 10 + i * 9, '#ffb347', { align: 'c' }));
     }
     const arrowTo = !ka && !game.over && game.explore.length ? (game.door.opened ? { x: game.door.cx, y: game.door.cy, label: 'SAÍDA' } : ph && ph.state === 'ready' ? { x: ph.cx, y: ph.cy, label: 'TELEFONE' } : null) : null;
@@ -939,7 +945,7 @@
     px(ctx, game.door.opened ? '#7dffa0' : '#ffd23f', X(game.door.cx) - 2, Y(0), 4, 2);
     if (kr) for (const q of game.pings) if (game.time - q.t < 6 && Math.floor(tm * 4) % 2) px(ctx, '#ff4d4d', X(q.x) - 1, Y(q.y) - 1, 3, 3);
     const me = game.pl;
-    if (Math.floor(tm * 3) % 2 || true) { px(ctx, '#000', X(me.x) - 2, Y(me.y) - 2, 5, 5); px(ctx, '#ff4d4d', X(me.x) - 1, Y(me.y) - 1, 3, 3); }
+    px(ctx, '#000', X(me.x) - 2, Y(me.y) - 2, 5, 5); px(ctx, kr ? '#ff4d4d' : (Math.floor(tm * 3) % 2 ? '#ffffff' : '#7ad0ff'), X(me.x) - 1, Y(me.y) - 1, 3, 3);
   }
   function drawMap(ctx, game, W, H, tm) {
     if (!R.mapCv) R.mapCv = buildMapCv(game);
@@ -948,7 +954,7 @@
     const kr = game.role === 'killer';                                     // o assassino conhece o acampamento: vê todos os geradores
     const known = game.gens.filter((o) => kr || o.known).length;
     const legend = DP.font.wrap((kr ? 'GERADORES ' : 'GERADORES ACHADOS ' + known + '/' + game.gens.length + ' · ') + 'PRONTOS ' + game.gensDone + '/' + game.need, Math.floor((W - 8) / 6))
-      .concat(DP.font.wrap(kr ? 'ROXO: CARRO. AZUL: BARCO. VOCÊ: QUADRADO VERMELHO. M FECHA' : 'VERDE: JÁ VISTO. CINZA: A EXPLORAR. ROXO: CARRO. AZUL: BARCO. VOCÊ: QUADRADO VERMELHO. M FECHA', Math.floor((W - 8) / 6)));
+      .concat(DP.font.wrap(kr ? 'ROXO: CARRO. AZUL: BARCO. VOCÊ: QUADRADO PISCANTE. M FECHA' : 'VERDE: JÁ VISTO. CINZA: A EXPLORAR. ROXO: CARRO. AZUL: BARCO. VOCÊ: QUADRADO PISCANTE. M FECHA', Math.floor((W - 8) / 6)));
     const topPad = 16, botPad = 8 + legend.length * 9;
     const sc = Math.max(1, Math.min((W - 12) / mw, (H - topPad - botPad) / mh));
     const ox = Math.round((W - mw * sc) / 2), oy = topPad;
@@ -992,7 +998,7 @@
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
     const pulse = 3 + Math.floor(tm * 3) % 2;
     ctx.strokeRect(X(me.x) - pulse, Y(me.y) - pulse, pulse * 2, pulse * 2);
-    px(ctx, '#ff4d4d', X(me.x) - 1, Y(me.y) - 1, 3, 3);
+    px(ctx, kr ? '#ff4d4d' : '#7ad0ff', X(me.x) - 1, Y(me.y) - 1, 3, 3);
     // legenda
     const ly = oy + Math.round(mh * sc) + 5;
     legend.forEach((l, n) => text(ctx, l, Math.round(W / 2), ly + n * 9, n === 0 ? '#ffb347' : '#a9a9b5', { align: 'c' }));
@@ -1017,6 +1023,7 @@
     ctx.lineWidth = 2; ctx.strokeStyle = wait ? '#8a8a99' : '#ffd23f';
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(A(a)) * (r + 2), cy + Math.sin(A(a)) * (r + 2)); ctx.stroke();
     text(ctx, 'AGORA!', cx, cy + r + 9, '#ffd23f', { align: 'c' });
+    text(ctx, DP.ui && DP.ui.keys ? 'APERTE ESPAÇO' : 'TOQUE NA TELA', cx, cy + r + 19, '#ffffff', { align: 'c', shadow: 'rgba(0,0,0,.95)' });
   }
 
   function drawButton(ctx, b, tm, pressed) {
@@ -1030,7 +1037,10 @@
       ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = b.active ? hot : 'rgba(255,255,255,.25)';
       ctx.globalAlpha = b.active ? 0.6 + glow * 0.4 : 1; ctx.stroke(); ctx.globalAlpha = 1;
-      text(ctx, b.label, cx, cy - 3, b.active ? hot : '#9a9aa5', { align: 'c' });
+      const showKey = b.key && DP.ui && DP.ui.keys;
+      text(ctx, b.label, cx, showKey ? cy - 8 : cy - 3, b.active ? hot : '#9a9aa5', { align: 'c' });
+      if (showKey) text(ctx, b.key, cx, cy + 2, b.active ? '#ffffff' : '#6f6f7c', { align: 'c' });
+      if (b.cap) text(ctx, b.cap, b.x + b.w, b.y - 9, hot, { align: 'r', shadow: 'rgba(0,0,0,.95)' });
     } else {
       ctx.fillStyle = pressed ? 'rgba(255,210,63,.4)' : b.sel ? 'rgba(255,255,255,.14)' : 'rgba(20,18,24,.85)';
       ctx.fillRect(b.x, b.y, b.w, b.h);
