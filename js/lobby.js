@@ -102,7 +102,7 @@
     text(ctx, 'DEAD PIXEL', 0, 0, '#e23a3a', { align: 'c' });
     ctx.restore();
     const subY = Math.round(H * 0.07) + 7 * sc + 5;
-    text(ctx, 'PROTÓTIPO 6: VISÃO', cx, subY, '#e9c07a', { align: 'c' });
+    text(ctx, 'PROTÓTIPO 10: ACAMPAMENTO', cx, subY, '#e9c07a', { align: 'c' });
     // prévia: o personagem principal e o assassino apagado, à espreita
     const ps = H >= 300 ? 3 : H >= 230 ? 2 : 1;
     const feet = Math.min(Math.round(H * 0.5) - 10, subY + 14 + 22 * ps);
@@ -146,10 +146,15 @@
     text(ctx, kill ? 'VOCÊ' : 'IA (APAGADO)', k.x + 56, k.y + 16, kill ? '#fff' : '#3d3d47');
     const hint = kill ? 'TOQUE P/ VOLTAR' : 'TOQUE P/ JOGAR';
     text(ctx, hint, k.x + 56, k.y + 26, kill ? '#ffb347' : '#5d5d69');
-    // legenda
+    // legenda: a versão longa só se couber acima dos botões (telas baixas usam a curta)
     const ly = L.box.legend.y;
-    DP.font.wrap(kill ? 'OS 4 SOBREVIVENTES SÃO BOTS. CACE TODOS ANTES QUE ESCAPEM.' : 'VAGAS LIVRES VIRAM BOTS. VISÃO CURTA: SÓ SE VÊ O QUE ESTÁ PERTO OU NA LANTERNA.', Math.floor((W - 16) / 6))
-      .forEach((l, i) => text(ctx, l, Math.round(W / 2), ly + i * 9, '#6f6f7c', { align: 'c' }));
+    const topBtn = L.buttons.filter((b) => !b.ghost && b.y > ly - 2).reduce((m, b) => Math.min(m, b.y), H);
+    const cols = Math.floor((W - 16) / 6);
+    const variants = kill
+      ? ['OS 4 SOBREVIVENTES SÃO BOTS. CACE TODOS ANTES QUE ESCAPEM.', 'SOBREVIVENTES = BOTS.']
+      : ['VAGAS LIVRES VIRAM BOTS. VISÃO CURTA: SÓ SE VÊ O QUE ESTÁ PERTO OU NA LANTERNA.', 'VAGAS LIVRES VIRAM BOTS.'];
+    const pick = variants.map((v) => DP.font.wrap(v, cols)).find((ls) => ly + ls.length * 9 <= topBtn - 1) || [];
+    pick.forEach((l2, i) => text(ctx, l2, Math.round(W / 2), ly + i * 9, '#6f6f7c', { align: 'c' }));
   }
 
   function drawChars(ctx, W, H, tm, ui, L) {
@@ -227,7 +232,10 @@
   }
 
   function labelFor(b, ui) {
-    if (b.id === 'train_toggle') return b.w < 100 ? 'TREINO: ' + (ui.training ? 'SIM' : 'NÃO') : 'TREINO: ' + (ui.training ? 'LIGADO' : 'DESLIGADO');
+    if (b.id === 'train_toggle') {
+      const long = ['MODO: PARTIDA (ACAMPAMENTO)', 'MODO: TREINO (ACAMPAMENTO)', 'MODO: TREINO (ARENA PEQUENA)'][ui.mode || 0], mid = ['MODO: PARTIDA', 'MODO: TREINO', 'MODO: ARENA'][ui.mode || 0], short = ['PARTIDA', 'TREINO', 'ARENA'][ui.mode || 0];
+      return long.length * 6 + 8 <= b.w ? long : mid.length * 6 + 8 <= b.w ? mid : short;
+    }
     if (b.id === 'diff_toggle') { const n = { easy: 'FÁCIL', normal: 'NORMAL', hard: 'DIFÍCIL' }[ui.difficulty]; return b.w < 100 ? 'DIF: ' + n : 'DIFICULDADE: ' + n; }
     return b.label;
   }

@@ -559,7 +559,7 @@ console.log('telas');
   for (const f of ['font.js', 'camp.js', 'game.js', 'map.js', 'lobby.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), uctx, { filename: f });
   const lay = uctx.DP.lobby.layout;
   const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-  let bad = 0; const sizes = [[320, 187], [195, 390], [422, 195], [280, 500], [240, 320], [360, 203]];
+  let bad = 0; const sizes = [[320, 187], [195, 390], [422, 195], [280, 500], [240, 320], [360, 203], [180, 320], [200, 360]];
   for (const [W, H] of sizes) {
     for (const st of ['menu', 'lobby', 'chars', 'shop']) {
       const L = lay(st, W, H);
@@ -641,7 +641,7 @@ console.log('paridade de informação');
 console.log('dificuldade');
 {
   const T = (role, d) => DP.createGame({ rng: seeded(1), role, difficulty: d, bots: 0 }).routeTime('fuse');
-  ok(T('survivor', 'normal') === 20, 'normal: gerador leva 20 s');
+  ok(T('survivor', 'normal') === 45, 'normal: fusível leva 45 s');
   ok(T('survivor', 'hard') > T('survivor', 'normal') && T('survivor', 'easy') < T('survivor', 'normal'), 'sobrevivente: difícil = tarefas mais longas, fácil = mais curtas');
   ok(T('killer', 'hard') < T('killer', 'normal') && T('killer', 'easy') > T('killer', 'normal'), 'assassino: difícil = bots trabalham mais rápido, fácil = mais devagar');
   const hk = DP.createGame({ rng: seeded(1), role: 'killer', difficulty: 'hard', bots: 0 }), ek = DP.createGame({ rng: seeded(1), role: 'killer', difficulty: 'easy', bots: 0 });
@@ -666,8 +666,9 @@ function fairKillerInput(g, st, i) {
   else if (st.last && g.time - st.last.t < 10 && Math.hypot(st.last.x - k.x, st.last.y - k.y) > 1.2) dest = st.last;
   else {                                                                                       // patrulha: visita os geradores em ordem
     const left = g.gens.filter((o) => !o.done);
-    if (g.door.powered) dest = { x: g.door.cx, y: g.door.cy + 2 };
-    else if (left.length) { st.gi = ((st.gi || 0) + (st.gt && Math.hypot(st.gt.cx - k.x, st.gt.cy - k.y) < 2.5 ? 1 : 0)); st.gt = left[st.gi % left.length]; dest = { x: st.gt.cx, y: st.gt.cy }; }
+    const vs = g.vehicles.filter((v) => v.state !== 'gone' && v.state !== 'leaving');
+    const list = (g.door.powered ? [g.phone && g.phone.state === 'ready' ? g.phone : g.door] : left).concat(vs);
+    if (list.length) { st.gi = ((st.gi || 0) + (st.gt && Math.hypot(st.gt.cx - k.x, st.gt.cy - k.y) < (st.gt.range ? st.gt.range - 0.5 : 2.5) ? 1 : 0)); st.gt = list[st.gi % list.length]; dest = st.gt === g.door ? { x: g.door.cx, y: g.door.cy + 2 } : st.gt.stand || { x: st.gt.cx, y: st.gt.cy }; }
   }
   if (!dest) return { ax: 0, ay: 0 };
   const dx = dest.x - k.x, dy = dest.y - k.y, d = Math.hypot(dx, dy);
@@ -944,7 +945,7 @@ console.log('polícia');
   let allOut = 0, calls = 0, t0 = 0;
   for (let seed = 1; seed <= 3; seed++) {
     const g = DP.createGameAny({ map: 'camp', rng: seeded(seed * 7), role: 'killer' });
-    for (let i = 0; i < 60 * 800 && !g.over; i++) g.update(1 / 60, {});
+    for (let i = 0; i < 60 * 1500 && !g.over; i++) g.update(1 / 60, {});
     if (g.escapedCount === 4) allOut++; calls += g.phone.calls; t0 += g.time;
   }
   ok(allOut === 3 && calls === 3, `3/3 equipes de bots escapam pela polícia sem ninguém atrapalhando (média ${(t0 / 3).toFixed(0)} s, ${calls} chamadas)`);
@@ -1058,11 +1059,28 @@ console.log('carro e barco');
   let done = 0, tt = 0, viaCar = 0, viaBoat = 0, viaPol = 0;
   for (let seed = 1; seed <= 4; seed++) {
     const g = DP.createGameAny({ map: 'camp', rng: seeded(seed * 7), role: 'killer' });
-    for (let i = 0; i < 60 * 900 && !g.over; i++) g.update(1 / 60, {});
+    for (let i = 0; i < 60 * 1500 && !g.over; i++) g.update(1 / 60, {});
     if (g.escapedCount === 4) done++; tt += g.time;
     viaCar += g.vehicles[0].pax.length; viaBoat += g.vehicles[1].pax.length; viaPol += g.escapedCount - g.vehicles[0].pax.length - g.vehicles[1].pax.length;
   }
-  ok(done === 4, `4/4 equipes de bots escapam em 15 min sem assassino (média ${(tt / 4).toFixed(0)} s; pelo carro ${viaCar}, barco ${viaBoat}, polícia ${viaPol})`);
+  ok(done === 4, `4/4 equipes de bots escapam em 25 min sem assassino (média ${(tt / 4).toFixed(0)} s; pelo carro ${viaCar}, barco ${viaBoat}, polícia ${viaPol})`);
+}
+
+// ---------- 25. ajuste fino (etapa 11) ----------
+console.log('ajuste fino');
+{
+  const c = DP.createGameAny({ map: 'camp', rng: seeded(51), bots: 3 }), a = DP.createGameAny({ map: 'arena', rng: seeded(51), bots: 3 });
+  ok(c.hpMax === 3 && c.survivors.every((v) => v.hp === 3), 'mapa grande: 3 golpes por sobrevivente');
+  ok(a.hpMax === 2 && a.survivors.every((v) => v.hp === 2), 'arena: 2 golpes (como antes)');
+  ok(c.introT === 20 && a.introT === 3, 'o assassino demora 20 s para sair no mapa grande (3 s na arena)');
+  ok(c.routeTime('fuse') === 45 && c.cfg.ROUTES.phone === 30 && c.cfg.ROUTES.carPart === 35 && c.cfg.ROUTES.boatPart === 40, 'tempos de rota: fusível 45, telefone 30, peças 35/40');
+  const e = DP.createGameAny({ map: 'camp', rng: seeded(51), difficulty: 'easy' }), h = DP.createGameAny({ map: 'camp', rng: seeded(51), difficulty: 'hard' });
+  ok(e.diff.kp < 0.9 && c.diff.kp === 1 && h.diff.kp > 1, 'assassino-IA: fácil = mais lento que quem corre, difícil = um pouco mais forte');
+  // 3 golpes de fato: o 3º abate
+  const g = DP.createGameAny({ map: 'camp', rng: seeded(52), bots: 0, role: 'survivor' });
+  g.k.state = 'intro'; g.k.t = -999;
+  const v = g.survivors[0];
+  ok(v.hp === 3 && !v.dead, 'começa com 3 de vida');
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');

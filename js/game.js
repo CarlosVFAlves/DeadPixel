@@ -56,9 +56,10 @@
 
     RESPECT: 0.55,       // chance do assassino "respeitar" um pallet de pé (hesitar)
     HESITATE: [0.8, 1.5],
-    INTRO: 3,
+    INTRO: 3, INTRO_CAMP: 20,   // segundos até o assassino começar a andar (no mapa grande ele nasce longe e a equipe ganha vantagem)
 
     // objetivo: 5 de 8 geradores + porta principal
+    HP: 2, HP_CAMP: 3,   // golpes que um sobrevivente aguenta (o último abate); o mapa grande é mais longo e perdoa mais
     TEAM_BONUS: 0.8,     // cada pessoa extra no mesmo gerador rende isto
     GEN_RANGE: 1.45, DOOR_RANGE: 2.0, WIN_RANGE: 1.3,
     SKILL_EVERY: [3.5, 7],   // intervalo entre skill checks (s)
@@ -70,7 +71,7 @@
     KICK: 0.15,              // progresso que o assassino destrói ao chutar um gerador
 
     // tempos base (s) das tarefas de rota; multiplicados pela dificuldade (ver createGame)
-    ROUTES: { fuse: 20, door: 3, phone: 30, policeEta: 150, policeWindow: 120, carPart: 35, carStart: 10, boatPart: 40, boatStart: 15, leaveWait: 10 },
+    ROUTES: { fuse: 45, door: 3, phone: 30, policeEta: 150, policeWindow: 120, carPart: 35, carStart: 10, boatPart: 40, boatStart: 15, leaveWait: 10 },
     SABOTAGE_T: 2.5,         // assassino: tempo para sabotar um veículo (tira a última peça)
 
     // visão — a MESMA para pessoas e bots (paridade de informação): raio ambiente + cone de lanterna, com linha de vista
@@ -102,8 +103,8 @@
   const T_WIN = 5, T_WATER = 7, T_VEH = 8;
   // peças dos veículos: o carro leva bateria, chave e combustível; o barco, hélice, chave e combustível
   const PARTS = {
-    battery: { veh: 'car', name: 'BATERIA' }, ckey: { veh: 'car', name: 'CHAVE DO CARRO' }, cfuel: { veh: 'car', name: 'COMBUSTÍVEL' },
-    prop: { veh: 'boat', name: 'HÉLICE' }, bkey: { veh: 'boat', name: 'CHAVE DO BARCO' }, bfuel: { veh: 'boat', name: 'COMBUSTÍVEL' }
+    battery: { veh: 'car', name: 'BATERIA' }, ckey: { veh: 'car', name: 'CHAVE' }, cfuel: { veh: 'car', name: 'COMBUSTÍVEL' },
+    prop: { veh: 'boat', name: 'HÉLICE' }, bkey: { veh: 'boat', name: 'CHAVE' }, bfuel: { veh: 'boat', name: 'COMBUSTÍVEL' }
   };
 
   function createGame(opts) {
@@ -119,7 +120,7 @@
       level, dl,
       time: role === 'survivor' ? 1 + 0.3 * dl : 1 - 0.25 * dl,   // tempo das tarefas (sobrevivente-jogador: mais longo no difícil)
       bot: role === 'killer' ? 1 + 0.25 * dl : 1,                  // habilidade dos bots sobreviventes (reação, erro, sentidos)
-      kp: role === 'survivor' ? 1 + 0.06 * dl : 1                  // força do assassino-IA (velocidade e visão)
+      kp: role === 'survivor' ? { easy: 0.88, normal: 1, hard: 1.05 }[level] : 1   // força do assassino-IA (velocidade e visão): no fácil é um pouco mais lento que quem corre
     };
     const routeT = (name) => CFG.ROUTES[name] * diff.time;
     const bots = opts.bots === undefined ? 3 : opts.bots;
@@ -127,9 +128,9 @@
     const W = map.W, H = map.H, t = map.t;
 
     const g = {
-      cfg: CFG, map, training, role, diff, fullVision: false,
+      cfg: CFG, map, training, role, diff, fullVision: false, introT: map.kind === 'camp' ? CFG.INTRO_CAMP : CFG.INTRO, hpMax: map.kind === 'camp' ? CFG.HP_CAMP : CFG.HP,
       time: 0, over: false, overT: 0,
-      stats: { lunges: 0, stuns: 0, drops: 0, misses: 0, hits: 0, breaks: 0, vaults: 0, gens: 0, kicks: 0, skillOk: 0, skillFail: 0, cuts: 0, smashes: 0, crashes: 0 },
+      stats: { lunges: 0, stuns: 0, drops: 0, misses: 0, hits: 0, breaks: 0, vaults: 0, gens: 0, kicks: 0, skillOk: 0, skillFail: 0, sabotages: 0, cuts: 0, smashes: 0, crashes: 0 },
       pallets: [], windows: [], popups: [], fx: [], survivors: [],
       shake: 0, hitstop: 0, flash: 0,
       near: null, nearList: [], los: false, dist: 99, interact: null, kInteract: null, pInteract: null,
@@ -140,13 +141,14 @@
     function makeAI(i) {
       return { route: map.vehicles ? ['police', 'car', 'boat', 'police'][i % 4] : 'police', mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, fT: new Float32Array(W * H), zoneT: 0, planAge: 0, dx: 0, dy: 0, K: null, est: null, hearT: 0, fetch: null, wary: 0 };
     }
+    g.makeAI = makeAI;      // (testes de equilíbrio: transformar o 'jogador' em bot)
     const nSurv = 1 + bots;
     for (let i = 0; i < nSurv; i++) {
       const sp = map.spawnSurvivors[i % map.spawnSurvivors.length];
       const human = role === 'survivor' && i === 0;
       g.survivors.push({
         id: i, x: sp.x, y: sp.y, face: Math.PI / 2,
-        hp: 2, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
+        hp: map.kind === 'camp' ? CFG.HP_CAMP : CFG.HP, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
         noise: 0, acting: null, skill: null, skillCD: 4 + i * 1.7, tick: 0,
         dead: false, escaped: false, near: null, interact: null, human, item: null, tool: null, pickP: 0, pickFor: null, det: 0,
         ai: human ? null : makeAI(i), usedWin: 0
@@ -1002,7 +1004,7 @@
       if (tgt) use(tgt);
       const dx = tgt ? s.x - k.x : 0, dy = tgt ? s.y - k.y : 0, d = tgt ? Math.hypot(dx, dy) : 99;
 
-      if (k.state === 'intro') { k.t += dt; if (k.t >= CFG.INTRO) { k.state = 'chase'; k.t = 0; k.aware = 'patrol'; } return; }
+      if (k.state === 'intro') { k.t += dt; if (k.t >= g.introT) { k.state = 'chase'; k.t = 0; k.aware = 'patrol'; } return; }
       if (k.state === 'stun') {
         k.t += dt;
         if (k.t >= CFG.STUN) {
@@ -1064,7 +1066,7 @@
           if (isWin) glass(o.cx, o.cy, 3, 0, 0);
         }
         if (k.t >= (isWin ? CFG.WIN_BREAK_T : isSab ? CFG.SABOTAGE_T : CFG.BREAK_T)) {
-          if (isSab) sabotageVehicle(o);
+          if (isSab) { sabotageVehicle(o); g.stats.sabotages++; }
           else if (isWin) { breakWindow(o, true); popup('QUEBROU!', o.cx, o.cy - 1.2, '#9bd3f0'); }
           else {
             o.state = 'broken'; o.respawn = CFG.RESPAWN;

@@ -32,6 +32,7 @@ Princípios herdados do protótipo anterior:
 | 8 | **Mapa grande** | `js/camp.js`: acampamento 144×96 gerado por semente (floresta, lago + cais, cabanas, estrada, portão), conectividade garantida; navegação otimizada (fila em arrays tipados, busca limitada); equipe **descobre** geradores e bots **exploram**; **mapa de campo** (M); seta para a saída. |
 | 9 | **Polícia** | Telefone ao lado da estrada (liberado pela energia: 5 de 8 geradores), segurar AGIR 30 s liga, polícia chega em 150 s e **abre o portão por 120 s**; sem sair a tempo, ela vai embora e é preciso ligar de novo. Assassino chuta o telefone e vigia telefone/portão; bots ligam, esperam perto do estacionamento e correm quando abre. |
 | 10 | **Carro e Barco** | 6 peças espalhadas (bateria, chave e combustível do carro; hélice, chave e combustível do barco), carregar 1 peça, instalar segurando AGIR (carro 35 s/peça, barco 40 s/peça), ligar o motor (10 s) ou empurrar o barco (15 s), embarcar (2 lugares) e partir; assassino **sabota** (tira a última peça); bots se dividem entre polícia, carro e barco. Correção de um bug antigo: o campo de destino dos bots era compartilhado. |
+| 11 | **Ajuste fino** | Fusível 45 s, 3 golpes e 20 s de vantagem no acampamento, assassino-IA fácil 12% mais lento, modos da sala (partida / treino / treino na arena), telemetria por rota, legenda e botões da sala nas telas pequenas. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
 Marcos de qualidade: **126 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
@@ -415,3 +416,31 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 52. **Teste do assassino-IA quebrou por mudança legítima:** com veículos na patrulha ele demora mais a achar um jogador parado; o teste passou de 4 para 7 minutos e o de "só polícia" virou "qualquer rota".
 
 **Pendências desta etapa:** HUD de vez em quando sobrepõe mensagens de introdução em telas baixas (ver etapa 11); texto "LEVANDO:" pode ser longo no celular; barco e carro sem skill check; sem som de passos na água.
+\n
+### 11.5 Etapa 11 entregue: ajuste fino com números
+
+**Método.** Dois "laboratórios" no Node, com 8 a 16 sementes cada: (a) *assassino justo* (a mesma IA de teste de sempre, agora também vigiando telefone e sabotando veículos) contra 4 bots; (b) *assassino-IA do jogo* contra 4 bots, com o "jogador" trocado por um bot (`g.makeAI(0)`; a partida acaba quando ele morre ou escapa, como no jogo). Parâmetros mudados via `cfg` antes de cada partida.
+
+| Configuração (assassino-IA × bots; "jogador" = bot) | Resultado (16 partidas) |
+|---|---|
+| fusível 20 s, 2 golpes, intro 3 s (estado antes da etapa) | jogador morre em ~2,5 min (135–171 s), 1 vitória em 8 |
+| + fusível 45 s | jogador morre em 3–7 min; equipe escapa pouco |
+| + intro 20 s + dificuldade (fácil 0,88× / normal 1× / difícil 1,05×) | fácil: 5 vitórias; normal: 2; difícil: 4 (ruído de amostra) |
+| **+ 3 golpes (normal, adotado)** | **4 vitórias, 23 escapes em 16 partidas** (contra 11 com 2 golpes), duração média 292 s |
+
+- *Assassino justo vs 4 bots* (fusível 45 s, 3 golpes): assassino vence 5 de 8 (as 3 derrotas são fugas pelo carro/barco), duração média **558 s** (≈ 9 min), 63% de aproveitamento de golpe.
+- Equipe de bots **sem** assassino: escapa em **~405 s** (4 de 4 sementes; rotas usadas: polícia 9, carro 4, barco 3).
+
+**Decisões**
+- 3 golpes só no acampamento (na arena continuam 2, os testes antigos dependem disso); `CFG.HP_CAMP`.
+- Intro de 20 s (`CFG.INTRO_CAMP`): o assassino nasce a ~60 tiles; sem a vantagem, o jogador era alcançado antes de achar um gerador.
+- Dificuldade "fácil": assassino-IA a 0,88× (3,6 tiles/s < 4,0 de quem corre) para existir um modo em que dá para fugir em campo aberto.
+- Modos na sala em vez de mais um botão: telas estreitas não têm espaço; o rótulo escolhe a versão que cabe (longa → média → curta).
+- Telemetria: cada partida registra `map`, chamadas de polícia, passageiros por veículo e sabotagens; `__dp.report()` ignora partidas na arena.
+
+**Impasses**
+53. **Legenda da sala por baixo do botão em telas de 180×320.** O teste só cobria até 3 linhas. Solução: escolher, entre uma versão longa e uma curta, a que cabe acima do primeiro botão, e testar mais dois tamanhos (180×320, 200×360).
+54. **Rótulo do modo estourava o botão.** O texto longo "MODO: TREINO (ACAMPAMENTO)" tem 27 caracteres × 6 px. Solução: medir e cair para versões menores.
+55. **Teste de desempenho instável.** O limite de 25 ms no pior quadro falhou uma vez com a máquina ocupada (rodava ao lado de outra simulação). Solução: limites 60 ms (pior) e 2 ms (média), que ainda pegariam uma regressão real (o problema antigo era 60 ms *e* 3 ms de média).
+
+**O que ainda não foi calibrado com gente de verdade:** o tempo de partida para uma pessoa (que explora devagar), a letalidade do assassino-IA para humanos (que usam pallets melhor ou pior que os bots) e o equilíbrio entre rotas (polícia é a mais lenta; carro e barco dependem de achar peças). Para isso: jogar algumas partidas e abrir `__dp.report()`.

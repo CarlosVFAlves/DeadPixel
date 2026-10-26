@@ -11,7 +11,8 @@
   let role = 'survivor';       // quem o jogador controla: 'survivor' | 'killer'
   let game = null;
   let training = false;
-  let lobbyTraining = false;   // opção "TREINO" na sala
+  let lobbyMode = 0;           // modo na sala: 0 = partida (acampamento), 1 = treino (acampamento), 2 = treino na arena pequena
+  let curMap = 'camp';         // mapa da partida em andamento
   let difficulty = 'normal';   // easy | normal | hard (para quem joga)
   let toast = null;            // { text, t }
   let showMap = false;         // mapa de campo (tecla M)
@@ -107,11 +108,11 @@
       case 'go_shop': state = 'shop'; break;
       case 'back': state = 'menu'; break;
       case 'kslot': role = role === 'killer' ? 'survivor' : 'killer'; break;
-      case 'train_toggle': lobbyTraining = !lobbyTraining; break;
+      case 'train_toggle': lobbyMode = (lobbyMode + 1) % 3; break;
       case 'diff_toggle': difficulty = { easy: 'normal', normal: 'hard', hard: 'easy' }[difficulty]; try { localStorage.setItem('dp_diff', difficulty); } catch (e) {} break;
       case 'map': showMap = !showMap; break;
       case 'vision': if (game && game.training) game.fullVision = !game.fullVision; break;
-      case 'start': start(lobbyTraining); break;
+      case 'start': curMap = lobbyMode === 2 ? 'arena' : 'camp'; start(lobbyMode > 0); break;
       case 'drop': dropQueued = true; break;
       case 'act': actQueued = true; break;
       case 'radio': radioQueued = true; break;
@@ -127,7 +128,7 @@
   function start(tr) {
     training = tr; newBest = false; showMap = false;
     DP.render.reset();
-    game = DP.createGame({ training: tr, role, difficulty, sfx: (n, p) => { const f = DP.audio.sfx[n]; if (f) f(p); } });
+    game = DP.createGame({ training: tr, map: curMap, role, difficulty, sfx: (n, p) => { const f = DP.audio.sfx[n]; if (f) f(p); } });
     state = 'play';
     joy.id = null; joy.active = false; joy.dx = joy.dy = 0;
     beatT = 0;
@@ -195,8 +196,8 @@
       if (code === 'KeyP') state = 'chars';
       if (code === 'KeyL') state = 'shop';
     } else if (state === 'lobby') {
-      if (code === 'Enter' || code === 'Space') start(lobbyTraining);
-      if (code === 'KeyT') lobbyTraining = !lobbyTraining;
+      if (code === 'Enter' || code === 'Space') { curMap = lobbyMode === 2 ? 'arena' : 'camp'; start(lobbyMode > 0); }
+      if (code === 'KeyT') lobbyMode = (lobbyMode + 1) % 3;
       if (code === 'Digit1') role = 'survivor';
       if (code === 'Digit2') role = 'killer';
       if (code === 'Escape') state = 'menu';
@@ -260,8 +261,9 @@
     }
     // registro das últimas partidas (inclui treino) para analisar equilíbrio com números
     const st = g.stats;
-    log.push({ d: Date.now(), role: g.role, diff: g.diff.level, training, win, result: g.result, t: Math.round(g.time), gens: g.gensDone, esc: g.escapedCount, dead: g.deadCount,
-      hits: st.hits, lunges: st.lunges, stuns: st.stuns, vaults: st.vaults, cuts: st.cuts, breaks: st.breaks, smashes: st.smashes, kicks: st.kicks, drops: st.drops, skillOk: st.skillOk, skillFail: st.skillFail });
+    log.push({ d: Date.now(), role: g.role, map: curMap, diff: g.diff.level, training, win, result: g.result, t: Math.round(g.time), gens: g.gensDone, esc: g.escapedCount, dead: g.deadCount,
+      hits: st.hits, lunges: st.lunges, stuns: st.stuns, vaults: st.vaults, cuts: st.cuts, breaks: st.breaks, smashes: st.smashes, kicks: st.kicks, drops: st.drops, skillOk: st.skillOk, skillFail: st.skillFail,
+      calls: g.phone ? g.phone.calls : 0, car: g.vehicles[0] ? g.vehicles[0].pax.length : 0, boat: g.vehicles[1] ? g.vehicles[1].pax.length : 0, sab: st.sabotages || 0 });
     while (log.length > 60) log.shift();
     try { localStorage.setItem('dp_log', JSON.stringify(log)); } catch (e) {}
   }
@@ -269,7 +271,7 @@
   function report() {
     const out = {};
     for (const r of ['survivor', 'killer']) {
-      const m = log.filter((x) => x.role === r && !x.training);
+      const m = log.filter((x) => x.role === r && !x.training && x.map !== 'arena');
       if (!m.length) continue;
       const w = m.filter((x) => x.win).length, avg = (k) => (m.reduce((a, x) => a + (x[k] || 0), 0) / m.length).toFixed(1);
       out[r] = { partidas: m.length, vitorias: w, tempoMedio: avg('t') + 's', geradores: avg('gens'), escaparam: avg('esc'), abatidos: avg('dead'), acertos: avg('hits'), botes: avg('lunges'), aproveitamento: r === 'killer' ? Math.round(100 * m.reduce((a, x) => a + x.hits, 0) / Math.max(1, m.reduce((a, x) => a + x.lunges, 0))) + '%' : undefined };
@@ -277,7 +279,7 @@
     return out;
   }
 
-  function lobbyUI() { return { role, difficulty, training: lobbyTraining, coins, hist, best: bestText(), toast: toast ? toast.text : null }; }
+  function lobbyUI() { return { role, difficulty, training: lobbyMode > 0, mode: lobbyMode, coins, hist, best: bestText(), toast: toast ? toast.text : null }; }
 
   // ---------- laço ----------
   let last = performance.now(), beatT = 0, radioT = 0;

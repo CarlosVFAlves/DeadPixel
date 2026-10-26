@@ -29,17 +29,19 @@ No **TREINO** há o interruptor **VER TUDO** (botão no canto ou tecla `V`) para
 ## Dificuldade
 
 Botão **DIF** na sala (Fácil / Normal / Difícil), sempre "para quem joga":
-- como **sobrevivente**: tarefas 30% mais longas e assassino-IA 6% mais forte no Difícil (30% mais curtas e 6% mais fraco no Fácil); seus colegas não mudam.
+- como **sobrevivente**: tarefas 30% mais longas e assassino-IA 5% mais forte no Difícil; no Fácil as tarefas são 30% mais curtas e o assassino-IA fica **12% mais lento** (um pouco mais lento do que quem corre); seus colegas não mudam.
 - como **assassino**: os bots sobreviventes ficam 25% melhores no Difícil (reação, erro, visão e audição) e as tarefas deles 25% mais curtas; no Fácil o contrário.
-- Os tempos base ficam numa tabela única (`CFG.ROUTES`: gerador 20 s, porta 3 s).
+- Os tempos base ficam numa tabela única (`CFG.ROUTES`): fusível 45 s, porta 3 s (arena), telefone 30 s + polícia 150 s + janela de 120 s, peças do carro 35 s (+10 s para ligar), peças do barco 40 s (+15 s para empurrar).
+- **Modo** (botão na sala, tecla `T`): PARTIDA (acampamento), TREINO (acampamento, ninguém morre, pallets voltam; `V` mostra tudo) e TREINO ARENA (o mapa pequeno de 48×32, bom para praticar pallets e janelas).
+- No acampamento cada sobrevivente aguenta **3 golpes** (na arena, 2) e o assassino demora **20 s** para sair do lugar (na arena, 3 s).
 
 O jogo guarda no navegador um **histórico** (vitórias/derrotas) e as últimas 60 partidas. Para ver um resumo (aproveitamento de golpes, tempo médio...) abra o console e digite `__dp.report()`.
 
 **Dois papéis** (escolha na sala):
-- **SOBREVIVENTE:** você + **3 bots** (cores diferentes) contra o assassino (IA). Conserte geradores e escape pela porta principal.
+- **SOBREVIVENTE:** você + **3 bots** (cores diferentes) contra o assassino (IA). Explore, ache e conserte geradores, ou procure peças de carro/barco, e escape.
 - **ASSASSINO:** você caça **4 sobreviventes controlados por IA**. Eles consertam geradores juntos, fogem, usam pallets e janelas e tentam escapar.
 
-**Objetivo da equipe:** **5 de 8 geradores** → a **porta principal** (parede norte, 2 tiles) energiza → segure AGIR ~4 s para abrir → quem atravessa escapa. O assassino vence se **menos da metade** escapar.
+**Objetivo da equipe:** escapar por uma das **três rotas** (veja "O acampamento"): **polícia** (5 de 8 geradores → telefone → o portão abre quando ela chega), **carro** (3 peças → motor → 2 lugares) ou **barco** (3 peças → empurrar → 2 lugares). O assassino vence se **menos da metade** escapar. Na arena pequena, 5 geradores energizam a porta principal (segure AGIR ~3 s para abrir).
 
 O **pallet** continua sendo a principal defesa (veja abaixo); as **janelas** são a segunda rota de fuga.
 

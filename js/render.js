@@ -201,7 +201,7 @@
       else { lift = arc * 5; tuck = p > 0.3 && p < 0.7; }
     }
     if (s.invuln > 0 && !s.vault && Math.floor(tm * 20) % 2) return;
-    const id = s.id % 4, hurt = s.hp < 2;
+    const id = s.id % 4, hurt = s.hp < game.hpMax;
     const step = Math.floor(s.walk) % 2;
     const bob = s.moving && step && !s.vault ? 1 : 0;
     const lx = Math.round(vx * lean), ly = Math.round(vy * lean * 0.6);
@@ -754,7 +754,7 @@
       const x = x0 + i * 10, y = 3;
       if (v.escaped) { px(ctx, '#7dffa0', x + 1, y + 3, 5, 5); px(ctx, '#0b0b10', x + 3, y + 5, 1, 1); px(ctx, '#e0b48a', x + 2, y, 3, 3); }
       else if (v.dead) { px(ctx, '#4a4a55', x + 1, y + 3, 5, 5); px(ctx, '#6a6a75', x + 2, y, 3, 3); px(ctx, '#e23a3a', x + 1, y + 3, 1, 1); px(ctx, '#e23a3a', x + 5, y + 7, 1, 1); px(ctx, '#e23a3a', x + 5, y + 3, 1, 1); px(ctx, '#e23a3a', x + 1, y + 7, 1, 1); }
-      else { px(ctx, '#e0b48a', x + 2, y, 3, 3); px(ctx, JK[i % 4], x + 1, y + 3, 5, 5); if (v.hp < 2) px(ctx, '#c0302a', x + 3, y + 4, 1, 3); }
+      else { px(ctx, '#e0b48a', x + 2, y, 3, 3); px(ctx, JK[i % 4], x + 1, y + 3, 5, 5); if (v.hp < game.hpMax) px(ctx, '#c0302a', x + 3, y + 4, 1, 3); }
       if (v.human && game.role === 'survivor') px(ctx, '#ffffff', x + 1, y + 9, 5, 1);
     });
   }
@@ -766,7 +766,7 @@
       text(ctx, 'RESTAM ' + left + '/' + game.survivors.length, 4, 4, '#cfcfd8');
     } else {
       text(ctx, 'VIDA', 4, 4, '#cfcfd8');
-      for (let i = 0; i < 2; i++) text(ctx, '♥', 32 + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
+      for (let i = 0; i < game.hpMax; i++) text(ctx, '♥', 32 + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
     }
     drawTeam(ctx, game, W);
     let ly = 44;
@@ -818,7 +818,7 @@
           text(ctx, l, W / 2, y0 + i * 9, '#ffb347', { align: 'c' }));
       }
     } else if (game.k.state === 'intro') {
-      const left = Math.ceil(game.cfg.INTRO - game.k.t);
+      const left = Math.ceil(game.introT - game.k.t);
       text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, Math.max(60, Math.round(H * 0.2)), '#ff5c5c', { align: 'c' });
       DP.font.wrap(game.explore.length ? 'ESCAPE PELA POLÍCIA (' + game.need + ' GERADORES + TELEFONE), PELO CARRO OU PELO BARCO. M ABRE O MAPA' : 'CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELA PORTA PRINCIPAL', Math.floor((W - 8) / 6)).forEach((l, i) =>
         text(ctx, l, W / 2, Math.max(60, Math.round(H * 0.2)) + 10 + i * 9, '#ffb347', { align: 'c' }));
@@ -998,7 +998,7 @@
   }
 
   // ---------- sprites para as telas de menu (mesmo pixel art do jogo, ampliado) ----------
-  const UI_GAME = { role: 'survivor', cfg: { VAULT_T: 0.5, WINDUP: 0.16 } };
+  const UI_GAME = { role: 'survivor', hpMax: 2, cfg: { VAULT_T: 0.5, WINDUP: 0.16 } };
   // cx,cy = pés; sc = ampliação inteira; o = { id, face, moving, tm, alpha, hp, human }
   function uiSurvivor(ctx, cx, cy, sc, o) {
     o = o || {};
