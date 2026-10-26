@@ -43,7 +43,7 @@
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS;
-        if (t[i] === 1 || t[i] === 4) {
+        if (t[i] === 1 || t[i] === 4 || t[i] === 5) {
           px(c, '#4b4559', X, Y, TS, TS);
           for (let l = 0; l < TS; l += 4) px(c, '#3b3647', X, Y + l + 3, TS, 1);
           for (let l = 0; l < TS; l += 4) {
@@ -66,7 +66,7 @@
     // sombra das paredes no chão
     for (let y = 1; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x;
-      if (t[i] === 0 && t[i - W] === 1) { px(c, 'rgba(0,0,0,.35)', x * TS, y * TS, TS, 3); px(c, 'rgba(0,0,0,.2)', x * TS, y * TS + 3, TS, 2); }
+      if (t[i] === 0 && (t[i - W] === 1 || t[i - W] === 5)) { px(c, 'rgba(0,0,0,.35)', x * TS, y * TS, TS, 3); px(c, 'rgba(0,0,0,.2)', x * TS, y * TS + 3, TS, 2); }
     }
     return cv;
   }
@@ -138,45 +138,68 @@
     return Math.abs(c) > Math.abs(s) ? (c > 0 ? 'R' : 'L') : (s > 0 ? 'D' : 'U');
   }
 
+  const JK = ['#3d6fb5', '#b5503d', '#3db56f', '#c9a43d'], JL = ['#5b8ad0', '#d0705b', '#5bd08d', '#e0c05b'];
+  const JD = ['#2f548a', '#8a3b2b', '#2b8a52', '#9c7e2b'], HAIR = ['#3a2418', '#1c1c1c', '#6b4a22', '#c9b27a'];
+
   function drawSurvivor(ctx, s, game, tm) {
     const d = dir4(s.face);
-    const x = Math.round(s.x * TS), y = Math.round(s.y * TS) + 5;
-    let lift = 0;
-    if (s.vault) { const p = Math.min(1, s.vault.t / game.cfg.VAULT_T); lift = Math.sin(p * Math.PI) * 5; }
-    if (s.invuln > 0 && Math.floor(tm * 20) % 2) return;
-    const hurt = s.hp < 2;
+    const x0 = Math.round(s.x * TS), y0 = Math.round(s.y * TS) + 5;
+    // pose do pulo: arco, corpo inclinado para o lado em que passa, pernas encolhidas
+    let lift = 0, tuck = false, lean = 0, armsUp = false, vx = 0, vy = 0, kind = '', p = 0;
+    if (s.vault) {
+      const v = s.vault; kind = v.kind; p = Math.min(1, v.t / v.dur);
+      const dl = Math.hypot(v.x1 - v.x0, v.y1 - v.y0) || 1; vx = (v.x1 - v.x0) / dl; vy = (v.y1 - v.y0) / dl;
+      const arc = Math.sin(p * Math.PI);
+      if (kind === 'walk') { lift = arc * 2.5; lean = arc * 2.5; tuck = p > 0.3 && p < 0.7; }
+      else if (kind === 'crash') { lift = arc * 6.5; lean = arc * 3; tuck = true; armsUp = true; }
+      else if (kind === 'run') { lift = arc * 6; lean = arc * 1.5; tuck = p > 0.25 && p < 0.75; }
+      else { lift = arc * 5; tuck = p > 0.3 && p < 0.7; }
+    }
+    if (s.invuln > 0 && !s.vault && Math.floor(tm * 20) % 2) return;
+    const id = s.id % 4, hurt = s.hp < 2;
     const step = Math.floor(s.walk) % 2;
-    const bob = s.moving && step ? 1 : 0;
+    const bob = s.moving && step && !s.vault ? 1 : 0;
+    const lx = Math.round(vx * lean), ly = Math.round(vy * lean * 0.6);
+    const x = x0 + lx;
 
-    px(ctx, 'rgba(0,0,0,.4)', x - 4, y - 1, 8, 2);
-    const yy = y - lift;
+    px(ctx, 'rgba(0,0,0,.4)', x0 - 4, y0 - 1, 8, 2);
+    const yb = y0 - Math.round(lift);            // pés
+    const yy = yb + ly;                           // tronco e cabeça
+    // linhas de velocidade atrás de quem corre/atravessa
+    if (kind === 'run' || kind === 'crash') for (let i = 0; i < 3; i++) px(ctx, 'rgba(255,255,255,.35)', x0 - Math.round(vx * (6 + i * 3)) - 1, yb - 6 - i * 2 - Math.round(vy * (4 + i * 3)), 2, 1);
     // pernas
-    const legC = '#26334d';
+    const legC = '#26334d', lh = tuck ? 2 : 4;
     if (d === 'L' || d === 'R') {
-      const a = s.moving ? (step ? 1 : -1) : 0;
-      px(ctx, legC, x - 1 + a, yy - 4, 2, 4); px(ctx, '#1b2438', x - 1 - a, yy - 4, 2, 4);
+      const a = s.moving && !tuck ? (step ? 1 : -1) : 0;
+      px(ctx, legC, x0 - 1 + a, yb - lh, 2, lh); px(ctx, '#1b2438', x0 - 1 - a, yb - lh, 2, lh);
     } else {
-      const a = s.moving ? (step ? 1 : 0) : 0;
-      px(ctx, legC, x - 3, yy - 4 - (a ? 1 : 0), 2, 4); px(ctx, legC, x + 1, yy - 4 - (a ? 0 : (s.moving ? 1 : 0)), 2, 4);
+      const a = s.moving && !tuck ? (step ? 1 : 0) : 0;
+      px(ctx, legC, x0 - 3, yb - lh - (a ? 1 : 0), 2, lh); px(ctx, legC, x0 + 1, yb - lh - (a ? 0 : (s.moving && !tuck ? 1 : 0)), 2, lh);
     }
     // tronco
-    const jacket = hurt ? '#7e3a42' : '#3d6fb5';
-    px(ctx, jacket, x - 4, yy - 10 - bob, 8, 6);
-    px(ctx, hurt ? '#a04a52' : '#5b8ad0', x - 4, yy - 10 - bob, 8, 1);
-    if (hurt) { px(ctx, '#b02a2a', x - 2, yy - 8 - bob, 2, 1); px(ctx, '#b02a2a', x + 1, yy - 6 - bob, 1, 2); }
+    px(ctx, JK[id], x - 4, yy - 10 - bob, 8, 6);
+    px(ctx, JL[id], x - 4, yy - 10 - bob, 8, 1);
+    if (hurt) { px(ctx, '#b02a2a', x - 2, yy - 8 - bob, 2, 1); px(ctx, '#b02a2a', x + 1, yy - 6 - bob, 1, 2); px(ctx, '#7a1a1a', x - 3, yy - 6 - bob, 1, 1); }
     // braços
-    const armSwing = s.moving ? (step ? 1 : -1) : 0;
-    if (d === 'L' || d === 'R') px(ctx, '#2f548a', x - 1, yy - 9 - bob + armSwing, 2, 4);
-    else { px(ctx, '#2f548a', x - 5, yy - 9 - bob + armSwing, 1, 4); px(ctx, '#2f548a', x + 4, yy - 9 - bob - armSwing, 1, 4); }
+    const armSwing = s.moving && !s.vault ? (step ? 1 : -1) : 0;
+    if (armsUp) { px(ctx, JD[id], x - 5, yy - 17, 2, 6); px(ctx, JD[id], x + 3, yy - 17, 2, 6); px(ctx, '#e0b48a', x - 5, yy - 18, 2, 1); px(ctx, '#e0b48a', x + 3, yy - 18, 2, 1); }
+    else if (d === 'L' || d === 'R') px(ctx, JD[id], x - 1, yy - 9 - bob + armSwing, 2, 4);
+    else { px(ctx, JD[id], x - 5, yy - 9 - bob + armSwing, 1, 4); px(ctx, JD[id], x + 4, yy - 9 - bob - armSwing, 1, 4); }
+    if (kind === 'walk' && p < 0.55) { px(ctx, '#e0b48a', x0 + Math.round(vx * 6) - 1, yb - 5 + Math.round(vy * 3), 2, 2); }   // mãos no parapeito
     // cabeça
     const hy = yy - 15 - bob;
     px(ctx, '#e0b48a', x - 3, hy, 6, 5);
-    if (d === 'U') px(ctx, '#3a2418', x - 3, hy, 6, 5);
+    if (d === 'U') px(ctx, HAIR[id], x - 3, hy, 6, 5);
     else {
-      px(ctx, '#3a2418', x - 3, hy, 6, 2);
-      if (d === 'L') { px(ctx, '#3a2418', x + 1, hy, 2, 4); px(ctx, '#1a1a1a', x - 2, hy + 2, 1, 1); }
-      else if (d === 'R') { px(ctx, '#3a2418', x - 3, hy, 2, 4); px(ctx, '#1a1a1a', x + 1, hy + 2, 1, 1); }
+      px(ctx, HAIR[id], x - 3, hy, 6, 2);
+      if (d === 'L') { px(ctx, HAIR[id], x + 1, hy, 2, 4); px(ctx, '#1a1a1a', x - 2, hy + 2, 1, 1); }
+      else if (d === 'R') { px(ctx, HAIR[id], x - 3, hy, 2, 4); px(ctx, '#1a1a1a', x + 1, hy + 2, 1, 1); }
       else { px(ctx, '#1a1a1a', x - 2, hy + 2, 1, 1); px(ctx, '#1a1a1a', x + 1, hy + 2, 1, 1); }
+    }
+    // marcador de "este é você"
+    if (s.human && game.role === 'survivor') {
+      const mb = Math.round(Math.sin(tm * 5));
+      px(ctx, '#ffffff', x - 2, hy - 6 + mb, 5, 1); px(ctx, '#ffffff', x - 1, hy - 5 + mb, 3, 1); px(ctx, '#ffffff', x, hy - 4 + mb, 1, 1);
     }
   }
 
@@ -273,7 +296,7 @@
   }
   function drawGen(ctx, o, game, tm) {
     const X = o.tx * TS, Y = o.ty * TS;
-    const working = game.s.acting && game.s.acting.obj === o;
+    const working = game.survivors.some((v) => v.acting && v.acting.obj === o);
     const sh = working ? (Math.floor(tm * 30) % 2) : 0;
     px(ctx, 'rgba(0,0,0,.4)', X + 1, Y + 12, 15, 4);
     px(ctx, '#23262d', X + 1 + sh, Y + 3, 14, 11);
@@ -292,36 +315,80 @@
       px(ctx, '#ffb347', X + 2, Y - 3, Math.round(o.progress * 12), 1);
     }
   }
-  function drawGate(ctx, o, tm) {
-    const X = o.tx * TS, Y = o.ty * TS;
-    const col = o.open ? '#7dffa0' : '#8a3030';
-    px(ctx, '#1a1820', X, Y, TS, TS);
-    for (let i = 2; i < TS; i += 4) px(ctx, o.open ? 'rgba(125,255,160,.55)' : '#59525f', X + 3, Y + i, 10, 1);
-    px(ctx, col, X + 3, Y + 1, 10, 2);
-    if (o.open) {
-      const g = ctx.createRadialGradient(o.cx * TS, o.cy * TS, 2, o.cx * TS, o.cy * TS, 34);
-      g.addColorStop(0, 'rgba(125,255,160,' + (0.3 + 0.12 * Math.sin(tm * 5)) + ')'); g.addColorStop(1, 'rgba(125,255,160,0)');
-      ctx.fillStyle = g; ctx.fillRect(o.cx * TS - 34, o.cy * TS - 34, 68, 68);
+  // janela: 'h' = em parede horizontal (vidro atravessa x); 'v' = em parede vertical
+  const FR = '#7a5530', FRD = '#4d3420', GL = '#a9dcf2', GLD = '#6fb4dc', DARK = '#0d0d13';
+  function drawWindow(ctx, w, game, tm) {
+    const X = w.tx * TS, Y = w.ty * TS, hz = w.orient === 'h';
+    const R = (col, a, b, c, d) => (hz ? px(ctx, col, X + a, Y + b, c, d) : px(ctx, col, X + b, Y + a, d, c));
+    R(FRD, 0, 2, 16, 12); R(FR, 1, 3, 14, 10);                  // moldura
+    if (w.state === 'closed') {
+      const sh = w.prog > 0 ? Math.round(Math.sin(tm * 55) * 0.8) : 0;   // treme enquanto abrem
+      R(GLD, 2 + sh, 4, 12, 8); R(GL, 2 + sh, 4, 12, 4);
+      R(FRD, 7, 3, 2, 10);                                      // montante
+      R('#ffffff', 3 + sh, 5, 3, 1); R('#ffffff', 10 + sh, 6, 2, 1); R('#e8f8ff', 4 + sh, 6, 1, 2);   // brilho
+      if (w.prog > 0) {                                         // barra de abrir
+        const bx = hz ? X + 2 : X - 2, by = hz ? Y - 3 : Y + 2;
+        px(ctx, '#000', bx, by, 12, 3); px(ctx, '#7dffa0', bx + 1, by + 1, Math.round(10 * w.prog), 1);
+      }
+    } else if (w.state === 'open') {
+      const p = Math.min(1, w.t / 0.4);
+      const len = Math.round(12 - 9 * p);
+      R(DARK, 2, 4, 12, 8);                                     // vão
+      R('#d9b57a', 2, 11, 12, 1);                               // parapeito
+      R(GL, 2, 4, len, 4); R(GLD, 2, 8, len, 1); R('#ffffff', 2, 4, len, 1);   // a folha desliza para o canto
+      if (p < 1) R('rgba(255,255,255,.7)', 2 + len, 4, 2, 7);
+    } else {                                                    // quebrada
+      const p = Math.min(1, w.t / 0.5);
+      R(DARK, 2, 4, 12, 8);
+      for (let i = 0; i < 6; i++) {                             // dentes de vidro nas bordas
+        const o = 2 + i * 2 + ((hash(w.tx, w.ty, i) * 2) | 0);
+        R(GL, o, 4, 1, 2 + (i % 2)); R(GLD, o + 1, 11 - (i % 2) * 2, 1, 1 + (i % 2) * 2);
+      }
+      for (let i = 0; i < 10; i++) {                            // cacos no chão dos dois lados
+        const side = i < 5 ? -1 : 1, along = 1 + ((hash(w.tx, w.ty, i + 9) * 14) | 0), off = 1 + ((hash(w.tx, w.ty, i + 20) * 6) | 0);
+        const ax = hz ? X + along : (side < 0 ? X - off : X + TS + off - 1), ay = hz ? (side < 0 ? Y - off : Y + TS + off - 1) : Y + along;
+        px(ctx, i % 2 ? 'rgba(190,230,250,.95)' : 'rgba(120,180,215,.95)', ax, ay, i % 3 ? 1 : 2, 1);
+      }
+      if (p < 1) { ctx.fillStyle = 'rgba(255,255,255,' + (0.85 * (1 - p)) + ')'; ctx.fillRect(X - 3, Y - 3, TS + 6, TS + 6); }
     }
-    if (o.progress > 0 && o.progress < 1) { px(ctx, '#000', X + 1, Y - 4, 14, 3); px(ctx, '#7dffa0', X + 2, Y - 3, Math.round(o.progress * 12), 1); }
+  }
+
+  // porta principal (2 tiles): trancada → energizada → folhas abrindo
+  function drawDoor(ctx, d, game, tm) {
+    const X = d.tx * TS, Y = d.ty * TS, Wd = d.w * TS;
+    const open = d.opened, p = open ? Math.min(1, d.t / 0.9) : 0;
+    px(ctx, '#17151c', X, Y, Wd, TS);
+    if (open) px(ctx, 'rgba(210,255,225,' + (0.45 + 0.35 * p) + ')', X + 1, Y, Wd - 2, TS);
+    const leaf = Math.round((Wd / 2 - 1) * (1 - p));
+    const col = d.powered ? '#56655d' : '#3d3944', colL = d.powered ? '#7a8f84' : '#59525f';
+    for (const side of [0, 1]) {
+      const lx = side ? X + Wd - 1 - leaf : X + 1;
+      if (leaf <= 0) continue;
+      px(ctx, col, lx, Y + 1, leaf, TS - 2); px(ctx, colL, lx, Y + 1, leaf, 1);
+      for (let i = 3; i < leaf - 1; i += 5) px(ctx, 'rgba(0,0,0,.35)', lx + i, Y + 3, 1, TS - 6);
+      px(ctx, '#c9a46a', side ? lx + 1 : lx + leaf - 3, Y + 7, 2, 2);                 // maçaneta
+    }
+    const blink = Math.floor(tm * 3) % 2;
+    px(ctx, open ? '#7dffa0' : d.powered ? (blink ? '#ffd23f' : '#7a6420') : '#8a3030', X + Wd / 2 - 1, Y + 2, 2, 2);
+    if (open) {                                                                          // luz que vaza para o chão
+      const g = ctx.createLinearGradient(0, Y + TS, 0, Y + TS + 52);
+      g.addColorStop(0, 'rgba(210,255,225,' + (0.34 * p) + ')'); g.addColorStop(1, 'rgba(210,255,225,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(X, Y + TS); ctx.lineTo(X + Wd, Y + TS); ctx.lineTo(X + Wd + 16, Y + TS + 52); ctx.lineTo(X - 16, Y + TS + 52); ctx.closePath(); ctx.fill();
+    }
+    text(ctx, 'SAÍDA', X + Wd / 2, Y + TS + 3, d.powered ? '#7dffa0' : '#8a8a99', { align: 'c' });
+    if (d.progress > 0 && !open) { px(ctx, '#000', X + 2, Y + TS + 13, Wd - 4, 3); px(ctx, '#7dffa0', X + 3, Y + TS + 14, Math.round((Wd - 6) * d.progress), 1); }
   }
 
   // ---------- zona de impacto (ajuda visual) ----------
   function drawZone(ctx, game, tm) {
-    const p = game.near;
-    if (!p) return;
+    for (const nz of game.nearList) drawOneZone(ctx, game, tm, nz.pal, nz.sv);
+  }
+  function drawOneZone(ctx, game, tm, p, sv) {
     const C = game.cfg;
-    const dir = (function () {
-      const s = game.s;
-      let side = (s.x - p.cx) * p.nx + (s.y - p.cy) * p.ny;
-      if (Math.abs(side) < 0.1) side = -(Math.cos(s.face) * p.nx + Math.sin(s.face) * p.ny) || 1;
-      const sg = side > 0 ? -1 : 1;
-      return { x: p.nx * sg, y: p.ny * sg };
-    })();
+    const dir = game.dropDirFor(sv, p);
     const fake = { cx: p.cx, cy: p.cy, dir };
     const inside = game.k.state !== 'intro' && game.inZone(fake, game.k);
-    // retângulo em px
-    const x0 = Math.min(dir.x ? p.cx - 0.5 * 0 : p.cx - C.ZONE_W, dir.x ? p.cx + dir.x * C.ZONE_LEN : p.cx + C.ZONE_W);
     let rx, ry, rw, rh;
     if (dir.x) { rw = C.ZONE_LEN + 0.6; rh = C.ZONE_W * 2; rx = dir.x > 0 ? p.cx - 0.6 : p.cx - C.ZONE_LEN; ry = p.cy - C.ZONE_W; }
     else { rh = C.ZONE_LEN + 0.6; rw = C.ZONE_W * 2; ry = dir.y > 0 ? p.cy - 0.6 : p.cy - C.ZONE_LEN; rx = p.cx - C.ZONE_W; }
@@ -331,7 +398,6 @@
     ctx.strokeStyle = inside ? 'rgba(255,90,60,.9)' : 'rgba(255,210,63,.45)';
     ctx.lineWidth = 1;
     ctx.strokeRect(Math.round(rx * TS) + 0.5, Math.round(ry * TS) + 0.5, Math.round(rw * TS) - 1, Math.round(rh * TS) - 1);
-    void x0;
   }
 
   // ---------- cena ----------
@@ -409,14 +475,15 @@
       }
     }
     for (const o of game.gens) drawGenGlow(ctx, o, tm);
-    for (const o of game.gates) drawGate(ctx, o, tm);
+    for (const w of game.windows) drawWindow(ctx, w, game, tm);
+    drawDoor(ctx, game.door, game, tm);
     drawZone(ctx, game, tm);
 
     // pallets de pé + personagens, ordenados por y
     const list = [];
-    for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.near === p ? tm : 0) });
+    for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.nearList.some((n) => n.pal === p) ? tm : 0) });
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
-    list.push({ y: s.y, f: () => drawSurvivor(ctx, s, game, tm) });
+    for (const v of game.survivors) if (!v.dead && !v.escaped) list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) });
     list.push({ y: game.k.y, f: () => drawKiller(ctx, game.k, game, tm) });
     list.sort((a, b) => a.y - b.y);
     for (const o of list) o.f();
@@ -434,8 +501,9 @@
       if (game.near && game.role === 'survivor') text(ctx, 'ESPAÇO', game.near.cx * TS, game.near.cy * TS - 16 + bob, '#ffd23f', { align: 'c' });
       const it = game.pInteract;
       if (it && !(game.role === 'survivor' && game.s.acting)) {
-        const label = { gen: 'SEGURE E', gate: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', kick: 'E: CHUTAR' }[it.type];
-        text(ctx, label, it.obj.cx * TS, it.obj.cy * TS - (it.type === 'gen' ? 14 : 16) + bob, it.type === 'break' || it.type === 'kick' ? '#ff9d5c' : '#7dffa0', { align: 'c' });
+        const label = { gen: 'SEGURE E', door: 'SEGURE E: ABRIR PORTA', window: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', smash: 'E: QUEBRAR JANELA', kick: 'E: CHUTAR' }[it.type];
+        const bad = it.type === 'break' || it.type === 'kick' || it.type === 'smash';
+        text(ctx, label, it.obj.cx * TS, it.obj.cy * TS - (it.type === 'gen' ? 14 : 18) + bob, bad ? '#ff9d5c' : '#7dffa0', { align: 'c' });
       }
     }
     // textos flutuantes
@@ -456,11 +524,29 @@
   }
 
   // ---------- HUD ----------
+  // ícones da equipe: cor da jaqueta; vermelho = ferido; cinza = abatido; verde = escapou
+  function drawTeam(ctx, game, W) {
+    const n = game.survivors.length, x0 = W - 4 - 23 - 6 - n * 10;
+    game.survivors.forEach((v, i) => {
+      const x = x0 + i * 10, y = 3;
+      if (v.escaped) { px(ctx, '#7dffa0', x + 1, y + 3, 5, 5); px(ctx, '#0b0b10', x + 3, y + 5, 1, 1); px(ctx, '#e0b48a', x + 2, y, 3, 3); }
+      else if (v.dead) { px(ctx, '#4a4a55', x + 1, y + 3, 5, 5); px(ctx, '#6a6a75', x + 2, y, 3, 3); px(ctx, '#e23a3a', x + 1, y + 3, 1, 1); px(ctx, '#e23a3a', x + 5, y + 7, 1, 1); px(ctx, '#e23a3a', x + 5, y + 3, 1, 1); px(ctx, '#e23a3a', x + 1, y + 7, 1, 1); }
+      else { px(ctx, '#e0b48a', x + 2, y, 3, 3); px(ctx, JK[i % 4], x + 1, y + 3, 5, 5); if (v.hp < 2) px(ctx, '#c0302a', x + 3, y + 4, 1, 3); }
+      if (v.human && game.role === 'survivor') px(ctx, '#ffffff', x + 1, y + 9, 5, 1);
+    });
+  }
+
   function drawHUD(ctx, game, W, H, tm) {
     const s = game.s, ka = game.role === 'killer';
-    text(ctx, ka ? 'ALVO' : 'VIDA', 4, 4, '#cfcfd8');
-    for (let i = 0; i < 2; i++) text(ctx, '♥', (ka ? 28 : 32) + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
-    const gd = game.gensDone >= game.need;
+    if (ka) {
+      const left = game.survivors.filter((v) => game.alive(v)).length;
+      text(ctx, 'RESTAM ' + left + '/' + game.survivors.length, 4, 4, '#cfcfd8');
+    } else {
+      text(ctx, 'VIDA', 4, 4, '#cfcfd8');
+      for (let i = 0; i < 2; i++) text(ctx, '♥', 32 + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
+    }
+    drawTeam(ctx, game, W);
+    const gd = game.door.powered;
     text(ctx, 'GERADORES ' + game.gensDone + '/' + game.need, 4, 14, gd ? '#7dffa0' : '#ffb347');
     text(ctx, 'PALLETS ' + game.standing() + '/' + game.pallets.length, 4, 24, '#e9c07a');
     text(ctx, (ka ? 'TROPEÇOU ' : 'ATORDOADO ') + game.stats.stuns + 'X', 4, 34, ka ? '#ff9d5c' : '#ffd23f');
@@ -477,17 +563,17 @@
         px(ctx, 'rgba(0,0,0,.6)', W / 2 - 25, y0 + 10, 50, 4);
         px(ctx, '#ff9d5c', W / 2 - 24, y0 + 11, Math.round(48 * f), 2);
       } else if (game.time < 7) {
-        DP.font.wrap('CACE O SOBREVIVENTE ANTES QUE ELE ESCAPE. SETAS NA BORDA = BARULHO', Math.floor((W - 8) / 6)).forEach((l, i) =>
+        DP.font.wrap('CACE OS 4 SOBREVIVENTES. SETAS NA BORDA = BARULHO', Math.floor((W - 8) / 6)).forEach((l, i) =>
           text(ctx, l, W / 2, y0 + i * 9, '#ffb347', { align: 'c' }));
       }
     } else if (game.k.state === 'intro') {
       const left = Math.ceil(game.cfg.INTRO - game.k.t);
       text(ctx, 'O ASSASSINO CHEGA EM ' + left, W / 2, Math.max(46, Math.round(H * 0.2)), '#ff5c5c', { align: 'c' });
-      DP.font.wrap('CONSERTE ' + game.need + ' GERADORES E ESCAPE PELO PORTÃO', Math.floor((W - 8) / 6)).forEach((l, i) =>
+      DP.font.wrap('CONSERTE ' + game.need + ' DE 8 GERADORES E ESCAPE PELA PORTA PRINCIPAL', Math.floor((W - 8) / 6)).forEach((l, i) =>
         text(ctx, l, W / 2, Math.max(46, Math.round(H * 0.2)) + 10 + i * 9, '#ffb347', { align: 'c' }));
     }
     if (!(ka && (game.k.state === 'stumble' || game.k.state === 'stun' || game.time < 7)) && gd && game.time % 6 < 3 && !game.over) {
-      DP.font.wrap(ka ? 'PORTÕES ABERTOS! IMPEÇA A FUGA' : 'PORTÕES ABERTOS! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
+      DP.font.wrap(ka ? 'PORTA LIBERADA! IMPEÇA A FUGA' : 'PORTA LIBERADA! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
         text(ctx, l, W / 2, Math.max(46, Math.round(H * 0.2)) + i * 9, '#7dffa0', { align: 'c' }));
     } else if (!ka && game.k.hesitate) {
       text(ctx, 'ELE HESITA...', W / 2, Math.max(46, Math.round(H * 0.2)), '#ff9d5c', { align: 'c' });
@@ -556,11 +642,11 @@
     ctx.translate(cx, Math.round(H * 0.16)); ctx.scale(sc, sc);
     text(ctx, title, 0, 0, '#e23a3a', { align: 'c' });
     ctx.restore();
-    text(ctx, 'PROTÓTIPO 3: ASSASSINO', cx, Math.round(H * 0.16) + 7 * sc + 6, '#e9c07a', { align: 'c' });
+    text(ctx, 'PROTÓTIPO 4: JANELAS E EQUIPE', cx, Math.round(H * 0.16) + 7 * sc + 6, '#e9c07a', { align: 'c' });
     if (best) text(ctx, best, cx, Math.round(H * 0.36), '#8a8a99', { align: 'c' });
     const lines = DP.font.wrap(role === 'killer'
-      ? 'CACE O SOBREVIVENTE. QUEBRE PALLETS, CHUTE GERADORES E CUIDADO: LEVOU PALLET, TROPEÇA!'
-      : 'CONSERTE 5 GERADORES, ABRA O PORTÃO E ESCAPE. DERRUBE O PALLET NO ASSASSINO PARA GANHAR TEMPO.', Math.floor((W - 16) / 6));
+      ? 'CACE OS 4 SOBREVIVENTES. QUEBRE PALLETS E JANELAS, CHUTE GERADORES. LEVOU PALLET, TROPEÇA!'
+      : 'CONSERTE 5 DE 8 GERADORES COM SEUS 3 AMIGOS E ESCAPE PELA PORTA PRINCIPAL. USE PALLETS E JANELAS.', Math.floor((W - 16) / 6));
     lines.forEach((l, i) => text(ctx, l, cx, Math.round(H * 0.82) + i * 9, '#a9a9b5', { align: 'c' }));
   }
 
@@ -572,17 +658,18 @@
     const y0 = Math.round(H * 0.16);
     const esc = game.result === 'escaped', ka = game.role === 'killer';
     const win = ka ? !esc : esc;
-    text(ctx, ka ? (esc ? 'ELE ESCAPOU...' : 'ELE CAIU!') : (esc ? 'VOCÊ ESCAPOU!' : 'VOCÊ MORREU'), cx, y0, win ? '#7dffa0' : '#e23a3a', { align: 'c' });
+    text(ctx, ka ? (esc ? 'ELES ESCAPARAM...' : 'VITÓRIA!') : (esc ? 'VOCÊ ESCAPOU!' : 'VOCÊ MORREU'), cx, y0, win ? '#7dffa0' : '#e23a3a', { align: 'c' });
     const tt = Math.floor(game.time);
     const rows = [
       [ka ? 'DURAÇÃO DA CAÇADA' : esc ? 'TEMPO DE FUGA' : 'SOBREVIVEU', Math.floor(tt / 60) + ':' + String(tt % 60).padStart(2, '0')],
       ['GERADORES', game.gensDone + '/' + game.need],
+      ['ESCAPARAM / ABATIDOS', game.escapedCount + ' / ' + game.deadCount],
       ka ? ['TROPEÇOS', String(game.stats.stuns)] : ['ATORDOAMENTOS', String(game.stats.stuns)],
       ka ? ['GOLPES CERTEIROS', String(game.stats.hits)] : ['PALLETS DERRUBADOS', String(game.stats.drops)],
-      ka ? ['PALLETS QUEBRADOS', String(game.stats.breaks)] : ['SKILL CHECKS', game.stats.skillOk + ' OK / ' + game.stats.skillFail + ' ERROS']
+      ka ? ['QUEBROU PALLETS / JANELAS', game.stats.breaks + ' / ' + game.stats.smashes] : ['JANELAS: PULOS / CORTES', game.stats.vaults + ' / ' + game.stats.cuts]
     ];
     rows.forEach((r, i) => {
-      const y = y0 + 15 + i * 10;
+      const y = y0 + 14 + i * 9;
       text(ctx, r[0], Math.max(8, cx - 62), y, '#a9a9b5');
       text(ctx, r[1], Math.min(W - 8, cx + 62), y, '#fff', { align: 'r' });
     });

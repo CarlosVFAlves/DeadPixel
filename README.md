@@ -1,14 +1,15 @@
-# Dead Pixel — Protótipo 3: Jogue como o Assassino
+# Dead Pixel — Protótipo 4: Janelas e Equipe
 
 Jogo 2D em pixel art (HTML + canvas, **sem dependências**, gráficos e áudio gerados por código), pensado para **celular e PC**.
 Inspirado em *Dead by Daylight*, mas com foco total em **jogabilidade**.
 
 **Dois papéis** (escolha no menu, ou teclas `1` / `2`):
-- **SOBREVIVENTE:** fuja do assassino (IA), conserte geradores e escape.
-- **ASSASSINO:** você caça um sobrevivente controlado por IA. Ele conserta geradores, foge, usa pallets e tenta escapar.
+- **SOBREVIVENTE:** você + **3 bots** (cores diferentes) contra o assassino (IA). Conserte geradores e escape pela porta principal.
+- **ASSASSINO:** você caça **4 sobreviventes controlados por IA**. Eles consertam geradores juntos, fogem, usam pallets e janelas e tentam escapar.
 
-Objetivo do sobrevivente: conserte **5 de 7 geradores**, abra um dos **2 portões de saída** e escape — sem deixar o assassino te pegar.
-O **pallet** continua sendo a sua principal defesa (veja abaixo).
+**Objetivo da equipe:** **5 de 8 geradores** → a **porta principal** (parede norte, 2 tiles) energiza → segure AGIR ~4 s para abrir → quem atravessa escapa. O assassino vence se **menos da metade** escapar.
+
+O **pallet** continua sendo a principal defesa (veja abaixo); as **janelas** são a segunda rota de fuga.
 
 Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celular).
 
@@ -16,25 +17,48 @@ Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celula
 
 | Celular | Teclado | Ação |
 |---|---|---|
-| Arrastar na tela (joystick flutuante) | WASD / setas | andar |
-| **AGIR** (segurar) | **E** (segurar) | consertar gerador / abrir portão |
+| Arrastar na tela (joystick flutuante; **arraste pouco = andar**) | WASD / setas · **Shift = andar** (devagar e quieto) | mover |
+| **AGIR** (segurar) | **E** (segurar) | consertar gerador / abrir janela / abrir a porta principal |
 | **PALLET** | **Espaço** (ou E sem gerador por perto) | derrubar o pallet ao alcance |
 | tocar na tela com outro dedo | **Espaço** | acertar o skill check |
 | II | P / Esc | pausar |
 | — | R | reiniciar |
 | — | M | liga/desliga som |
 
-Modos: **JOGAR** (2 acertos e você cai; os pallets não voltam) e **TREINO** (não morre e os pallets voltam a ficar de pé depois de ~8 s, para repetir a mecânica à vontade).
+Modos: **JOGAR** (2 acertos e cai; nada volta) e **TREINO** (ninguém morre; pallets e janelas voltam sozinhos, para repetir as mecânicas à vontade).
+
+## Janelas
+
+10 janelas nas casas. Todas **começam fechadas**.
+
+| Situação | O que acontece |
+|---|---|
+| **Fechada**, segurar **AGIR** (E) ~0,8 s | **abre**, em silêncio (a folha desliza) |
+| **Aberta**, **correndo** | **pula** (0,45 s, arco rápido) |
+| **Aberta**, **andando** (Shift, ou joystick leve) | passa **tranquilamente** (1 s, apoia as mãos no parapeito). Não corta |
+| **Fechada**, **correndo** contra ela | **atravessa quebrando**: chuva de cacos, **se corta (−1 vida, nunca mata)** e o grito **denuncia a posição** |
+| **Quebrada** (por alguém) | vidro no chão: quem passar **se corta** de novo |
+| **Assassino** (AGIR, ~1 s) | **quebra** a janela, fechada ou aberta, para os sobreviventes se cortarem. Ele só **passa por janela aberta/quebrada** (0,85 s, mais devagar que eles); fechada o barra |
+
+Animações: abrir (folha desliza), pulo (arco, pernas encolhidas), passar com calma (mãos no parapeito), atravessar quebrando (braços na frente, linhas de velocidade, flash + cacos) e o assassino quebrando (machado).
+No treino as janelas e os pallets voltam sozinhos depois de ~12 s.
+
+## Equipe de bots
+
+- **Dividem os geradores** (cada um escolhe um diferente; dois no mesmo rendem 80% extra) e **fazem skill checks** (~85% de acerto).
+- **Só o mais próximo do assassino foge de longe**; os outros continuam trabalhando até ele chegar a ~7 tiles.
+- Fogem por **pallets** (derrubam na hora certa), **janelas** (abrem com calma ou quebram se estiverem fugindo) e vão para a **porta** quando ela está liberada.
+- Quem leva **2 golpes** cai (fora da partida). Se **você** (sobrevivente) cai ou escapa, a partida acaba.
 
 ## Jogando como assassino
 
 | Celular | Teclado | Ação |
 |---|---|---|
-| joystick | WASD / setas | andar (4,55 tiles/s; o sobrevivente corre ~4,4) |
+| joystick | WASD / setas | andar (4,55 tiles/s; os sobreviventes correm ~4,4). Empurre contra janela aberta/quebrada para passar |
 | **ATACAR** | **Espaço** | golpe com bote (ergue 0,16 s, avança ~2,5 tiles). Tem um pouco de mira assistida |
-| **AGIR** | **E** | **quebrar** pallet caído (~2 s, mexer cancela) ou **chutar** gerador com progresso (−15%) |
+| **AGIR** | **E** | **quebrar** pallet caído (~2 s) ou **janela** (~1 s), ou **chutar** gerador com progresso (−15%). Mexer cancela |
 
-- **Você ganha** derrubando o sobrevivente (2 acertos). **Perde** se ele escapar.
+- **Você ganha** se **menos da metade** (0 ou 1) dos 4 escapar. Cada sobrevivente cai com 2 acertos.
 - Setas laranja/vermelhas na borda da tela apontam **barulhos fora de vista**: gerador sendo consertado, skill check errado, gerador pronto.
 - A zona amarela/vermelha no chão mostra onde um pallet cairia se o sobrevivente derrubasse agora.
 - A IA do sobrevivente: **sente** você (batimento) a ~11 tiles e **vê** com linha de visão; foge de quem se aproxima; corre até um pallet que esteja no seu caminho, passa para o outro lado e **derruba na hora certa** (prevendo onde você estará, com tempo de reação humano); pula pallets caídos; foge para o portão quando está aberto.
@@ -50,7 +74,7 @@ Quando o assassino (você ou a IA) leva um pallet:
 - **Gerador:** fique encostado e **segure AGIR/E** (parado). ~15 s para terminar. Mexer o personagem cancela. Progresso fica salvo.
 - **Skill check:** de tempos em tempos aparece um anel com um ponteiro girando. Aperte **Espaço** (ou toque na tela com outro dedo) com o ponteiro na zona branca (**vermelha = perfeito**, ganha mais progresso). Errar: **−10%** do gerador, explosão e o assassino vem investigar.
 - **Assassino não é onisciente:** ele **vê** com linha de visão (até 13 tiles), **ouve** (reparo 9 tiles, andar 3,5, pular 5) e **rastreia** por 2,5 s depois de te perder. Sem te perceber ele **patrulha os geradores** e **chuta (−15%)** os que têm progresso. Gerador concluído faz barulho e ele vem ver.
-- **5 geradores prontos →** os **portões** (bordas oeste e leste do mapa) acendem. Segure AGIR ~4 s no portão para escapar.
+- **5 geradores prontos →** a **porta principal** (parede norte) acende. Segure AGIR ~4 s perto dela; depois é só atravessar.
 
 ## A mecânica do pallet
 
@@ -71,7 +95,7 @@ O assassino ataca com um bote (arma erguida 0,16 s → bote de 0,3 s): dá para 
 | `index.html` | página e canvas |
 | `js/font.js` | fonte bitmap 5×7 com acentos |
 | `js/audio.js` | sons sintetizados (queda do pallet, atordoamento, golpe, batida de coração) |
-| `js/map.js` | arena fixa: 5 casas, 2 muros com vão, 12 pallets, 7 geradores, 2 portões |
+| `js/map.js` | arena fixa: 5 casas, 2 muros com vão, 12 pallets, 10 janelas, 8 geradores, porta principal, 4 pontos de início |
 | `js/game.js` | **regras**: sobrevivente, IA do assassino, pallet (sem DOM, testável no Node) |
 | `js/render.js` | pixel art por código, zona de impacto, HUD |
 | `js/main.js` | laço, telas, entrada por toque/teclado |
@@ -80,7 +104,7 @@ O assassino ataca com um bote (arma erguida 0,16 s → bote de 0,3 s): dá para 
 
 ## Ajustes (`CFG` em `js/game.js`)
 
-`RUN` / `K_SPEED` (velocidades), `STUN` / `STUMBLE_T` / `STUMBLE_SPEED` / `TRIP_T` (tropeço), `AI_SPEED` / `AI_SENSE` / `AI_FLEE` / `AI_SKILL_ERR` (IA do sobrevivente), `REPAIR_T` (tempo do gerador), `SKILL_*` (skill check), `SIGHT` / `NOISE_*` / `TRACK` (percepção do assassino), `FALL_T` (tempo de queda), `ZONE_LEN` / `ZONE_W` (tamanho da zona de impacto), `STUN`, `BREAK_T`, `BREAK_COST` (quanto a IA prefere dar a volta a quebrar), `RESPECT` (chance de hesitar), `ATTACK_RANGE`, `RECOVER_*`.
+`RUN` / `K_SPEED` (velocidades), `STUN` / `STUMBLE_T` / `STUMBLE_SPEED` / `TRIP_T` (tropeço), `AI_SPEED` / `AI_SENSE` / `AI_FLEE` / `AI_SKILL_ERR` (IA do sobrevivente), `REPAIR_T` (tempo do gerador), `TEAM_BONUS`, `WIN_OPEN_T` / `WIN_BREAK_T` / `VAULT_*` (janelas), `NOISE_CRASH`, `SKILL_*` (skill check), `SIGHT` / `NOISE_*` / `TRACK` (percepção do assassino), `FALL_T` (tempo de queda), `ZONE_LEN` / `ZONE_W` (tamanho da zona de impacto), `STUN`, `BREAK_T`, `BREAK_COST` (quanto a IA prefere dar a volta a quebrar), `RESPECT` (chance de hesitar), `ATTACK_RANGE`, `RECOVER_*`.
 
 ## Próximos passos (ideias)
 

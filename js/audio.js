@@ -100,6 +100,16 @@
     gates() { for (let i = 0; i < 3; i++) tone(220 * (i + 2), 0.5, 'sawtooth', 0.12, 220 * (i + 2) * 1.5, 0, i * 0.12); },
     escape() { for (let i = 0; i < 5; i++) tone(392 * Math.pow(1.19, i), 0.25, 'triangle', 0.2, 0, 0, i * 0.11); },
     trip(pan) { noise(0.16, 0.5, 700, 'lowpass', 0.8, pan); tone(130, 0.2, 'square', 0.2, 55, pan); tone(300, 0.1, 'triangle', 0.12, 180, pan, 0.05); },
+    // vidro estilhaçando: estalo agudo + chuva de cacos
+    glass(pan) {
+      noise(0.07, 0.9, 5200, 'highpass', 0.7, pan);
+      for (let i = 0; i < 7; i++) tone(2400 + Math.random() * 3200, 0.07 + Math.random() * 0.07, 'triangle', 0.1, 1500 + Math.random() * 1500, pan, 0.02 + i * 0.045);
+      noise(0.35, 0.3, 3800, 'highpass', 0.6, pan, 0.12);
+    },
+    glassHit(pan) { noise(0.06, 0.5, 4200, 'highpass', 0.7, pan); tone(1800, 0.06, 'square', 0.08, 900, pan); },
+    winOpen(pan) { noise(0.28, 0.22, 900, 'bandpass', 3, pan, 0, 2200); tone(180, 0.2, 'sawtooth', 0.06, 260, pan); },
+    cut(pan) { tone(880, 0.16, 'sawtooth', 0.2, 300, pan); noise(0.12, 0.35, 2800, 'bandpass', 2, pan); },
+    doorOpen() { noise(0.7, 0.4, 500, 'lowpass', 1.2, 0, 0, 120); tone(70, 0.6, 'sawtooth', 0.14, 45); for (let i = 0; i < 3; i++) tone(330 * Math.pow(1.26, i), 0.3, 'triangle', 0.14, 0, 0, 0.2 + i * 0.1); },
     click() { tone(660, 0.05, 'square', 0.1, 440); },
     // batida de coração (raio de terror)
     heart(vol) {

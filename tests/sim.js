@@ -22,11 +22,11 @@ console.log('mapa');
   const m = DP.buildMap();
   const { W, H, t } = m;
   const free = (x, y) => x >= 0 && y >= 0 && x < W && y < H && t[y * W + x] === 0;
-  ok(free(Math.floor(m.spawnSurvivor.x), Math.floor(m.spawnSurvivor.y)), 'spawn do sobrevivente livre');
+  ok(m.spawnSurvivors.length === 4 && m.spawnSurvivors.every((p) => free(Math.floor(p.x), Math.floor(p.y))), '4 pontos de início livres');
   ok(free(Math.floor(m.spawnKiller.x), Math.floor(m.spawnKiller.y)), 'spawn do assassino livre');
 
   // flood fill (4-vizinhos): todo piso alcançável
-  const seen = new Uint8Array(W * H), st = [[Math.floor(m.spawnSurvivor.x), Math.floor(m.spawnSurvivor.y)]];
+  const seen = new Uint8Array(W * H), st = [[Math.floor(m.spawnSurvivors[0].x), Math.floor(m.spawnSurvivors[0].y)]];
   seen[st[0][1] * W + st[0][0]] = 1;
   while (st.length) {
     const [x, y] = st.pop();
@@ -39,6 +39,18 @@ console.log('mapa');
   for (let i = 0; i < W * H; i++) if (t[i] === 0 && !seen[i]) unreach++;
   ok(unreach === 0, `todo piso conectado (${unreach} tiles isolados)`);
   ok(seen[Math.floor(m.spawnKiller.y) * W + Math.floor(m.spawnKiller.x)] === 1, 'assassino alcança o sobrevivente');
+  ok(m.spawnSurvivors.every((p) => seen[Math.floor(p.y) * W + Math.floor(p.x)] === 1), 'todos os pontos de início conectados');
+
+  // janelas: parede dos dois lados e piso livre dos dois lados da passagem
+  let badW = 0;
+  for (const w of m.windows) {
+    const a = w.orient === 'h' ? [[-1, 0], [1, 0]] : [[0, -1], [0, 1]], b2 = w.orient === 'h' ? [[0, -1], [0, 1]] : [[-1, 0], [1, 0]];
+    for (const [dx, dy] of a) if (t[(w.ty + dy) * W + w.tx + dx] !== 1) badW++;
+    for (const [dx, dy] of b2) if (!free(w.tx + dx, w.ty + dy)) badW++;
+  }
+  ok(badW === 0 && m.windows.length >= 8, `${m.windows.length} janelas bem encaixadas nas paredes`);
+  ok(m.gens.length === 8 && m.NEED === 5, '8 geradores, 5 necessários');
+  ok(free(23, 1) && free(24, 1) && t[23] === 4 && t[24] === 4, 'porta principal de 2 tiles na parede norte, com passagem livre');
 
   // cada pallet: parede dos dois lados do vão e piso livre dos dois lados da passagem
   let bad = 0;
@@ -53,7 +65,7 @@ console.log('mapa');
 
 // ---------- helpers de cenário ----------
 function scene(training) {
-  const g = DP.createGame({ rng: seeded(1), training: !!training });
+  const g = DP.createGame({ rng: seeded(1), training: !!training, bots: 0 });
   g.k.state = 'chase';
   return g;
 }
@@ -135,7 +147,7 @@ console.log('hesitação');
 {
   let hesitated = 0;
   for (let seed = 1; seed <= 30; seed++) {
-    const g = DP.createGame({ rng: seeded(seed) });
+    const g = DP.createGame({ rng: seeded(seed), bots: 0 });
     g.k.state = 'chase';
     const p = g.pallets.find((q) => q.orient === 'v' && q.tx === 5);
     g.s.x = p.cx - 0.9; g.s.y = p.cy;
@@ -151,7 +163,7 @@ console.log('fuzz');
   let problems = 0, stunsTotal = 0, downs = 0;
   for (let seed = 1; seed <= 40; seed++) {
     const rnd = seeded(seed * 7);
-    const g = DP.createGame({ rng: rnd, training: seed % 2 === 0 });
+    const g = DP.createGame({ rng: rnd, training: seed % 2 === 0, bots: 0 });
     let ax = 0, ay = 0, ct = 0;
     for (let i = 0; i < 60 * 90 && !g.over; i++) {
       ct -= 1 / 60;
@@ -161,7 +173,7 @@ console.log('fuzz');
       g.update(1 / 60, { ax, ay, drop, act: rnd() < 0.5, press: rnd() < 0.05, actPress: rnd() < 0.02 });
       for (const e of [g.s, g.k]) {
         if (!isFinite(e.x) || !isFinite(e.y)) problems++;
-        else if (g.solid(Math.floor(e.x), Math.floor(e.y)) && !g.s.vault) { problems++; if (problems < 4) console.log('   dentro de sólido', e === g.s ? 'S' : 'K', e.x.toFixed(2), e.y.toFixed(2)); }
+        else if (g.solid(Math.floor(e.x), Math.floor(e.y)) && !(e === g.s && (g.s.vault || !g.alive(g.s))) && !(e === g.k && g.k.state === 'kvault')) { problems++; if (problems < 4) console.log('   dentro de sólido', e === g.s ? 'S' : 'K', e.x.toFixed(2), e.y.toFixed(2)); }
       }
     }
     stunsTotal += g.stats.stuns; if (g.over) downs++;
@@ -190,16 +202,16 @@ console.log('geradores');
   g.s.skillCD = 999;                       // sem skill check aqui
   runFor(g, 0.1, {});
   ok(g.interact && g.interact.type === 'gen', 'perto do gerador há ação disponível');
-  runFor(g, 7.5, { act: true });
-  ok(gen.progress > 0.45 && gen.progress < 0.55, `segurando AGIR ~7,5s = ~50% (${gen.progress.toFixed(2)})`);
+  runFor(g, DP.CFG.REPAIR_T / 2, { act: true });
+  ok(gen.progress > 0.45 && gen.progress < 0.55, `segurando AGIR metade do tempo = ~50% (${gen.progress.toFixed(2)})`);
   runFor(g, 1, { act: true, ax: 1 });      // andar cancela o reparo
   const before = gen.progress;
   runFor(g, 1, { ax: 0, ay: 0 });
   ok(gen.progress === before, 'sem segurar AGIR o progresso não anda');
   g.s.x = gen.cx - 1.0; g.s.y = gen.cy;
-  runFor(g, 8.5, { act: true });
+  runFor(g, DP.CFG.REPAIR_T / 2 + 1, { act: true });
   ok(gen.done && g.gensDone === 1, 'gerador concluído');
-  ok(!g.gates[0].open, 'portões ainda fechados com 1 gerador');
+  ok(!g.door.powered, 'porta ainda sem energia com 1 gerador');
 }
 {
   // skill check: acerto, perfeito e falha
@@ -229,20 +241,21 @@ console.log('geradores');
   ok(g.stats.skillFail === 1 && g.k.aware !== 'patrol', 'assassino vai investigar o barulho');
 }
 
-// ---------- 9. portões e fuga ----------
-console.log('portões');
+// ---------- 9. porta principal e fuga ----------
+console.log('porta principal');
 {
   const g = scene(true); g.k.state = 'intro'; g.k.t = -999;
   g.s.skillCD = 999;
-  for (let i = 0; i < 5; i++) { g.s.x = g.gens[i].cx - 1; g.s.y = g.gens[i].cy; if (g.solid(Math.floor(g.s.x), Math.floor(g.s.y))) g.s.x += 2; g.s.skillCD = 999; runFor(g, 0.05, {}); runFor(g, 15.5, { act: true }); }
-  ok(g.gensDone === 5, '5 geradores concluídos');
-  ok(g.gates.every((x) => x.open), 'portões energizados');
-  const gate = g.gates[0];
-  g.s.x = 1.6; g.s.y = gate.cy;
+  for (let i = 0; i < 5; i++) { g.s.x = g.gens[i].cx - 1; g.s.y = g.gens[i].cy; if (g.solid(Math.floor(g.s.x), Math.floor(g.s.y))) g.s.x += 2; g.s.skillCD = 999; runFor(g, 0.05, {}); runFor(g, DP.CFG.REPAIR_T + 0.5, { act: true }); }
+  ok(g.gensDone === 5, '5 de 8 geradores concluídos');
+  ok(g.door.powered && !g.door.opened, 'porta principal energizada (ainda fechada)');
+  g.s.x = 24.0; g.s.y = 2.2; g.s.skillCD = 999;
   runFor(g, 0.1, {});
-  ok(g.interact && g.interact.type === 'gate', 'perto do portão há ação');
+  ok(g.interact && g.interact.type === 'door', 'perto da porta há ação');
   runFor(g, 4.3, { act: true });
-  ok(g.over && g.result === 'escaped', 'segurar AGIR no portão = escapou');
+  ok(g.door.opened && !g.over, 'segurar AGIR abre a porta');
+  runFor(g, 1.0, { ay: -1 });
+  ok(g.over && g.result === 'escaped' && g.s.escaped, 'atravessar a porta aberta = escapou');
 }
 
 // ---------- 10. percepção do assassino ----------
@@ -287,7 +300,7 @@ function CFG_SIGHT(g) { return g.cfg.SIGHT; }
 
 // ---------- 11. jogador como ASSASSINO ----------
 console.log('assassino (jogador)');
-function killerScene(training, seed) { return DP.createGame({ rng: seeded(seed || 3), role: 'killer', training: !!training }); }
+function killerScene(training, seed) { return DP.createGame({ rng: seeded(seed || 3), role: 'killer', training: !!training, bots: 0 }); }
 {
   const g = killerScene();
   ok(g.role === 'killer' && g.k.state === 'chase', 'começa livre para andar');
@@ -382,15 +395,126 @@ console.log('IA do sobrevivente');
       const v = g._v;
       const atk = d < 1.35 && g.k.state === 'chase';
       const still = g.k.state === 'break';                       // quem quebra pallet fica parado
-      g.update(1 / 60, { ax: still ? 0 : v.x, ay: still ? 0 : v.y, drop: atk, actPress: !!g.kInteract && g.k.state === 'chase' });
+      g.update(1 / 60, { ax: still ? 0 : v.x, ay: still ? 0 : v.y, drop: atk, actPress: !!g.kInteract && g.kInteract.type !== 'smash' && g.k.state === 'chase' });
       if (g.k.state === 'stumble') ns++;
-      for (const e of [g.s, g.k]) if (!isFinite(e.x) || !isFinite(e.y) || (g.solid(Math.floor(e.x), Math.floor(e.y)) && !g.s.vault)) bad++;
+      for (const e of [g.s, g.k]) if (!isFinite(e.x) || !isFinite(e.y) || (g.solid(Math.floor(e.x), Math.floor(e.y)) && !(e === g.s && (g.s.vault || !g.alive(g.s))) && !(e === g.k && g.k.state === 'kvault'))) bad++;
     }
     res[g.over ? g.result : 'timeout']++; stuns += g.stats.stuns; drops += g.stats.drops; hits += g.stats.hits; tTot += g.time; trips += ns > 0 ? 1 : 0;
   }
   ok(bad === 0, 'ninguém entra em parede/NaN com o bot jogando');
   ok(drops > 0, `a IA usa pallets (${drops} derrubados em 24 partidas, ${stuns} atordoamentos, ${trips} partidas com tropeço)`);
   console.log('   resultados (assassino-bot):', JSON.stringify(res), 'acertos:', hits, 'tempo médio', (tTot / 24).toFixed(0) + 's');
+}
+
+// ---------- 14. janelas ----------
+console.log('janelas');
+{
+  const fresh = () => { const g = scene(true); g.k.state = 'intro'; g.k.t = -999; g.s.skillCD = 999; const w = g.windows.find((q) => q.tx === 11 && q.ty === 11); return { g, w }; };
+  // posiciona o sobrevivente do lado de dentro (norte) olhando para a janela (sul)
+  const setup = (g, w) => { g.s.x = w.cx; g.s.y = w.cy - 0.85; g.s.hp = 2; };
+  let { g, w } = fresh();
+  ok(w.state === 'closed' && g.solid(w.tx, w.ty), 'janela começa fechada e sólida');
+  setup(g, w);
+  runFor(g, 0.8, { ax: 0, ay: 1, walk: true });
+  ok(g.s.y < w.cy && !g.s.vault && w.state === 'closed', 'andando contra a janela fechada: não passa');
+  // abrir com AGIR (segurar)
+  setup(g, w); g.update(1 / 60, {});
+  ok(g.interact && g.interact.type === 'window', 'perto da janela fechada há ação de abrir');
+  const pingsBefore = g.pings.length;
+  runFor(g, 0.9, { act: true });
+  ok(w.state === 'open' && g.pings.length === pingsBefore, 'segurar AGIR abre a janela sem alertar o assassino');
+  // aberta: correndo = pula (rápido); andando = passa tranquilamente (lento); sem se cortar
+  setup(g, w); g.s.vault = null;
+  runFor(g, 0.1, { ax: 0, ay: 1 });
+  ok(g.s.vault && g.s.vault.kind === 'run' && Math.abs(g.s.vault.dur - DP.CFG.VAULT_RUN) < 1e-9, 'correndo: pula a janela aberta');
+  runFor(g, 0.6, {});
+  ok(!g.s.vault && g.s.y > w.cy + 0.5 && g.s.hp === 2 && g.stats.cuts === 0, 'do outro lado, sem machucar');
+  setup(g, w);
+  runFor(g, 0.1, { ax: 0, ay: 1, walk: true });
+  ok(g.s.vault && g.s.vault.kind === 'walk' && g.s.vault.dur > DP.CFG.VAULT_RUN * 1.8, 'andando: passa com calma (mais lento)');
+  runFor(g, 1.2, {});
+  ok(g.s.y > w.cy + 0.5 && g.s.hp === 2, 'passou tranquilamente');
+}
+{
+  // fechada + correndo = atravessa quebrando e se corta
+  const g = scene(false); g.k.state = 'intro'; g.k.t = -999;
+  const w = g.windows.find((q) => q.tx === 11 && q.ty === 11);
+  g.s.x = w.cx; g.s.y = w.cy - 0.85; g.s.hp = 2;
+  runFor(g, 0.1, { ax: 0, ay: 1 });
+  ok(g.s.vault && g.s.vault.kind === 'crash', 'correndo contra a janela fechada: atravessa quebrando');
+  runFor(g, 0.6, {});
+  ok(w.state === 'broken' && g.s.hp === 1 && g.stats.cuts === 1 && g.s.y > w.cy + 0.5, 'janela quebrada, sobrevivente cortado (vida 2→1)');
+  ok(g.pings.length >= 1, 'o barulho denuncia a posição');
+  // passar pela quebrada de novo = corta de novo (mas nunca mata)
+  g.s.x = w.cx; g.s.y = w.cy + 0.85; g.s.vault = null; g.s.vaultCD = 0;
+  runFor(g, 0.1, { ax: 0, ay: -1 }); runFor(g, 0.6, {});
+  ok(g.stats.cuts === 2 && g.s.hp === 1 && !g.s.dead, 'vidro no chão corta de novo, mas não mata');
+}
+{
+  // assassino: quebrar janela (fechada ou aberta) e passar por janela aberta/quebrada
+  const g = killerScene(true); g.s.x = 3; g.s.y = 3;
+  const w = g.windows.find((q) => q.tx === 11 && q.ty === 11);
+  g.k.x = w.cx; g.k.y = w.cy - 0.9;
+  g.update(1 / 60, {});
+  ok(g.kInteract && g.kInteract.type === 'smash', 'perto da janela: AGIR = quebrar');
+  g.update(1 / 60, { actPress: true });
+  runFor(g, 1.1, {});
+  ok(w.state === 'broken' && g.stats.smashes === 1, 'janela quebrada pelo assassino em ~1s');
+  g.k.x = w.cx; g.k.y = w.cy - 0.85; g.k.state = 'chase';
+  runFor(g, 0.15, { ax: 0, ay: 1 });
+  ok(g.k.state === 'kvault', 'assassino pula a janela quebrada');
+  runFor(g, 1.0, {});
+  ok(g.k.y > w.cy + 0.5 && g.k.state === 'chase', 'e cai do outro lado (mais devagar que o sobrevivente)');
+  const w2 = g.windows.find((q) => q.tx === 10 && q.ty === 4);
+  g.k.x = w2.cx; g.k.y = w2.cy - 0.85; g.k.state = 'chase';
+  runFor(g, 0.2, { ax: 0, ay: 1 });
+  ok(g.k.state !== 'kvault' && g.k.y < w2.cy, 'janela FECHADA barra o assassino');
+}
+
+// ---------- 15. equipe: 4 sobreviventes ----------
+console.log('equipe');
+{
+  const g = DP.createGame({ rng: seeded(9) });
+  ok(g.survivors.length === 4 && g.survivors[0].human && g.survivors.slice(1).every((v) => v.ai), 'você + 3 bots no papel de sobrevivente');
+  const g2 = DP.createGame({ rng: seeded(9), role: 'killer' });
+  ok(g2.survivors.length === 4 && g2.survivors.every((v) => v.ai), '4 bots quando você é o assassino');
+}
+{
+  // assassino parado: a equipe divide os geradores e todos escapam (mais rápido que um sozinho)
+  const g = DP.createGame({ rng: seeded(21), role: 'killer' });
+  for (let i = 0; i < 60 * 300 && !g.over; i++) g.update(1 / 60, {});
+  ok(g.over && g.escapedCount === 4, `os 4 escapam pela porta principal (${g.escapedCount}/4 em ${g.time.toFixed(0)}s)`);
+  ok(g.time < 240, 'equipe termina bem antes do que um sozinho (< 240s)');
+  ok(g.gensDone >= 5 && g.door.opened, 'geradores e porta concluídos');
+}
+{
+  // sobrevivente-jogador parado com bots: bots consertam e escapam; o jogador só termina quando morre/escapa
+  const g = DP.createGame({ rng: seeded(22) });
+  g.k.state = 'intro'; g.k.t = -999;
+  g.s.x = 3; g.s.y = 3;
+  for (let i = 0; i < 60 * 200; i++) g.update(1 / 60, {});
+  ok(g.survivors.slice(1).filter((v) => v.escaped).length === 3 || g.gensDone >= 5, `os bots avançam sozinhos (geradores ${g.gensDone}/5)`);
+}
+{
+  // assassino-bot contra a equipe inteira
+  const res = { dead: 0, escaped: 0, timeout: 0 }; let kills = 0, esc = 0, tTot = 0, bad = 0, crashes = 0, opens = 0;
+  for (let seed = 1; seed <= 8; seed++) {
+    const g = DP.createGame({ rng: seeded(seed * 17), role: 'killer' });
+    for (let i = 0; i < 60 * 300 && !g.over; i++) {
+      const tg = g.survivors.filter((v) => g.alive(v)).sort((a, b) => Math.hypot(a.x - g.k.x, a.y - g.k.y) - Math.hypot(b.x - g.k.x, b.y - g.k.y))[0];
+      const dx = tg.x - g.k.x, dy = tg.y - g.k.y, d = Math.hypot(dx, dy);
+      if (i % 6 === 0) g._v = (g.los && d < 12) ? { x: dx / (d || 1), y: dy / (d || 1) } : g.pathVec(g.k, tg.x, tg.y);
+      const v = g._v;
+      const still = g.k.state === 'break';
+      g.update(1 / 60, { ax: still ? 0 : v.x, ay: still ? 0 : v.y, drop: d < 1.35 && g.k.state === 'chase', actPress: !!g.kInteract && g.kInteract.type !== 'smash' && g.k.state === 'chase' });
+      for (const e of [g.k].concat(g.survivors.filter((q) => g.alive(q)))) {
+        if (!isFinite(e.x) || !isFinite(e.y) || (g.solid(Math.floor(e.x), Math.floor(e.y)) && !e.vault && e.state !== 'kvault')) bad++;
+      }
+    }
+    res[g.over ? g.result : 'timeout']++; kills += g.deadCount; esc += g.escapedCount; tTot += g.time; crashes += g.stats.crashes; opens += g.stats.cuts;
+  }
+  ok(bad === 0, 'ninguém dentro de parede/NaN nas 8 partidas contra a equipe');
+  console.log('   assassino-bot vs equipe:', JSON.stringify(res), 'abatidos', kills, 'escaparam', esc, 'tempo médio', (tTot / 8).toFixed(0) + 's', 'cortes', crashes, '/', opens);
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');

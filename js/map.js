@@ -5,7 +5,7 @@
   const DP = root.DP = root.DP || {};
 
   const W = 48, H = 32;
-  const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2, T_GEN = 3, T_GATE = 4;
+  const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2, T_GEN = 3, T_GATE = 4, T_WIN = 5;
 
   function buildMap() {
     const t = new Uint8Array(W * H);
@@ -62,21 +62,31 @@
     block(16, 28, 3, 1, T_CRATE);
     block(44, 24, 2, 2, T_CRATE);
 
-    // geradores (sólidos): um em cada casa e 2 ao ar livre; são precisos 5 de 7
-    const gens = [[7, 10], [40, 9], [12, 25], [39, 25], [22, 17], [24, 2], [2, 22]].map((g) => ({ tx: g[0], ty: g[1] }));
+    // geradores (sólidos): um em cada casa e 3 ao ar livre; são precisos 5 de 8
+    const gens = [[7, 10], [40, 9], [12, 25], [39, 25], [22, 17], [2, 22], [16, 2], [45, 6]].map((g) => ({ tx: g[0], ty: g[1] }));
     for (const g of gens) set(g.tx, g.ty, T_GEN);
 
-    // portões de saída: um buraco na parede da borda (oeste e leste)
-    const gates = [{ tx: 0, ty: 16, side: 'W' }, { tx: W - 1, ty: 16, side: 'E' }];
-    for (const g of gates) set(g.tx, g.ty, T_GATE);
+    // porta principal: 2 tiles no meio da parede norte (abre depois de 5 geradores)
+    const door = { tx: 23, ty: 0, w: 2 };
+    set(23, 0, T_GATE); set(24, 0, T_GATE);
+
+    // janelas: um tile de parede com vidro. 'h' = em parede horizontal (passa-se na vertical)
+    const windows = [
+      [10, 4, 'h'], [11, 11, 'h'],            // casa 1
+      [31, 8, 'v'], [41, 7, 'v'],             // casa 2
+      [6, 23, 'v'], [11, 27, 'h'],            // casa 3
+      [41, 22, 'v'], [35, 20, 'h'],           // casa 4
+      [20, 15, 'v'], [27, 16, 'v']            // casa central
+    ].map((w) => ({ tx: w[0], ty: w[1], orient: w[2] }));
+    for (const w of windows) set(w.tx, w.ty, T_WIN);
 
     return {
-      W, H, t, indoor, pallets, gens, gates, NEED: 5,
-      spawnSurvivor: { x: 24.5, y: 8.5 },
+      W, H, t, indoor, pallets, gens, door, windows, NEED: 5,
+      spawnSurvivors: [{ x: 24.5, y: 8.5 }, { x: 17.5, y: 10.5 }, { x: 29.5, y: 14.5 }, { x: 10.5, y: 13.5 }],
       spawnKiller: { x: 24.5, y: 26.5 }
     };
   }
 
   DP.buildMap = buildMap;
-  DP.T = { FLOOR: T_FLOOR, WALL: T_WALL, CRATE: T_CRATE, GEN: T_GEN, GATE: T_GATE };
+  DP.T = { FLOOR: T_FLOOR, WALL: T_WALL, CRATE: T_CRATE, GEN: T_GEN, GATE: T_GATE, WIN: T_WIN };
 })(typeof window !== 'undefined' ? window : globalThis);

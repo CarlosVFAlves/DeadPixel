@@ -198,7 +198,10 @@
       }
     }
     const act = !!keys.KeyE || [...held.values()].includes('act');
-    const out = { ax, ay, drop: dropQueued, act, actPress: actQueued, press: pressQueued };
+    // andar (devagar e quieto): Shift, ou arrastar o joystick só um pouquinho
+    let walk = !!(keys.ShiftLeft || keys.ShiftRight);
+    if (joy.active) { const l = Math.hypot(joy.dx, joy.dy); if (l > 0.18 && l < 0.55 && !keys.KeyW && !keys.KeyA && !keys.KeyS && !keys.KeyD) walk = true; }
+    const out = { ax, ay, drop: dropQueued, act, actPress: actQueued, press: pressQueued, walk };
     dropQueued = actQueued = pressQueued = false;
     return out;
   }
@@ -255,7 +258,7 @@
       if (state === 'pause') {
         DP.render.overlay(ctx, W, H, 0.7);
         text(ctx, 'PAUSADO', Math.round(W / 2), Math.round(H * 0.2), '#fff', { align: 'c' });
-        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU CHUTAR GERADOR (MEXER CANCELA). M: SOM.' : 'WASD/SETAS: MOVER. SEGURE E: CONSERTAR GERADOR. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: SOM.', Math.floor((W - 16) / 6));
+        const tips = DP.font.wrap(role === 'killer' ? 'WASD/SETAS: MOVER. ESPAÇO: ATACAR. E: QUEBRAR PALLET OU JANELA, CHUTAR GERADOR (MEXER CANCELA). M: SOM.' : 'WASD/SETAS: MOVER. SHIFT: ANDAR (QUIETO). SEGURE E: CONSERTAR / ABRIR JANELA. ESPAÇO: DERRUBAR PALLET E ACERTAR O SKILL CHECK. M: SOM.', Math.floor((W - 16) / 6));
         tips.forEach((l, i) => text(ctx, l, Math.round(W / 2), Math.round(H * 0.2) + 14 + i * 9, '#a9a9b5', { align: 'c' }));
       }
     }

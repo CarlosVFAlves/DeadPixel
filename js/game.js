@@ -1,12 +1,13 @@
-// Lógica do jogo: sobrevivente, assassino (IA) e a mecânica de pallet.
-// Sem DOM aqui — o render e a entrada ficam em render.js / main.js (e dá para testar no Node).
+// Lógica do jogo: 4 sobreviventes (você + bots, ou 4 bots), assassino, pallets, janelas,
+// geradores e porta principal. Sem DOM aqui — render e entrada ficam em render.js / main.js
+// (e dá para testar no Node).
 (function (root) {
   'use strict';
   const DP = root.DP = root.DP || {};
 
-  // Tudo que mexe na "sensação" do pallet está aqui.
   const CFG = {
     RUN: 4.0,            // velocidade do sobrevivente (tiles/s)
+    WALK: 0.5,           // multiplicador ao andar (Shift / joystick leve)
     BURST: 1.3,          // multiplicador após ser acertado
     BURST_T: 1.8,
     K_SPEED: 4.55,       // velocidade do assassino
@@ -20,6 +21,7 @@
     RECOVER_MISS: 0.85,
     RECOVER_HIT: 1.7,
 
+    // pallet
     DROP_RANGE: 1.3,     // distância máxima do pallet para derrubar
     FALL_T: 0.22,        // tempo de queda — o atordoamento só vale no impacto
     ZONE_LEN: 1.7,       // zona de impacto: comprimento (a partir do pallet, no lado da queda)
@@ -32,27 +34,38 @@
     BREAK_COST: 9,       // "custo em tiles" de quebrar vs. dar a volta (IA)
     VAULT_T: 0.5,        // pular o pallet caído
 
+    // janelas
+    WIN_OPEN_T: 0.8,     // segurar AGIR para abrir uma janela fechada (silencioso)
+    WIN_BREAK_T: 1.0,    // o assassino quebra a janela (fechada ou aberta)
+    VAULT_RUN: 0.45,     // correndo: pula a janela aberta
+    VAULT_WALK: 1.0,     // andando: passa "tranquilamente" pela janela aberta
+    VAULT_CRASH: 0.5,    // correndo contra a janela fechada: atravessa quebrando (e se corta)
+    VAULT_K: 0.85,       // o assassino passa por janela aberta/quebrada (mais devagar)
+    NOISE_WALK: 1.4, NOISE_CRASH: 10,
+
     RESPECT: 0.55,       // chance do assassino "respeitar" um pallet de pé (hesitar)
     HESITATE: [0.8, 1.5],
     INTRO: 3,
 
-    // objetivo: geradores + portões
-    REPAIR_T: 15,        // segundos segurando AGIR para terminar um gerador
-    GATE_T: 4,           // segundos para abrir o portão
-    GEN_RANGE: 1.45, GATE_RANGE: 1.6,
+    // objetivo: 5 de 8 geradores + porta principal
+    REPAIR_T: 20,        // segundos segurando AGIR para terminar um gerador (1 pessoa)
+    TEAM_BONUS: 0.8,     // cada pessoa extra no mesmo gerador rende isto
+    DOOR_T: 4,           // segundos para abrir a porta principal
+    GEN_RANGE: 1.45, DOOR_RANGE: 2.0, WIN_RANGE: 1.3,
     SKILL_EVERY: [3.5, 7],   // intervalo entre skill checks (s)
     SKILL_DELAY: 0.45,       // tempo até o ponteiro começar a girar
     SKILL_SPEED: 5.2,        // rad/s do ponteiro
     SKILL_ZONE: 0.34,        // meia largura da zona de acerto (rad)
     SKILL_GREAT: 0.12,       // meia largura da zona perfeita
     SKILL_FAIL: 0.10,        // progresso perdido ao errar
-    // IA do sobrevivente (quando você é o assassino)
+    KICK: 0.15,              // progresso que o assassino destrói ao chutar um gerador
+
+    // IA do sobrevivente
     AI_SENSE: 11,        // sente o assassino por perto (batimento), mesmo sem ver
     AI_SEE: 16,          // vê o assassino com linha de visão até aqui
     AI_FLEE: 14,         // começa a fugir dentro desta distância
     AI_SPEED: 1.1,       // o sobrevivente-IA corre um pouco mais (compensa não ter olhos humanos)
     AI_SKILL_ERR: 0.40,  // erro (rad) no skill check: ~85% de acerto
-    KICK: 0.15,              // progresso que o assassino destrói ao chutar um gerador
 
     // percepção do assassino
     SIGHT: 13,           // enxerga com linha de visão até aqui (tiles)
@@ -60,10 +73,11 @@
     SEARCH_WAIT: 2.5,
     PATROL_SPEED: 0.88,  // multiplicador de velocidade enquanto patrulha/procura
     NOISE_MOVE: 3.5, NOISE_REPAIR: 9, NOISE_GATE: 8, NOISE_VAULT: 5,
-    RESPAWN: 8           // só no TREINO: pallets voltam a ficar de pé
+    RESPAWN: 8           // só no TREINO: pallets/janelas voltam
   };
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  const T_WIN = 5;
 
   function createGame(opts) {
     opts = opts || {};
@@ -71,45 +85,81 @@
     const sfx = opts.sfx || function () {};
     const training = !!opts.training;
     const role = opts.role === 'killer' ? 'killer' : 'survivor';
+    const bots = opts.bots === undefined ? 3 : opts.bots;
     const map = DP.buildMap();
     const W = map.W, H = map.H, t = map.t;
 
     const g = {
       cfg: CFG, map, training, role,
       time: 0, over: false, overT: 0,
-      stats: { stuns: 0, drops: 0, misses: 0, hits: 0, breaks: 0, vaults: 0, gens: 0, kicks: 0, skillOk: 0, skillFail: 0 },
-      pallets: [], popups: [], fx: [],
+      stats: { stuns: 0, drops: 0, misses: 0, hits: 0, breaks: 0, vaults: 0, gens: 0, kicks: 0, skillOk: 0, skillFail: 0, cuts: 0, smashes: 0, crashes: 0 },
+      pallets: [], windows: [], popups: [], fx: [], survivors: [],
       shake: 0, hitstop: 0, flash: 0,
-      near: null, los: false, dist: 99, interact: null, kInteract: null, pInteract: null, pings: [], result: null, gensDone: 0, need: 0, gens: [], gates: [],
-      s: {
-        x: map.spawnSurvivor.x, y: map.spawnSurvivor.y, face: Math.PI / 2,
-        hp: 2, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
-        noise: 0, acting: null, skill: null, skillCD: 4, tick: 0
-      },
-      k: {
-        x: map.spawnKiller.x, y: map.spawnKiller.y, face: -Math.PI / 2,
-        state: role === 'killer' ? 'chase' : 'intro', t: 0, dur: 0, trip: 0, tripCD: 0, tripDir: 0, ph: 0, vx: 0, vy: 0, ldx: 0, ldy: 0, hitDone: false, pal: null,
-        moving: false, walk: 0, hesitate: false,
-        aware: 'patrol', lost: 0, last: null, wait: 0, goal: null
-      }
+      near: null, nearList: [], los: false, dist: 99, interact: null, kInteract: null, pInteract: null,
+      pings: [], result: null, gensDone: 0, need: map.NEED, gens: [],
+      escapedCount: 0, deadCount: 0
     };
+
+    function makeAI() {
+      return { mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, zoneT: 0 };
+    }
+    const nSurv = 1 + bots;
+    for (let i = 0; i < nSurv; i++) {
+      const sp = map.spawnSurvivors[i % map.spawnSurvivors.length];
+      const human = role === 'survivor' && i === 0;
+      g.survivors.push({
+        id: i, x: sp.x, y: sp.y, face: Math.PI / 2,
+        hp: 2, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
+        noise: 0, acting: null, skill: null, skillCD: 4 + i * 1.7, tick: 0,
+        dead: false, escaped: false, near: null, interact: null, human,
+        ai: human ? null : makeAI(), usedWin: 0
+      });
+    }
+
+    k_init();
+    function k_init() {
+      g.k = {
+        x: map.spawnKiller.x, y: map.spawnKiller.y, face: -Math.PI / 2,
+        state: role === 'killer' ? 'chase' : 'intro', t: 0, dur: 0, trip: 0, tripCD: 0, tripDir: 0, ph: 0, vx: 0, vy: 0, ldx: 0, ldy: 0, hitDone: false, pal: null, brkKind: 'pallet', brk: 0,
+        moving: false, walk: 0, hesitate: false, vault: null,
+        aware: 'patrol', lost: 0, last: null, wait: 0, goal: null, target: null
+      };
+    }
 
     const palAt = new Array(W * H).fill(null);
     for (const p of map.pallets) {
       const o = {
         tx: p.tx, ty: p.ty, cx: p.tx + 0.5, cy: p.ty + 0.5, orient: p.orient,
         nx: p.orient === 'h' ? 0 : 1, ny: p.orient === 'h' ? 1 : 0,   // eixo da passagem
-        state: 'up', t: 0, dir: { x: 0, y: 0 }, respawn: 0, respect: undefined, hes: 0, hitNote: 0
+        state: 'up', t: 0, dir: { x: 0, y: 0 }, respawn: 0, respect: undefined, hes: 0
       };
       g.pallets.push(o);
       palAt[p.ty * W + p.tx] = o;
     }
     g.palAt = palAt;
-    g.need = map.NEED;
-    g.gens = map.gens.map((o) => ({ tx: o.tx, ty: o.ty, cx: o.tx + 0.5, cy: o.ty + 0.5, progress: 0, done: false, visited: -99 }));
-    g.gates = map.gates.map((o) => ({ tx: o.tx, ty: o.ty, cx: o.tx + 0.5, cy: o.ty + 0.5, side: o.side, progress: 0, open: false, visited: -99 }));
+    const winAt = new Array(W * H).fill(null);
+    for (const w of map.windows) {
+      const o = {
+        tx: w.tx, ty: w.ty, cx: w.tx + 0.5, cy: w.ty + 0.5, orient: w.orient,
+        nx: w.orient === 'h' ? 0 : 1, ny: w.orient === 'h' ? 1 : 0,
+        state: 'closed', t: 99, prog: 0, usedT: 0, respawn: 0, smashChecked: -1
+      };
+      g.windows.push(o);
+      winAt[w.ty * W + w.tx] = o;
+    }
+    g.winAt = winAt;
+    g.gens = map.gens.map((o) => ({ tx: o.tx, ty: o.ty, cx: o.tx + 0.5, cy: o.ty + 0.5, progress: 0, done: false, visited: -99, w: 0 }));
+    g.door = { tx: map.door.tx, ty: map.door.ty, w: map.door.w, cx: map.door.tx + map.door.w / 2, cy: 0.5, progress: 0, powered: false, opened: false, t: 99, visited: -99 };
 
-    const s = g.s, k = g.k;
+    const k = g.k;
+    let s = g.survivors[0];      // "contexto": o sobrevivente que as funções abaixo estão tratando
+    let ai = s.ai;
+    const use = (sv) => { s = sv; ai = sv.ai; };
+    const alive = (sv) => !sv.dead && !sv.escaped;
+    g.s = g.survivors[0];
+    Object.defineProperty(g, 'ai', { get() { return g.survivors[0].ai; } });
+    g.pl = role === 'killer' ? k : g.survivors[0];       // quem a câmera segue
+
     const field = new Float32Array(W * H);
     let fieldT = 0, fieldTile = -1;
 
@@ -117,7 +167,15 @@
     function solid(tx, ty) {
       if (tx < 0 || ty < 0 || tx >= W || ty >= H) return true;
       const i = ty * W + tx;
-      if (t[i]) return true;
+      if (t[i]) return true;                       // paredes, caixas, geradores, porta e janelas
+      const p = palAt[i];
+      return !!(p && p.state === 'down');
+    }
+    // visão: janelas são de vidro (dá para ver através)
+    function blocksSight(tx, ty) {
+      if (tx < 0 || ty < 0 || tx >= W || ty >= H) return true;
+      const i = ty * W + tx;
+      if (t[i]) return t[i] !== T_WIN;
       const p = palAt[i];
       return !!(p && p.state === 'down');
     }
@@ -147,27 +205,47 @@
       for (const off of [0, -0.26, 0.26]) {
         const ox = -uy * off, oy = ux * off;
         for (let l = 0; l < d; l += 0.2) {
-          if (solid(Math.floor(a.x + ox + ux * l), Math.floor(a.y + oy + uy * l))) return false;
+          if (blocksSight(Math.floor(a.x + ox + ux * l), Math.floor(a.y + oy + uy * l))) return false;
         }
       }
       return true;
     }
-
-    // ---------- campo de caminho do assassino (Dijkstra a partir do objetivo dele) ----------
-    function extra(i) {
-      const p = palAt[i];
-      if (!p) return 0;
-      return p.state === 'down' ? CFG.BREAK_COST : p.state === 'up' ? 0.3 : 0;
+    // rede de segurança: se alguém ficar encostado em algo sólido, solta no ponto livre mais próximo
+    function unstick(e, r) {
+      if (!hitsCircle(e.x, e.y, r)) return;
+      for (let rad = 0.1; rad <= 1.2; rad += 0.1) {
+        for (let a = 0; a < 16; a++) {
+          const x = e.x + Math.cos(a * Math.PI / 8) * rad, y = e.y + Math.sin(a * Math.PI / 8) * rad;
+          if (!hitsCircle(x, y, r)) { e.x = x; e.y = y; return; }
+        }
+      }
     }
-    function blocked(tx, ty) { return tx < 0 || ty < 0 || tx >= W || ty >= H || t[ty * W + tx] !== 0; }
-    const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
-    // custo de pisar no tile i: o assassino quebra pallet caído (caro); o sobrevivente pula (barato)
+    // ---------- caminhos (Dijkstra) ----------
+    // sMode=true: sobrevivente (pula pallets e janelas); false: assassino (quebra pallets, vaulta janelas abertas)
+    let winPass = 0;     // IA do sobrevivente: 1 = aceita atravessar janela fechada (abrindo ou quebrando)
+    function hardBlocked(tx, ty) { return tx < 0 || ty < 0 || tx >= W || ty >= H || t[ty * W + tx] !== 0; }
+    function blockedFor(tx, ty, sMode) {
+      if (tx < 0 || ty < 0 || tx >= W || ty >= H) return true;
+      const v = t[ty * W + tx];
+      if (v === 0) return false;
+      if (v === T_WIN) {
+        const w = winAt[ty * W + tx];
+        return sMode ? (w.state === 'closed' && !winPass) : w.state === 'closed';
+      }
+      return true;
+    }
+    const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
     function costAt(i, sMode) {
+      const w = winAt[i];
+      if (w) {
+        if (sMode) return w.state === 'open' ? 2 : w.state === 'broken' ? 5 : 6;
+        return 4;
+      }
       const p = palAt[i];
       if (!p) return 0;
       if (sMode) return p.state === 'down' ? 1.4 : p.state === 'falling' ? 3 : 0;
-      return extra(i);
+      return p.state === 'down' ? CFG.BREAK_COST : p.state === 'up' ? 0.3 : 0;
     }
     function dijkstra(arr, gx, gy, sMode) {
       arr.fill(1e9);
@@ -202,33 +280,33 @@
         const ux = i % W, uy = (i / W) | 0;
         for (const d of DIRS) {
           const vx = ux + d[0], vy = uy + d[1];
-          if (blocked(vx, vy)) continue;
+          if (blockedFor(vx, vy, sMode)) continue;
           const diag = d[0] !== 0 && d[1] !== 0;
-          if (diag && (blocked(ux + d[0], uy) || blocked(ux, uy + d[1]))) continue;
+          if (diag && (hardBlocked(ux + d[0], uy) || hardBlocked(ux, uy + d[1]))) continue;
           const j = vy * W + vx;
           const nd = cd + (diag ? 1.414 : 1) + costAt(i, sMode);
           if (nd < arr[j]) { arr[j] = nd; push(j, nd); }
         }
       }
     }
-    function computeField(gx, gy) { dijkstra(field, gx, gy, false); }
-
     // melhor tile vizinho de e seguindo o campo arr
     function bestNb(arr, e, sMode) {
       const kx = Math.floor(e.x), ky = Math.floor(e.y);
       let best = null, bv = 1e9;
       for (const d of DIRS) {
         const nx = kx + d[0], ny = ky + d[1];
-        if (blocked(nx, ny)) continue;
+        if (blockedFor(nx, ny, sMode)) continue;
         const diag = d[0] !== 0 && d[1] !== 0;
         if (diag && (solid(kx + d[0], ky) || solid(kx, ky + d[1]))) continue;
         const j = ny * W + nx;
         const v = arr[j] + (diag ? 1.414 : 1) + costAt(j, sMode);
-        if (v < bv) { bv = v; best = { x: nx, y: ny, pal: palAt[j] && palAt[j].state === 'down' ? palAt[j] : null }; }
+        if (v < bv) {
+          bv = v;
+          best = { x: nx, y: ny, pal: palAt[j] && palAt[j].state === 'down' ? palAt[j] : null, win: winAt[j] || null };
+        }
       }
       return best;
     }
-    function bestNeighbor() { return bestNb(field, k, false); }
 
     // ---------- eventos visuais ----------
     function popup(text, x, y, color) { g.popups.push({ text, x, y, t: 0, color: color || '#fff' }); }
@@ -238,7 +316,14 @@
         g.fx.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: 0.35 + rnd() * 0.3, c: col || '#8b7355' });
       }
     }
-    const pan = (x) => clamp((x - s.x) / 10, -0.8, 0.8);
+    const GLASS = ['#d6f2ff', '#9bd3f0', '#6fb4dc', '#ffffff'];
+    function glass(x, y, n, dirx, diry) {
+      for (let i = 0; i < n; i++) {
+        const a = rnd() * Math.PI * 2, sp = 1 + rnd() * 3;
+        g.fx.push({ x, y, vx: Math.cos(a) * sp + (dirx || 0) * 2, vy: Math.sin(a) * sp + (diry || 0) * 2, t: 0, life: 0.45 + rnd() * 0.5, c: GLASS[(rnd() * GLASS.length) | 0] });
+      }
+    }
+    const pan = (x) => clamp((x - g.pl.x) / 10, -0.8, 0.8);
 
     // ---------- pallet ----------
     function inZone(p, e) {
@@ -264,7 +349,6 @@
       }
       return best;
     }
-
     function tryDrop() {
       if (g.over || s.vault) return false;
       const p = findDroppable();
@@ -274,7 +358,6 @@
       sfx('creak', pan(p.cx));
       return true;
     }
-
     function land(p) {
       p.state = 'down'; p.t = 0; p.respawn = CFG.RESPAWN;
       sfx('slam', pan(p.cx));
@@ -284,7 +367,7 @@
       const kd = Math.hypot(k.x - p.cx, k.y - p.cy);
       const stunned = inZone(p, k) && k.state !== 'intro';
       if (stunned) {
-        k.state = 'stun'; k.t = 0; k.pal = null; k.aware = 'hunt'; k.lost = 0;
+        k.state = 'stun'; k.t = 0; k.pal = null; k.vault = null; k.aware = 'hunt'; k.lost = 0;
         g.stats.stuns++;
         g.hitstop = 0.1; g.shake = 7; g.flash = 0.25;
         sfx('stun', pan(k.x));
@@ -296,34 +379,70 @@
         popup('ERROU!', p.cx, p.cy - 1.2, '#ff7a59');
       }
       // quem estava em cima do tile (ou encostando nele) é empurrado para fora, para o lado em que estava
-      for (const e of [s, k]) {
-        const r = e === s ? CFG.R_S : CFG.R_K;
+      const ents = g.survivors.filter((v) => alive(v)).concat([k]);
+      for (const e of ents) {
+        const isK = e === k, r = isK ? CFG.R_K : CFG.R_S;
         const dxr = e.x - clamp(e.x, p.tx, p.tx + 1), dyr = e.y - clamp(e.y, p.ty, p.ty + 1);
         if (dxr * dxr + dyr * dyr >= r * r) continue;
         let side = (e.x - p.cx) * p.nx + (e.y - p.cy) * p.ny;
-        if (Math.abs(side) < 0.05) side = (e === s ? -1 : 1) * (p.dir.x * p.nx + p.dir.y * p.ny);
+        if (Math.abs(side) < 0.05) side = (isK ? 1 : -1) * (p.dir.x * p.nx + p.dir.y * p.ny);
         const sg = side >= 0 ? 1 : -1;
         if (p.nx) e.x = p.cx + sg * (0.5 + r + 0.03); else e.y = p.cy + sg * (0.5 + r + 0.03);
       }
     }
 
-    function startBreak(p) {
-      k.state = 'break'; k.t = 0; k.pal = p; k.brk = 0;
-      k.face = Math.atan2(p.cy - k.y, p.cx - k.x);
+    // ---------- janelas ----------
+    function breakWindow(w, byKiller) {
+      w.state = 'broken'; w.t = 0; w.respawn = CFG.RESPAWN + 4;
+      glass(w.cx, w.cy, 22, w.nx, w.ny);
+      sfx('glass', pan(w.cx));
+      g.shake = Math.max(g.shake, 3);
+      if (byKiller) { g.stats.smashes++; }
+    }
+    function openWindow(w) {
+      w.state = 'open'; w.t = 0; w.prog = 0;
+      sfx('winOpen', pan(w.cx));
+    }
+    // corte de vidro: perde 1 de vida (nunca mata), grita e denuncia onde está
+    function cutSurvivor() {
+      g.stats.cuts++;
+      sfx('cut', pan(s.x));
+      g.flash = Math.max(g.flash, 0.12);
+      if (!training && s.hp > 1) s.hp--;
+      popup('SE CORTOU!', s.x, s.y - 1.5, '#ff4d4d');
+      s.invuln = Math.max(s.invuln, 0.3);
+      alert(s.x, s.y);
     }
 
-    // rede de segurança: se alguém ficar encostado em algo sólido, solta no ponto livre mais próximo
-    function unstick(e, r) {
-      if (!hitsCircle(e.x, e.y, r)) return;
-      for (let rad = 0.1; rad <= 1.2; rad += 0.1) {
-        for (let a = 0; a < 16; a++) {
-          const x = e.x + Math.cos(a * Math.PI / 8) * rad, y = e.y + Math.sin(a * Math.PI / 8) * rad;
-          if (!hitsCircle(x, y, r)) { e.x = x; e.y = y; return; }
-        }
+    // ---------- sobrevivente: dano, fim de partida ----------
+    function over(result) {
+      if (g.over) return;
+      g.over = true; g.overT = 0; g.result = result;
+      const win = role === 'killer' ? result === 'dead' : result === 'escaped';
+      sfx(win ? 'escape' : 'death');
+    }
+    function checkEnd() {
+      if (g.over) return;
+      const h = role === 'survivor' ? g.survivors[0] : null;
+      if (h && h.dead) return over('dead');
+      if (h && h.escaped) return over('escaped');
+      if (g.survivors.every((v) => !alive(v))) {
+        // assassino vence se menos da metade escapou
+        over(g.escapedCount * 2 < g.survivors.length ? 'dead' : 'escaped');
       }
     }
-
-    // ---------- sobrevivente ----------
+    function escapeSurvivor(sv) {
+      if (!alive(sv)) return;
+      sv.escaped = true; sv.vault = null; g.escapedCount++;
+      popup('ESCAPOU!', sv.x, sv.y - 1.4, '#7dffa0');
+      sfx('escape');
+      checkEnd();
+    }
+    function killSurvivor(sv) {
+      sv.dead = true; sv.vault = null; g.deadCount++;
+      popup('ABATIDO!', sv.x, sv.y - 1.4, '#ff4d4d');
+      checkEnd();
+    }
     function hurt() {
       g.stats.hits++;
       s.invuln = 0.7; s.burst = CFG.BURST_T;
@@ -333,13 +452,10 @@
       k.aware = 'hunt'; k.lost = 0;
       if (training) return;
       s.hp--;
-      if (s.hp <= 0) {
-        g.over = true; g.overT = 0; g.result = 'dead';
-        sfx(role === 'killer' ? 'escape' : 'death');
-      }
+      if (s.hp <= 0) killSurvivor(s);
     }
 
-    // ---------- geradores, skill check, portões ----------
+    // ---------- geradores, skill check, porta ----------
     function alert(x, y) {
       g.pings.push({ x, y, t: g.time });
       if (k.state === 'intro' || role === 'killer') return;
@@ -353,23 +469,25 @@
         const d = Math.hypot(s.x - o.cx, s.y - o.cy);
         if (d < CFG.GEN_RANGE && d < bd) { bd = d; best = { type: 'gen', obj: o }; }
       }
-      for (const o of g.gates) {
-        if (!o.open) continue;
-        const d = Math.hypot(s.x - o.cx, s.y - o.cy);
-        if (d < CFG.GATE_RANGE && d < bd) { bd = d; best = { type: 'gate', obj: o }; }
+      const dr = g.door;
+      if (dr.powered && !dr.opened) {
+        const d = Math.hypot(s.x - dr.cx, s.y - dr.cy);
+        if (d < CFG.DOOR_RANGE && d < bd) { bd = d; best = { type: 'door', obj: dr }; }
+      }
+      for (const w of g.windows) {
+        if (w.state !== 'closed') continue;
+        const d = Math.hypot(s.x - w.cx, s.y - w.cy);
+        if (d < CFG.WIN_RANGE && d < bd) { bd = d; best = { type: 'window', obj: w }; }
       }
       return best;
     }
-    function startSkill() {
-      s.skill = { t: 0, tz: 1.5 + rnd() * 3.6 };
-      sfx('skill');
-    }
+    function startSkill() { s.skill = { t: 0, tz: 1.5 + rnd() * 3.6 }; if (s.human) sfx('skill'); }
     function endSkill(result) {
       const o = s.acting && s.acting.obj;
       if (result === 'fail' || result === 'miss') {
         g.stats.skillFail++;
         if (o) o.progress = Math.max(0, o.progress - CFG.SKILL_FAIL);
-        g.shake = 5; g.flash = 0.12;
+        g.shake = Math.max(g.shake, 5); g.flash = Math.max(g.flash, 0.12);
         sfx('bang', pan(s.x));
         popup(role === 'killer' ? 'ALGO EXPLODIU!' : 'FALHOU!', s.x, s.y - 1.5, '#ff4d4d');
         alert(s.x, s.y);
@@ -377,8 +495,8 @@
         g.stats.skillOk++;
         const great = result === 'great';
         if (o) o.progress = Math.min(1, o.progress + (great ? 0.05 : 0.025));
-        sfx('skillok');
-        popup(great ? 'PERFEITO!' : 'BOM', s.x, s.y - 1.5, great ? '#7dffa0' : '#cfe8ff');
+        if (s.human) sfx('skillok');
+        if (s.human) popup(great ? 'PERFEITO!' : 'BOM', s.x, s.y - 1.5, great ? '#7dffa0' : '#cfe8ff');
       }
       s.skill = null;
       s.skillCD = CFG.SKILL_EVERY[0] + rnd() * (CFG.SKILL_EVERY[1] - CFG.SKILL_EVERY[0]);
@@ -395,29 +513,86 @@
       sfx('genDone', pan(o.cx));
       popup('GERADOR PRONTO!', o.cx, o.cy - 1.4, '#7dffa0');
       alert(o.cx, o.cy);               // a explosão de luz denuncia o gerador
-      if (g.gensDone >= g.need) {
-        for (const gt of g.gates) gt.open = true;
-        popup('PORTÕES ENERGIZADOS!', s.x, s.y - 2.2, '#ffd23f');
+      if (g.gensDone >= g.need && !g.door.powered) {
+        g.door.powered = true;
+        popup('PORTA PRINCIPAL LIBERADA!', g.door.cx, 3, '#ffd23f');
         sfx('gates');
       }
     }
-    function escape() {
-      g.over = true; g.overT = 0; g.result = 'escaped';
-      sfx(role === 'killer' ? 'death' : 'escape');
-    }
     function act(dt) {
       const tg = s.acting, o = tg.obj;
+      s.tick -= dt;
       if (tg.type === 'gen') {
         s.noise = CFG.NOISE_REPAIR; o.noisyT = g.time;
-        o.progress = Math.min(1, o.progress + dt / CFG.REPAIR_T);
-        s.tick -= dt; if (s.tick <= 0) { s.tick = 0.55; sfx('repair', pan(o.cx)); }
+        o.progress = Math.min(1, o.progress + dt / CFG.REPAIR_T * (o.w === 0 ? 1 : CFG.TEAM_BONUS));
+        o.w++;
+        if (s.tick <= 0) { s.tick = 0.55; if (s.human || Math.hypot(o.cx - g.pl.x, o.cy - g.pl.y) < 12) sfx('repair', pan(o.cx)); }
         if (o.progress >= 1) finishGen(o);
-      } else {
+      } else if (tg.type === 'door') {
         s.noise = CFG.NOISE_GATE;
-        o.progress = Math.min(1, o.progress + dt / CFG.GATE_T);
-        s.tick -= dt; if (s.tick <= 0) { s.tick = 0.4; sfx('repair', pan(o.cx)); }
-        if (o.progress >= 1) escape();
+        o.progress = Math.min(1, o.progress + dt / CFG.DOOR_T);
+        if (s.tick <= 0) { s.tick = 0.4; sfx('repair', pan(o.cx)); }
+        if (o.progress >= 1) { o.opened = true; o.t = 0; sfx('doorOpen'); popup('PORTA ABERTA!', o.cx, 3, '#7dffa0'); }
+      } else {                                     // janela: abre sem barulho
+        s.noise = 0.8;
+        o.prog += dt / CFG.WIN_OPEN_T;
+        if (o.prog >= 1) openWindow(o);
       }
+    }
+
+    // ---------- pular: pallet caído e janelas ----------
+    function startVault(v) {
+      s.vault = v;
+      g.stats.vaults++;
+      sfx(v.kind === 'crash' ? 'glass' : 'vault', pan(s.x));
+    }
+    function tryVault(ax, ay, len, walkMode) {
+      // pallet caído
+      for (const p of g.pallets) {
+        if (p.state !== 'down') continue;
+        const rx = s.x - p.cx, ry = s.y - p.cy;
+        const along = rx * p.nx + ry * p.ny;
+        const lat = -rx * p.ny + ry * p.nx;
+        if (Math.abs(along) > 1.0 || Math.abs(along) < 0.3 || Math.abs(lat) > 0.55) continue;
+        const away = along > 0 ? -1 : 1;
+        if ((ax * p.nx + ay * p.ny) * away < 0.5 * Math.min(1, len)) continue;
+        const x1 = p.nx ? p.cx + p.nx * away * 0.95 : s.x;
+        const y1 = p.ny ? p.cy + p.ny * away * 0.95 : s.y;
+        if (hitsCircle(x1, y1, CFG.R_S)) continue;
+        startVault({ t: 0, dur: CFG.VAULT_T, x0: s.x, y0: s.y, x1, y1, kind: 'pallet', win: null });
+        return;
+      }
+      // janelas
+      for (const w of g.windows) {
+        const rx = s.x - w.cx, ry = s.y - w.cy;
+        const along = rx * w.nx + ry * w.ny;
+        const lat = -rx * w.ny + ry * w.nx;
+        if (Math.abs(along) > 1.05 || Math.abs(along) < 0.3 || Math.abs(lat) > 0.55) continue;
+        const away = along > 0 ? -1 : 1;
+        if ((ax * w.nx + ay * w.ny) * away < 0.5 * Math.min(1, len)) continue;
+        const x1 = w.nx ? w.cx + w.nx * away * 0.95 : s.x;
+        const y1 = w.ny ? w.cy + w.ny * away * 0.95 : s.y;
+        if (hitsCircle(x1, y1, CFG.R_S)) continue;
+        let kind;
+        if (w.state === 'closed') { if (walkMode) continue; kind = 'crash'; }   // andando: precisa abrir (AGIR)
+        else kind = walkMode ? 'walk' : 'run';
+        const dur = kind === 'crash' ? CFG.VAULT_CRASH : kind === 'walk' ? CFG.VAULT_WALK : CFG.VAULT_RUN;
+        startVault({ t: 0, dur, x0: s.x, y0: s.y, x1, y1, kind, win: w, did: false, dx: -away * w.nx, dy: -away * w.ny });
+        return;
+      }
+    }
+    function advanceVault(dt) {
+      const v = s.vault;
+      v.t += dt;
+      const p = Math.min(1, v.t / v.dur);
+      s.x = v.x0 + (v.x1 - v.x0) * p; s.y = v.y0 + (v.y1 - v.y0) * p;
+      s.moving = true; s.walk += dt * (v.kind === 'walk' ? 6 : 14);
+      s.noise = v.kind === 'crash' ? CFG.NOISE_CRASH : v.kind === 'walk' ? CFG.NOISE_WALK : CFG.NOISE_VAULT;
+      if (v.win && !v.did) {
+        if (v.kind === 'crash' && p >= 0.3) { v.did = true; g.stats.crashes++; breakWindow(v.win, false); cutSurvivor(); }
+        else if (v.kind !== 'crash' && v.win.state === 'broken' && p >= 0.5) { v.did = true; cutSurvivor(); }
+      }
+      if (p >= 1) { s.vault = null; s.vaultCD = 0.15; if (v.win) v.win.usedT = g.time; }
     }
 
     function updateSurvivor(dt, inp) {
@@ -426,53 +601,28 @@
       s.invuln = Math.max(0, s.invuln - dt);
       s.burst = Math.max(0, s.burst - dt);
       s.vaultCD = Math.max(0, s.vaultCD - dt);
-      if (s.vault) {
-        const v = s.vault;
-        v.t += dt;
-        const p = Math.min(1, v.t / CFG.VAULT_T);
-        s.x = v.x0 + (v.x1 - v.x0) * p; s.y = v.y0 + (v.y1 - v.y0) * p;
-        s.moving = true; s.walk += dt * 14; s.noise = CFG.NOISE_VAULT;
-        if (p >= 1) { s.vault = null; s.vaultCD = 0.15; }
-        return;
-      }
+      if (s.vault) { advanceVault(dt); return; }
       let ax = inp.ax || 0, ay = inp.ay || 0;
       const len = Math.hypot(ax, ay);
       if (len > 1) { ax /= len; ay /= len; }
       s.moving = len > 0.12;
-      if (inp.act && !s.moving && g.interact) {
-        s.acting = g.interact; s.walk = 0;
-        s.face = Math.atan2(g.interact.obj.cy - s.y, g.interact.obj.cx - s.x);
+      const walkMode = !!inp.walk;
+      if (inp.act && !s.moving && s.interact) {
+        s.acting = s.interact; s.walk = 0;
+        s.face = Math.atan2(s.interact.obj.cy - s.y, s.interact.obj.cx - s.x);
         act(dt);
         return;
       }
       if (s.moving) {
-        s.noise = CFG.NOISE_MOVE;
-        const sp = CFG.RUN * (role === 'killer' ? CFG.AI_SPEED : 1) * (s.burst > 0 ? CFG.BURST : 1);
+        s.noise = walkMode ? CFG.NOISE_WALK : CFG.NOISE_MOVE;
+        const sp = CFG.RUN * (role === 'killer' ? CFG.AI_SPEED : 1) * (s.burst > 0 ? CFG.BURST : 1) * (walkMode ? CFG.WALK : 1);
         moveBy(s, ax * sp * dt, ay * sp * dt, CFG.R_S);
         s.face = Math.atan2(ay, ax);
-        s.walk += dt * 11;
-
-        // pular pallet caído: empurrar contra ele
-        if (!s.vaultCD) {
-          for (const p of g.pallets) {
-            if (p.state !== 'down') continue;
-            const rx = s.x - p.cx, ry = s.y - p.cy;
-            const along = rx * p.nx + ry * p.ny;
-            const lat = -rx * p.ny + ry * p.nx;
-            if (Math.abs(along) > 1.0 || Math.abs(along) < 0.3 || Math.abs(lat) > 0.55) continue;
-            const away = along > 0 ? -1 : 1;
-            if ((ax * p.nx + ay * p.ny) * away < 0.5 * Math.min(1, len)) continue;
-            // atravessa no eixo da passagem; o eixo lateral é mantido
-            const x1 = p.nx ? p.cx + p.nx * away * 0.95 : s.x;
-            const y1 = p.ny ? p.cy + p.ny * away * 0.95 : s.y;
-            if (hitsCircle(x1, y1, CFG.R_S)) continue;
-            s.vault = { t: 0, x0: s.x, y0: s.y, x1, y1 };
-            g.stats.vaults++;
-            sfx('vault', pan(s.x));
-            break;
-          }
-        }
+        s.walk += dt * (walkMode ? 7 : 11);
+        if (!s.vaultCD) tryVault(ax, ay, len, walkMode);
       } else { s.walk = 0; }
+      // porta principal aberta: quem chega nela escapa
+      if (g.door.opened && s.y < 1.7 && Math.abs(s.x - g.door.cx) < 2.2) escapeSurvivor(s);
     }
 
     // ---------- assassino ----------
@@ -482,12 +632,44 @@
       popup('REGREDIU', o.cx, o.cy - 1.2, '#ff7a59');
       k.state = 'recover'; k.t = 0; k.dur = 1.0;
     }
+    function startBreak(o, kind) {
+      k.state = 'break'; k.t = 0; k.pal = o; k.brk = 0; k.brkKind = kind || 'pallet';
+      k.face = Math.atan2(o.cy - k.y, o.cx - k.x);
+    }
+    function startKVault(w) {
+      const rx = k.x - w.cx, ry = k.y - w.cy;
+      const along = rx * w.nx + ry * w.ny, away = along > 0 ? -1 : 1;
+      const x1 = w.nx ? w.cx + w.nx * away * 0.95 : k.x, y1 = w.ny ? w.cy + w.ny * away * 0.95 : k.y;
+      if (hitsCircle(x1, y1, CFG.R_K)) return false;
+      k.state = 'kvault'; k.t = 0;
+      k.vault = { dur: CFG.VAULT_K, x0: k.x, y0: k.y, x1, y1, win: w, dx: -away * w.nx, dy: -away * w.ny };
+      k.face = Math.atan2(y1 - k.y, x1 - k.x);
+      sfx('vault', pan(k.x));
+      return true;
+    }
+    function tryKillerVault(ax, ay, len) {
+      for (const w of g.windows) {
+        if (w.state === 'closed') continue;
+        const rx = k.x - w.cx, ry = k.y - w.cy;
+        const along = rx * w.nx + ry * w.ny, lat = -rx * w.ny + ry * w.nx;
+        if (Math.abs(along) > 1.1 || Math.abs(along) < 0.3 || Math.abs(lat) > 0.6) continue;
+        const away = along > 0 ? -1 : 1;
+        if ((ax * w.nx + ay * w.ny) * away < 0.5 * Math.min(1, len)) continue;
+        if (startKVault(w)) return true;
+      }
+      return false;
+    }
     function findKillerInteract() {
       let best = null, bd = 1e9;
       for (const p of g.pallets) {
         if (p.state !== 'down') continue;
         const d = Math.hypot(k.x - p.cx, k.y - p.cy);
         if (d < 1.25 && d < bd) { bd = d; best = { type: 'break', obj: p }; }
+      }
+      for (const w of g.windows) {
+        if (w.state === 'broken') continue;
+        const d = Math.hypot(k.x - w.cx, k.y - w.cy);
+        if (d < 1.35 && d < bd) { bd = d; best = { type: 'smash', obj: w }; }
       }
       if (best) return best;
       for (const o of g.gens) {
@@ -498,6 +680,15 @@
       return best;
     }
     const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+    function nearestAlive(e) {
+      let best = null, bd = 1e9;
+      for (const v of g.survivors) {
+        if (!alive(v)) continue;
+        const d = Math.hypot(v.x - e.x, v.y - e.y);
+        if (d < bd) { bd = d; best = v; }
+      }
+      return best;
+    }
 
     // controle do jogador quando ele é o assassino
     function playerKiller(dt, inp, dx, dy, d) {
@@ -509,10 +700,11 @@
         moveBy(k, ax * CFG.K_SPEED * dt, ay * CFG.K_SPEED * dt, CFG.R_K);
         k.face = Math.atan2(ay, ax);
         if (Math.hypot(k.x - ox, k.y - oy) > 0.0005) { k.moving = true; k.walk += dt * 11; }
+        if (tryKillerVault(ax, ay, len)) return;
       }
       if (inp.drop) {                                  // ATACAR (com um pouco de mira assistida)
         let lx = Math.cos(k.face), ly = Math.sin(k.face);
-        if (d < CFG.ATTACK_RANGE * 1.5 && hasLOS(k, s) && Math.abs(angDiff(Math.atan2(dy, dx), k.face)) < 1.0) { lx = dx / (d || 1); ly = dy / (d || 1); }
+        if (s && d < CFG.ATTACK_RANGE * 1.5 && hasLOS(k, s) && Math.abs(angDiff(Math.atan2(dy, dx), k.face)) < 1.0) { lx = dx / (d || 1); ly = dy / (d || 1); }
         k.ldx = lx; k.ldy = ly; k.face = Math.atan2(ly, lx);
         k.state = 'windup'; k.t = 0;
         sfx('windup', pan(k.x));
@@ -520,7 +712,9 @@
       }
       if (inp.actPress && g.kInteract) {
         const it = g.kInteract;
-        if (it.type === 'break') startBreak(it.obj); else kickGen(it.obj);
+        if (it.type === 'break') startBreak(it.obj, 'pallet');
+        else if (it.type === 'smash') startBreak(it.obj, 'window');
+        else kickGen(it.obj);
       }
     }
 
@@ -530,7 +724,7 @@
       const f = Math.max(0, 1 - k.t / CFG.STUMBLE_T);
       let hx, hy;
       if (role === 'killer') { hx = inp.ax || 0; hy = inp.ay || 0; }
-      else { const tg = k.last || s; hx = tg.x - k.x; hy = tg.y - k.y; }
+      else { const tg = k.last || nearestAlive(k) || k; hx = tg.x - k.x; hy = tg.y - k.y; }
       const hl = Math.hypot(hx, hy);
       if (k.trip > 0) {
         k.trip -= dt;
@@ -557,9 +751,11 @@
 
     function updateKiller(dt, inp) {
       unstick(k, CFG.R_K);
-      const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy);
-      g.dist = d;
       k.moving = false;
+      // quem o assassino está olhando agora: o alvo atual, senão o mais próximo
+      let tgt = (k.target && alive(k.target)) ? k.target : nearestAlive(k);
+      if (tgt) use(tgt);
+      const dx = tgt ? s.x - k.x : 0, dy = tgt ? s.y - k.y : 0, d = tgt ? Math.hypot(dx, dy) : 99;
 
       if (k.state === 'intro') { k.t += dt; if (k.t >= CFG.INTRO) { k.state = 'chase'; k.t = 0; k.aware = 'patrol'; } return; }
       if (k.state === 'stun') {
@@ -572,6 +768,14 @@
       }
       if (k.state === 'stumble') { doStumble(dt, inp); return; }
       if (k.state === 'recover') { k.t += dt; if (k.t >= k.dur) { k.state = 'chase'; k.t = 0; } return; }
+      if (k.state === 'kvault') {
+        k.t += dt;
+        const v = k.vault, p = Math.min(1, k.t / v.dur);
+        k.x = v.x0 + (v.x1 - v.x0) * p; k.y = v.y0 + (v.y1 - v.y0) * p;
+        k.moving = true; k.walk += dt * 8;
+        if (p >= 1) { k.state = 'chase'; k.t = 0; k.vault = null; v.win.usedT = g.time; }
+        return;
+      }
       if (k.state === 'windup') {
         k.t += dt;
         if (k.t >= CFG.WINDUP) { k.state = 'lunge'; k.t = 0; k.hitDone = false; sfx('lunge', pan(k.x)); }
@@ -581,7 +785,12 @@
         k.t += dt;
         moveBy(k, k.ldx * CFG.K_LUNGE * dt, k.ldy * CFG.K_LUNGE * dt, CFG.R_K);
         k.moving = true; k.walk += dt * 16;
-        if (!k.hitDone && s.invuln <= 0 && d < CFG.HIT_R) { k.hitDone = true; hurt(); }
+        if (!k.hitDone) {
+          for (const v of g.survivors) {
+            if (!alive(v) || v.invuln > 0 || Math.hypot(v.x - k.x, v.y - k.y) >= CFG.HIT_R) continue;
+            use(v); k.hitDone = true; hurt(); break;
+          }
+        }
         if (k.t >= CFG.LUNGE_T) {
           k.state = 'recover'; k.t = 0; k.dur = k.hitDone ? CFG.RECOVER_HIT : CFG.RECOVER_MISS;
         }
@@ -590,35 +799,50 @@
       if (k.state === 'break') {
         if (role === 'killer' && Math.hypot(inp.ax || 0, inp.ay || 0) > 0.6 && k.t > 0.3) { k.state = 'chase'; k.t = 0; k.pal = null; return; }
         k.t += dt;
-        const p = k.pal;
-        if (Math.floor(k.t / 0.5) > k.brk) { k.brk++; sfx('breakHit', pan(k.x)); g.shake = Math.max(g.shake, 1.5); }
-        if (k.t >= CFG.BREAK_T) {
-          p.state = 'broken'; p.respawn = CFG.RESPAWN; k.pal = null;
-          g.stats.breaks++;
-          sfx('breakDone', pan(p.cx));
-          dust(p.cx, p.cy, 16, '#a07a45');
-          k.state = 'chase'; k.t = 0;
+        const o = k.pal, isWin = k.brkKind === 'window';
+        if (Math.floor(k.t / 0.5) > k.brk) {
+          k.brk++; sfx(isWin ? 'glassHit' : 'breakHit', pan(k.x)); g.shake = Math.max(g.shake, 1.5);
+          if (isWin) glass(o.cx, o.cy, 3, 0, 0);
+        }
+        if (k.t >= (isWin ? CFG.WIN_BREAK_T : CFG.BREAK_T)) {
+          if (isWin) { breakWindow(o, true); popup('QUEBROU!', o.cx, o.cy - 1.2, '#9bd3f0'); }
+          else {
+            o.state = 'broken'; o.respawn = CFG.RESPAWN;
+            g.stats.breaks++;
+            sfx('breakDone', pan(o.cx));
+            dust(o.cx, o.cy, 16, '#a07a45');
+          }
+          k.pal = null; k.state = 'chase'; k.t = 0;
         }
         return;
       }
 
       if (role === 'killer') { playerKiller(dt, inp, dx, dy, d); return; }
+      if (!tgt) return;                                 // todos já saíram da partida
 
-      // ---- percepção: vê (linha de visão), ouve (ruído) ou rastreia ----
-      const los = hasLOS(k, s);
-      g.los = los;
-      const sees = los && d < CFG.SIGHT;
-      const hears = d < s.noise;
-      if (sees || hears) { k.aware = 'hunt'; k.lost = 0; k.last = { x: s.x, y: s.y }; }
-      else if (k.aware === 'hunt') {
-        k.lost += dt;
-        if (k.lost > CFG.TRACK) { k.aware = 'search'; k.wait = 0; }
+      // ---- percepção: vê (linha de visão), ouve (ruído) ou rastreia — de todos os sobreviventes ----
+      let seen = null, sd = 1e9, seenLos = false;
+      for (const v of g.survivors) {
+        if (!alive(v)) continue;
+        const vd = Math.hypot(v.x - k.x, v.y - k.y), vlos = hasLOS(k, v);
+        if (((vlos && vd < CFG.SIGHT) || vd < v.noise) && vd < sd) { sd = vd; seen = v; seenLos = vlos; }
       }
+      if (seen) {
+        k.target = seen; use(seen);
+        k.aware = 'hunt'; k.lost = 0; k.last = { x: seen.x, y: seen.y };
+      } else if (k.aware === 'hunt') {
+        k.lost += dt;
+        if (k.lost > CFG.TRACK) { k.aware = 'search'; k.wait = 0; k.target = null; }
+      }
+      const cur = seen || tgt; use(cur);
+      const cdx = s.x - k.x, cdy = s.y - k.y, cd = Math.hypot(cdx, cdy);
+      const los = seen ? seenLos : hasLOS(k, s);
+      g.los = los;
       const hunting = k.aware === 'hunt';
 
-      if (hunting && los && d < CFG.ATTACK_RANGE && !s.vault) {
-        const n = Math.hypot(dx, dy) || 1;
-        k.ldx = dx / n; k.ldy = dy / n; k.face = Math.atan2(dy, dx);
+      if (hunting && los && cd < CFG.ATTACK_RANGE && !s.vault) {
+        const n = cd || 1;
+        k.ldx = cdx / n; k.ldy = cdy / n; k.face = Math.atan2(cdy, cdx);
         k.state = 'windup'; k.t = 0;
         sfx('windup', pan(k.x));
         return;
@@ -648,9 +872,19 @@
         }
       }
 
+      // às vezes quebra uma janela que acabaram de usar (para cortar quem passar depois)
+      if (k.aware !== 'patrol' || true) {
+        for (const w of g.windows) {
+          if (w.state !== 'open' || !w.usedT || g.time - w.usedT > 6 || w.smashChecked === w.usedT) continue;
+          if (Math.hypot(k.x - w.cx, k.y - w.cy) > 1.5) continue;
+          w.smashChecked = w.usedT;
+          if (rnd() < 0.6) { startBreak(w, 'window'); return; }
+        }
+      }
+
       const ti = clamp(Math.floor(gy), 0, H - 1) * W + clamp(Math.floor(gx), 0, W - 1);
       fieldT -= dt;
-      if (fieldT <= 0 || ti !== fieldTile) { computeField(gx, gy); fieldT = 0.15; fieldTile = ti; }
+      if (fieldT <= 0 || ti !== fieldTile) { dijkstra(field, gx, gy, false); fieldT = 0.15; fieldTile = ti; }
 
       // mind game: às vezes o assassino "respeita" um pallet de pé entre vocês
       k.hesitate = false;
@@ -671,9 +905,10 @@
       let tx, ty;
       if (hunting && los) { tx = s.x; ty = s.y; }
       else {
-        const n = bestNeighbor();
+        const n = bestNb(field, k, false);
         if (!n) return;
-        if (n.pal && Math.hypot(k.x - n.pal.cx, k.y - n.pal.cy) < 1.2) { startBreak(n.pal); return; }
+        if (n.pal && Math.hypot(k.x - n.pal.cx, k.y - n.pal.cy) < 1.2) { startBreak(n.pal, 'pallet'); return; }
+        if (n.win && Math.hypot(k.x - n.win.cx, k.y - n.win.cy) < 1.25 && startKVault(n.win)) return;
         tx = n.x + 0.5; ty = n.y + 0.5;
       }
       const mx = tx - k.x, my = ty - k.y, ml = Math.hypot(mx, my);
@@ -686,24 +921,21 @@
       }
     }
 
-    // próximo gerador (ou portão) a patrulhar: prefere os que já têm progresso e os que não visitou há pouco
+    // próximo gerador (ou a porta) a patrulhar: prefere os que já têm progresso e os que não visitou há pouco
     function pickGoal() {
-      const list = g.gensDone >= g.need ? g.gates : g.gens.filter((o) => !o.done);
+      const list = g.door.powered ? [g.door] : g.gens.filter((o) => !o.done);
       if (!list.length) return null;
       const w = list.map((o) => {
         const d = Math.hypot(k.x - o.cx, k.y - o.cy);
-        return (o.progress > 0 ? 3 : 1) * (g.time - o.visited > 25 ? 1 : 0.1) / (1 + d / 25);
+        return ((o.progress || 0) > 0 ? 3 : 1) * (g.time - o.visited > 25 ? 1 : 0.1) / (1 + d / 25);
       });
       let r = rnd() * w.reduce((a, b) => a + b, 0);
       for (let i = 0; i < list.length; i++) { r -= w[i]; if (r <= 0) return list[i]; }
       return list[list.length - 1];
     }
 
-    // ---------- IA do sobrevivente (quando o jogador é o assassino) ----------
+    // ---------- IA do sobrevivente ----------
     const fS = new Float32Array(W * H), fK = new Float32Array(W * H), fT = new Float32Array(W * H);
-    const ai = { mode: 'repair', target: null, aware: 0, lk: null, thinkT: 0, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, gateGoal: null, fieldT: 0, zoneT: 0 };
-    g.ai = ai;
-    const tileOf = (e) => clamp(Math.floor(e.y), 0, H - 1) * W + clamp(Math.floor(e.x), 0, W - 1);
 
     function steer(arr, out, goal) {
       // já no tile do destino: vai direto ao ponto (senão o campo empurra para fora do tile)
@@ -714,11 +946,17 @@
       }
       const n = bestNb(arr, s, true);
       if (!n) return;
+      if (n.win) {
+        const wd = Math.hypot(s.x - n.win.cx, s.y - n.win.cy);
+        if (n.win.state === 'closed' && ai.mode !== 'flee' && wd < 1.25) { out.winAct = n.win; return; }   // para e abre
+        if (n.win.state !== 'closed' && ai.mode !== 'flee' && wd < 2.2) out.walk = true;                  // passa com calma
+      }
       const mx = n.x + 0.5 - s.x, my = n.y + 0.5 - s.y, l = Math.hypot(mx, my) || 1;
       out.ax = mx / l; out.ay = my / l;
     }
 
     function planFlee() {
+      const k0 = winPass; winPass = s.hp > 1 ? 1 : 0;       // com vida cheia aceita se cortar para escapar
       dijkstra(fS, s.x, s.y, true);
       dijkstra(fK, k.x, k.y, false);
       const myT = CFG.RUN, kT = CFG.K_SPEED;
@@ -739,20 +977,19 @@
       if (best) {
         dijkstra(fT, bT.x, bT.y, true);
         ai.plan = { pal: best, T: bT, err: (rnd() - 0.5) * 0.6, react: rnd() * 0.22 };
+        winPass = k0;
         return;
       }
-      // sem pallet seguro: o tile mais longe do assassino que ainda dá para alcançar primeiro (portão aberto tem bônus)
+      // sem pallet seguro: o tile mais longe do assassino que ainda dá para alcançar primeiro (porta aberta tem bônus)
       let bt = null, bv = -1e9;
       for (let i = 0; i < W * H; i++) {
         if (t[i] !== 0 || fS[i] > 22 || fS[i] / myT + 0.15 > fK[i] / kT) continue;
-        const v = fK[i] - 0.35 * fS[i];
+        let v = fK[i] - 0.35 * fS[i] + ((i * 7919 + s.id * 104729) % 97) / 97 * 5;      // cada um escolhe um canto diferente
+        for (const o of g.survivors) if (o !== s && alive(o) && Math.hypot(o.x - ((i % W) + 0.5), o.y - (((i / W) | 0) + 0.5)) < 5) v -= 4;
         if (v > bv) { bv = v; bt = i; }
       }
-      for (const gt of g.gates) {
-        if (!gt.open) continue;
-        const gi = gt.ty * W + gt.tx;
-        // o portão está na parede: usa o tile livre ao lado
-        const ni = gt.side === 'W' ? gi + 1 : gi - 1;
+      if (g.door.opened) {
+        const ni = 1 * W + Math.floor(g.door.cx);
         if (fS[ni] < 1e8 && fS[ni] / myT + 0.15 < fK[ni] / kT && 40 - 0.35 * fS[ni] + fK[ni] > bv) { bv = 40 - 0.35 * fS[ni] + fK[ni]; bt = ni; }
       }
       if (bt !== null) {
@@ -760,10 +997,11 @@
         dijkstra(fT, T.x, T.y, true);
         ai.plan = { pal: null, T, err: 0, react: 0 };
       } else ai.plan = { pal: null, T: null, err: 0, react: 0 };
+      winPass = k0;
     }
 
     function aiSurvivor(dt) {
-      const out = { ax: 0, ay: 0, act: false, drop: false, press: false, actPress: false };
+      const out = { ax: 0, ay: 0, act: false, drop: false, press: false, actPress: false, walk: false };
       const kdx = k.x - s.x, kdy = k.y - s.y, kd = Math.hypot(kdx, kdy);
       const sensed = kd < CFG.AI_SENSE || (kd < CFG.AI_SEE && hasLOS(s, k));
       if (sensed) { ai.aware = 4; ai.lk = { x: k.x, y: k.y }; } else ai.aware = Math.max(0, ai.aware - dt);
@@ -777,8 +1015,10 @@
 
       // foge de quem se aproxima; um assassino parado e distante não assusta
       const kMoving = Math.hypot(k.vx, k.vy) > 0.6 || k.state === 'lunge' || k.state === 'windup';
-      const fleeing = ai.aware > 0 && (kd < 7 || (kMoving && kd < CFG.AI_FLEE) || s.burst > 0);
-      ai.mode = fleeing ? 'flee' : (g.gensDone >= g.need ? 'exit' : 'repair');
+      // só o mais próximo do assassino sai correndo de longe: os outros continuam trabalhando
+      const nearest = nearestAlive(k) === s;
+      const fleeing = ai.aware > 0 && (kd < 7 || (kMoving && kd < CFG.AI_FLEE && nearest) || s.burst > 0);
+      ai.mode = fleeing ? 'flee' : (g.door.powered ? 'exit' : 'repair');
 
       if (ai.mode === 'flee') {
         ai.thinkT -= dt;
@@ -804,46 +1044,56 @@
             if (ai.wait > 2.5 && kd < 9) { out.drop = true; ai.noPal[p.tx + ',' + p.ty] = g.time + 5; }   // trava a passagem
           }
         } else ai.wait = 0;
+        const k0 = winPass; winPass = s.hp > 1 ? 1 : 0;
         if (plan && plan.T && !waiting) {
           if (Math.hypot(plan.T.x - s.x, plan.T.y - s.y) > 0.3) steer(fT, out, plan.T);
         } else if (!plan || (!plan.T && !waiting)) {
           const l = kd || 1; out.ax = -kdx / l; out.ay = -kdy / l;     // sem opção: corre para longe
         }
+        winPass = k0;
         return out;
       }
       ai.wait = 0;
 
       // exit/repair: caminha até o alvo e segura AGIR
       ai.fieldT -= dt;
-      if (ai.mode === 'exit') {
-        if (!ai.target || !g.gates.includes(ai.target)) {
-          let bg = null, bd = 1e9;
+      const k0 = winPass; winPass = 1;                                   // calmo: abre janelas fechadas
+      let tg = null;
+      if (g.door.opened) {
+        // porta aberta: é só atravessar
+        if (ai.fieldT <= 0) { dijkstra(fT, g.door.cx, 1.2, true); ai.fieldT = 0.4; }
+        steer(fT, out, { x: g.door.cx, y: 1.2 });
+        winPass = k0;
+        return out;
+      }
+      if (ai.mode === 'exit') tg = g.door;
+      else {
+        if (!ai.target || !g.gens.includes(ai.target) || ai.target.done) {
           dijkstra(fS, s.x, s.y, true);
-          for (const gt of g.gates) { const ni = gt.side === 'W' ? gt.ty * W + gt.tx + 1 : gt.ty * W + gt.tx - 1; if (fS[ni] < bd) { bd = fS[ni]; bg = gt; } }
+          let bg = null, bv = 1e9;
+          for (const o of g.gens) {
+            if (o.done) continue;
+            let v = Math.min(fS[o.ty * W + o.tx - 1] || 1e9, fS[o.ty * W + o.tx + 1] || 1e9, fS[(o.ty + 1) * W + o.tx] || 1e9, fS[(o.ty - 1) * W + o.tx] || 1e9) - o.progress * 10;
+            if (ai.lk && Math.hypot(ai.lk.x - o.cx, ai.lk.y - o.cy) < 9) v += 30;      // evita onde viu o assassino
+            for (const other of g.survivors) if (other !== s && alive(other) && other.ai && other.ai.target === o) v += 8;   // reparte o trabalho
+            if (v < bv) { bv = v; bg = o; }
+          }
           ai.target = bg; ai.fieldT = 0;
         }
-      } else if (!ai.target || !g.gens.includes(ai.target) || ai.target.done) {
-        dijkstra(fS, s.x, s.y, true);
-        let bg = null, bv = 1e9;
-        for (const o of g.gens) {
-          if (o.done) continue;
-          let v = Math.min(fS[o.ty * W + o.tx - 1] || 1e9, fS[o.ty * W + o.tx + 1] || 1e9, fS[(o.ty + 1) * W + o.tx] || 1e9, fS[(o.ty - 1) * W + o.tx] || 1e9) - o.progress * 10;
-          if (ai.lk && Math.hypot(ai.lk.x - o.cx, ai.lk.y - o.cy) < 9) v += 30;      // evita onde viu o assassino
-          if (v < bv) { bv = v; bg = o; }
-        }
-        ai.target = bg; ai.fieldT = 0;
+        tg = ai.target;
       }
-      const tg = ai.target;
-      if (!tg) return out;
-      const it = g.interact;
-      if (it && it.obj === tg) { out.act = true; return out; }
+      if (!tg) { winPass = k0; return out; }
+      const it = s.interact;
+      if (it && it.obj === tg) { out.act = true; winPass = k0; return out; }
       if (ai.fieldT <= 0) { dijkstra(fT, tg.cx, tg.cy, true); ai.fieldT = 0.4; }
-      steer(fT, out, { x: tg.cx, y: tg.cy });
+      steer(fT, out, tg === g.door ? { x: g.door.cx, y: 1.2 } : { x: tg.cx, y: tg.cy });
+      if (out.winAct && it && it.obj === out.winAct) out.act = true;
+      winPass = k0;
       return out;
     }
 
     // ---------- loop ----------
-    g.tryDrop = tryDrop;
+    g.tryDrop = () => { use(g.survivors[0]); return tryDrop(); };
 
     g.update = function (dt, inp) {
       inp = inp || {};
@@ -851,40 +1101,57 @@
       g.time += dt;
       g.shake = Math.max(0, g.shake - dt * 22);
       g.flash = Math.max(0, g.flash - dt);
+      for (const w of g.windows) w.t += dt;
+      g.door.t += dt;
 
       if (g.over) {
         g.overT += dt;
         return;
       }
 
-      g.interact = findInteract();
+      for (const o of g.gens) o.w = 0;
+      for (const sv of g.survivors) {
+        if (!alive(sv)) continue;
+        use(sv);
+        sv.interact = findInteract();
+        const sin = sv.human ? inp : aiSurvivor(dt);
+        if (s.skill && (sin.press || sin.drop || sin.actPress)) pressSkill();
+        else if (sin.drop || (sin.actPress && !sv.interact)) tryDrop();
+        updateSurvivor(dt, sin);
+
+        // skill checks só acontecem enquanto conserta um gerador
+        if (alive(sv) && s.acting && s.acting.type === 'gen') {
+          if (!s.skill) { s.skillCD -= dt; if (s.skillCD <= 0) startSkill(); }
+          else {
+            s.skill.t += dt;
+            if (skillAngle() > s.skill.tz + CFG.SKILL_ZONE + 0.1) endSkill('miss');
+          }
+        } else s.skill = null;
+        if (alive(sv)) sv.near = findDroppable(); else sv.near = null;
+        if (g.over) return;
+      }
+
+      g.interact = g.survivors[0].interact;
       g.kInteract = role === 'killer' ? findKillerInteract() : null;
       g.pInteract = role === 'killer' ? g.kInteract : g.interact;
-      const sin = role === 'killer' ? aiSurvivor(dt) : inp;   // quem controla o sobrevivente
-      if (s.skill && (sin.press || sin.drop || sin.actPress)) pressSkill();
-      else if (sin.drop || (sin.actPress && !g.interact)) tryDrop();
-      updateSurvivor(dt, sin);
-
-      // skill checks só acontecem enquanto conserta um gerador
-      if (s.acting && s.acting.type === 'gen') {
-        if (!s.skill) { s.skillCD -= dt; if (s.skillCD <= 0) startSkill(); }
-        else {
-          s.skill.t += dt;
-          if (skillAngle() > s.skill.tz + CFG.SKILL_ZONE + 0.1) endSkill('miss');
-        }
-      } else s.skill = null;
-      if (g.over) return;
 
       for (const p of g.pallets) {
         p.t += dt;
         if (p.state === 'falling' && p.t >= CFG.FALL_T) land(p);
         if (training && (p.state === 'down' || p.state === 'broken')) {
           p.respawn -= dt;
-          if (p.respawn <= 0 &&
-            Math.hypot(s.x - p.cx, s.y - p.cy) > 1.6 && Math.hypot(k.x - p.cx, k.y - p.cy) > 1.6 &&
+          if (p.respawn <= 0 && g.survivors.every((v) => !alive(v) || Math.hypot(v.x - p.cx, v.y - p.cy) > 1.6) && Math.hypot(k.x - p.cx, k.y - p.cy) > 1.6 &&
             !(k.state === 'break' && k.pal === p)) {
             p.state = 'up'; p.t = 0; p.respect = undefined;
             sfx('respawn');
+          }
+        }
+      }
+      for (const w of g.windows) {
+        if (training && w.state !== 'closed' && w.state !== 'opening') {
+          w.respawn -= dt;
+          if (w.respawn <= 0 && g.survivors.every((v) => !alive(v) || Math.hypot(v.x - w.cx, v.y - w.cy) > 1.8) && Math.hypot(k.x - w.cx, k.y - w.cy) > 1.8 && !(k.state === 'break' && k.pal === w)) {
+            w.state = 'closed'; w.t = 0; w.respawn = 0; sfx('respawn');
           }
         }
       }
@@ -892,7 +1159,11 @@
       const kox = k.x, koy = k.y;
       updateKiller(dt, inp);
       k.vx = (k.x - kox) / (dt || 1); k.vy = (k.y - koy) / (dt || 1);
-      g.near = findDroppable();
+      g.nearList = [];
+      for (const sv of g.survivors) if (alive(sv) && sv.near && (role === 'killer' || sv.human)) g.nearList.push({ pal: sv.near, sv });
+      g.near = g.survivors[0].near;
+      const ref = role === 'killer' ? nearestAlive(k) : g.survivors[0];
+      g.dist = ref ? Math.hypot(ref.x - k.x, ref.y - k.y) : 99;
       g.pings = g.pings.filter((q) => g.time - q.t < 4);
 
       for (const pu of g.popups) pu.t += dt;
@@ -911,10 +1182,11 @@
       return { x: mx / l, y: my / l };
     };
     g.alert = alert;
-    g.pl = role === 'killer' ? k : s;
+    g.alive = alive;
     g.standing = () => g.pallets.filter((p) => p.state === 'up').length;
     g.inZone = inZone;
     g.solid = solid;
+    g.dropDirFor = (sv, p) => { use(sv); return dropDir(p); };
     g.CFG = CFG;
     return g;
   }
