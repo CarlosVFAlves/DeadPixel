@@ -2290,7 +2290,7 @@
     return g;
   }
 
-  DP.VERSION = '0.0.3';          // versão do jogo (aparece no menu); a cada entrega sobe: 0.0.2, 0.0.3...
+  DP.VERSION = '0.0.4';          // versão do jogo (aparece no menu); a cada entrega sobe: 0.0.2, 0.0.3...
   DP.createGame = createGame;
   DP.CFG = CFG;
 })(typeof window !== 'undefined' ? window : globalThis);

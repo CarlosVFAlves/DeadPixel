@@ -147,10 +147,10 @@ Quando o assassino (você ou a IA) leva um pallet:
 O assassino ataca com um bote (arma erguida 0,16 s → bote de 0,3 s): dá para desviar na lateral. Acerto = −1 vida, +30% de velocidade por 1,8 s.
 
 ## Multijogador (v0.0.2)
-Menu → **MULTIJOGADOR**. Um jogador **cria a sala** (a partida roda no aparelho dele: manter a aba aberta e na frente); os outros abrem o jogo (pelo link do artefato, logados no claude.ai) e entram pela lista. Cada um toca na vaga que quer (1 assassino + 4 sobreviventes); vagas sem pessoa viram bots; o anfitrião toca INICIAR. Não há servidor: usa a sala do artefato. Detalhes e limites: `PLAYBOOK.md` §13.
+Menu → **MULTIJOGADOR**. Um jogador **cria a sala** (a partida roda no aparelho dele: manter a aba aberta e na frente); os outros abrem o jogo (pelo link do artefato, logados no claude.ai) e entram pela lista. Cada um toca na vaga que quer (1 assassino + 4 sobreviventes); vagas sem pessoa viram bots; o anfitrião toca INICIAR. Não há servidor: usa a sala do artefato. **Sem a sala do Claude (v0.0.4):** CRIAR POR CÓDIGO / ENTRAR COM CÓDIGO conecta dois aparelhos direto (WebRTC), trocando um código de convite e um de resposta por mensagem; funciona até com o link público ou o arquivo HTML. Detalhes e limites: `PLAYBOOK.md` §13.
 
 ## Testes
-`node tests/sim.js` (lógica, ~3 min) e `node tests/browser-mp.js arquivo.html` (duas telas no Chromium em partida multijogador simulada), `node tests/browser-smoke.js arquivo.html` (desenho no Chromium: passa por todos os tipos de objeto e falha se algum quadro lançar erro). Versão atual no menu: ver `DP.VERSION`.
+`node tests/sim.js` (lógica, ~3 min) e `node tests/browser-p2p.js arquivo.html` (conexão por código com WebRTC real), `node tests/browser-mp.js arquivo.html` (duas telas no Chromium em partida multijogador simulada), `node tests/browser-smoke.js arquivo.html` (desenho no Chromium: passa por todos os tipos de objeto e falha se algum quadro lançar erro). Versão atual no menu: ver `DP.VERSION`.
 
 ## Arquivos
 

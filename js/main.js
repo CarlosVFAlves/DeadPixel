@@ -55,17 +55,38 @@
   const sfxFn = (n, p, v, x) => { const f = DP.audio.sfx[n]; if (f) { DP.audio.vol = v === undefined ? 1 : v; f(p, x); DP.audio.vol = 1; } };
   function mpMsg(t) { mpErr = t; mpErrT = 4; }
   function leaveMp() {
-    if (mp) { try { if (mp.host) mp.host.close(); else if (mp.guest) mp.guest.leave(); } catch (e) {} }
+    if (mp) { try { if (mp.host) mp.host.close(); else if (mp.guest) mp.guest.leave(); } catch (e) {} if (mp.p2p) setTimeout(((p) => () => { try { p.close(); } catch (e) {} })(mp.p2p), 120); }
     mp = null;
+  }
+  // ---- conexão direta por código (quando a sala do Claude não está disponível para algum jogador) ----
+  const p2pOk = () => !!(DP.p2p && DP.p2p.supported() && DP.p2pui);
+  function startP2pHost() {
+    if (!p2pOk()) { mpMsg('ESTE NAVEGADOR NÃO TEM CONEXÃO DIRETA'); return; }
+    leaveMp();
+    const code = DP.net.mkCode(), p = DP.p2p.makeHost(code);
+    mp = { host: DP.net.Host(p.room, 'ANFITRIÃO', { code }), p2p: p };
+    mp.host.push(); state = 'mplobby'; p2pInvite();
+  }
+  function p2pInvite() { if (mp && mp.p2p && mp.host) DP.p2pui.invite(mp.p2p, {}); }
+  function startP2pJoin() {
+    if (!p2pOk()) { mpMsg('ESTE NAVEGADOR NÃO TEM CONEXÃO DIRETA'); return; }
+    leaveMp();
+    const p = DP.p2p.makeGuest();
+    p.onHello = (h) => {
+      if (mp) return;
+      mp = { guest: DP.net.Guest(p.room, h.code), p2p: p };
+      mp.guest.join(); state = 'mplobby'; DP.p2pui.close();
+    };
+    DP.p2pui.join(p, { onCancel: () => { try { p.close(); } catch (e) {} } });
   }
   function mpBegin(g) {
     game = g; role = g.role; training = false; curMap = 'camp'; newBest = false; showMap = false; DP.render.reset();
     state = 'play'; joy.id = null; joy.active = false; joy.dx = joy.dy = 0; beatT = 0; window.__dp.game = g;
   }
   function mpInfo() {
-    const o = { ok: roomState, games: [], lobby: null, err: mpErr, diag: roomDiag };
+    const o = { ok: roomState, games: [], lobby: null, err: mpErr, diag: roomDiag, p2p: p2pOk() };
     if (roomState && roomApi) { try { o.games = DP.net.listGames(roomApi); } catch (e) {} }
-    if (mp) { try { o.lobby = mp.host ? mp.host.info() : mp.guest.info(); } catch (e) {} }
+    if (mp) { try { o.lobby = mp.host ? mp.host.info() : mp.guest.info(); if (o.lobby && mp.p2p) o.lobby.p2p = true; } catch (e) {} }
     return o;
   }
   let helpPage = 0, helpFrom = 'menu';
@@ -170,6 +191,9 @@
       case 'mp_retry': roomState = null; ensureRoom(true); break;
       case 'mp_perm': (async () => { try { const perm = await window.claude.use('permissions'); if (perm) { await perm.manage(); } } catch (e) { mpMsg('PAINEL DE PERMISSÕES INDISPONÍVEL'); } roomState = null; ensureRoom(true); })(); break;
       case 'mp_create': if (roomState && DP.net) { mp = { host: DP.net.Host(roomApi, 'J' + String(roomApi.me()).slice(-3).toUpperCase()) }; mp.host.push(); state = 'mplobby'; } break;
+      case 'p2p_host': startP2pHost(); break;
+      case 'p2p_join': startP2pJoin(); break;
+      case 'mp_invite': p2pInvite(); break;
       case 'mp_start': if (mp && mp.host) { const g = mp.host.start(DP.createGame, { sfx: sfxFn }); mpBegin(g); } break;
       case 'mp_leave': leaveMp(); state = 'mp'; break;
       case 'go_chars': state = 'chars'; break;

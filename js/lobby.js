@@ -65,22 +65,31 @@
         L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: bw, h: 17, color: '#8a8a99' });
       }
     } else if (state === 'mp') {
-      const bw = Math.min(190, W - 2 * M), bx = cx - bw / 2, games = (ui && ui.mp && ui.mp.games) || [];
+      const bw = Math.min(190, W - 2 * M), bx = cx - bw / 2, games = (ui && ui.mp && ui.mp.games) || [], ok = ui && ui.mp && ui.mp.ok, p2p = !!(ui && ui.mp && ui.mp.p2p);
       L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: Math.min(70, W - 2 * M), h: 17, color: '#8a8a99' });
-      if (ui && ui.mp && ui.mp.ok === false) {
-        L.buttons.push({ id: 'mp_retry', label: 'TENTAR DE NOVO', x: bx, y: H - 62, w: bw, h: 17, color: '#ffd23f' });
-        if (ui.mp.diag && ui.mp.diag.hasPerm) L.buttons.push({ id: 'mp_perm', label: 'PERMISSÕES', x: bx, y: H - 42, w: bw, h: 17, color: '#7ad0ff' });
+      if (p2p) {
+        L.buttons.push({ id: 'p2p_host', label: 'CRIAR POR CÓDIGO', x: bx, y: H - 62, w: bw, h: 17, color: '#7ad0ff' });
+        L.buttons.push({ id: 'p2p_join', label: 'ENTRAR COM CÓDIGO', x: bx, y: H - 42, w: bw, h: 17, color: '#7ad0ff' });
       }
-      if (ui && ui.mp && ui.mp.ok) {
+      if (ok === false) {
+        const rx = M + Math.min(70, W - 2 * M) + 4, rw = W - M - rx, hasPerm = ui.mp.diag && ui.mp.diag.hasPerm, hw = Math.floor((rw - 4) / 2);
+        L.buttons.push({ id: 'mp_retry', label: 'DE NOVO', x: rx, y: H - 22, w: hasPerm ? hw : rw, h: 17, color: '#ffd23f' });
+        if (hasPerm) L.buttons.push({ id: 'mp_perm', label: 'PERMISSÕES', x: rx + hw + 4, y: H - 22, w: hw, h: 17, color: '#7ad0ff' });
+      }
+      if (ok) {
         L.buttons.push({ id: 'mp_create', label: 'CRIAR SALA', x: bx, y: 34, w: bw, h: 18, color: '#ffd23f' });
-        games.slice(0, Math.max(1, Math.min(4, Math.floor((H - 34 - 18 - 14 - 30 - 22) / 20)))).forEach((gm, i) => L.buttons.push({ id: 'mp_join' + i, label: '', x: bx, y: 70 + i * 20, w: bw, h: 17, color: '#7dffa0' }));
+        games.slice(0, Math.max(1, Math.min(4, Math.floor((H - 34 - 18 - 14 - 30 - 22 - (p2p ? 44 : 0)) / 20)))).forEach((gm, i) => L.buttons.push({ id: 'mp_join' + i, label: '', x: bx, y: 70 + i * 20, w: bw, h: 17, color: '#7dffa0' }));
       }
     } else if (state === 'mplobby') {
       const bw = Math.min(210, W - 2 * M), bx = cx - bw / 2, lb = (ui && ui.mp && ui.mp.lobby) || { slots: [] }, rh = H < 200 ? 15 : 17, y0 = 36;
       for (let i = 0; i < 5; i++) L.buttons.push({ id: 'mp_slot' + i, label: '', x: bx, y: y0 + i * (rh + 2), w: bw, h: rh, color: '#7ad0ff', ghost: true });
-      const by = H - 22, half = Math.floor((W - 2 * M - 4) / 2);
-      L.buttons.push({ id: 'mp_leave', label: 'SAIR', x: M, y: by, w: lb.isHost ? Math.min(60, half) : half, h: 17, color: '#8a8a99' });
-      if (lb.isHost) L.buttons.push({ id: 'mp_start', label: 'INICIAR', x: M + Math.min(60, half) + 4, y: by, w: W - 2 * M - Math.min(60, half) - 4, h: 17, color: '#ffd23f' });
+      const by = H - 22, half = Math.floor((W - 2 * M - 4) / 2), sw = lb.isHost ? Math.min(60, half) : half;
+      L.buttons.push({ id: 'mp_leave', label: 'SAIR', x: M, y: by, w: sw, h: 17, color: '#8a8a99' });
+      if (lb.isHost && lb.p2p) {
+        const rest = W - 2 * M - sw - 8, w2 = Math.floor(rest / 2);
+        L.buttons.push({ id: 'mp_invite', label: 'CONVIDAR', x: M + sw + 4, y: by, w: w2, h: 17, color: '#7ad0ff' });
+        L.buttons.push({ id: 'mp_start', label: 'INICIAR', x: M + sw + 8 + w2, y: by, w: rest - w2, h: 17, color: '#ffd23f' });
+      } else if (lb.isHost) L.buttons.push({ id: 'mp_start', label: 'INICIAR', x: M + sw + 4, y: by, w: W - 2 * M - sw - 4, h: 17, color: '#ffd23f' });
     } else if (state === 'help') {
       const bw = Math.min(90, Math.floor((W - 2 * M - 4) / 2));
       L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: bw, h: 17, color: '#8a8a99' });
@@ -200,7 +209,7 @@
       ['CURAR 1 VIDA (~6 S PARADO; SE NÃO ESTIVER FERIDO, CURA UM COLEGA PERTO) / PÔR ARMADILHA DE URSO', 'F', 'TOQUE NO ESPAÇO DA MOCHILA'],
       ['ARMADILHA DO ASSASSINO: DESARME (SEGURE E) OU SOLTE UM COLEGA PRESO (SEGURE E). A SUA PRENDE O ASSASSINO.', '', ''],
       ['LIGANDO PARA A POLÍCIA APARECE UM CHAT: RESPONDA COM 1, 2 OU 3 (OU TOQUE).', '1 / 2 / 3', 'TOQUE NA RESPOSTA'],
-      ['MULTIJOGADOR: MENU > MULTIJOGADOR. UM CRIA A SALA (A PARTIDA RODA NO APARELHO DELE), OS OUTROS ENTRAM PELA LISTA E ESCOLHEM A VAGA.', '', '']] },
+      ['MULTIJOGADOR: MENU > MULTIJOGADOR. UM CRIA A SALA (A PARTIDA RODA NO APARELHO DELE), OS OUTROS ENTRAM PELA LISTA E ESCOLHEM A VAGA. SEM A SALA DO CLAUDE: CRIAR/ENTRAR POR CÓDIGO.', '', '']] },
     { t: 'ASSASSINO', rows: [
       ['MOVER', 'WASD/SETAS', 'JOYSTICK'],
       ['ATACAR (GOLPE COM BOTE)', 'ESPAÇO', 'BOTÃO ATACAR'],
@@ -260,19 +269,21 @@
     if (mp.ok === null || mp.ok === undefined) { text(ctx, 'CONECTANDO...', Math.round(W / 2), 40, '#8a8a99', { align: 'c' }); return; }
     if (!mp.ok) {
       const d = mp.diag || {}, why = d.why;
-      const txt = why === 'SEM-CLAUDE' ? 'ESTA TELA NÃO TEM A CAMADA DO CLAUDE: ABRA O JOGO PELO CLAUDE.AI (NÃO POR ARQUIVO NEM POR ENDEREÇO DIRETO).'
-        : why === 'NEGADA' ? 'A PERMISSÃO DA SALA FOI NEGADA NESTE APARELHO. TOQUE EM PERMISSÕES PARA LIBERAR.'
-        : why === 'INDISPONIVEL' ? 'ESTE ACESSO NÃO TEM A SALA. O CLAUDE SÓ LIGA A SALA PARA QUEM ESTÁ LOGADO E FOI ADMITIDO NO ARTEFATO (MEMBRO OU CONVIDADO); VISITANTE DE LINK PÚBLICO NÃO CONECTA.'
-        : 'A SALA NÃO RESPONDEU PARA ESTE ACESSO. CONFIRA SE A PESSOA ESTÁ LOGADA E ABRIU O JOGO PELO LINK DENTRO DO CLAUDE.AI; TOQUE EM TENTAR DE NOVO.';
-      DP.font.wrap(txt, cols).forEach((l, i) => text(ctx, l, 8, 36 + i * 9, '#ff9d5c'));
-      DP.font.wrap('DIAGNÓSTICO: ' + (why || '-') + ' | PERMISSÃO: ' + (d.hasPerm ? (d.perm || '?') : 'SEM PAINEL') + (d.err ? ' | ' + d.err : '') + (d.permErr ? ' | ' + d.permErr : ''), cols).forEach((l, i) => text(ctx, l, 8, H - 90 + i * 9, '#6f6f7c'));
+      const txt = why === 'SEM-CLAUDE' ? 'ESTA TELA NÃO TEM A SALA DO CLAUDE (ARQUIVO OU ENDEREÇO DIRETO).'
+        : why === 'NEGADA' ? 'A PERMISSÃO DA SALA FOI NEGADA. TOQUE EM PERMISSÕES PARA LIBERAR.'
+        : why === 'INDISPONIVEL' ? 'ESTE ACESSO NÃO TEM A SALA DO CLAUDE (VISITANTE DE LINK PÚBLICO OU OUTRA ORGANIZAÇÃO).'
+        : 'A SALA DO CLAUDE NÃO RESPONDEU PARA ESTE ACESSO.';
+      let y = 36;
+      DP.font.wrap(txt + (mp.p2p ? ' USE A CONEXÃO POR CÓDIGO ABAIXO: UM CRIA E MANDA UM CÓDIGO, O OUTRO RESPONDE.' : ''), cols).forEach((l) => { text(ctx, l, 8, y, '#ff9d5c'); y += 9; });
+      DP.font.wrap('DIAGNÓSTICO: ' + (why || '-') + ' | PERMISSÃO: ' + (d.hasPerm ? (d.perm || '?') : 'SEM PAINEL') + (d.err ? ' | ' + d.err : '') + (d.permErr ? ' | ' + d.permErr : ''), cols).forEach((l) => { text(ctx, l, 8, y + 4, '#6f6f7c'); y += 9; });
+      if (mp.err) text(ctx, mp.err, Math.round(W / 2), H - 100, '#ff9d5c', { align: 'c' });
       return;
     }
     text(ctx, 'SALAS ABERTAS', 8, 58, '#8a8a99');
     const games = mp.games || [];
     if (!games.length) DP.font.wrap('NENHUMA AINDA. CRIE UMA E MANDE A PESSOA ABRIR O JOGO E TOCAR EM MULTIJOGADOR.', cols).forEach((l, i) => text(ctx, l, 8, 70 + i * 9, '#6f6f7c'));
     L.buttons.forEach((b) => { if (b.id.indexOf('mp_join') === 0) { const gm = games[+b.id.slice(7)]; if (gm) text(ctx, gm.code + '  ' + gm.host + '  ' + gm.players + '/5', b.x + b.w / 2, b.y + 5, '#7dffa0', { align: 'c' }); } });
-    if (mp.err) text(ctx, mp.err, Math.round(W / 2), H - 34, '#ff9d5c', { align: 'c' });
+    if (mp.err) text(ctx, mp.err, Math.round(W / 2), mp.p2p ? H - 76 : H - 34, '#ff9d5c', { align: 'c' });
   }
   function drawMpLobby(ctx, W, H, tm, ui, L) {
     bg(ctx, W, H, tm);
@@ -287,7 +298,7 @@
       text(ctx, who ? (mine ? 'VOCÊ (' + who + ')' : who) : 'BOT', b.x + b.w - 4, b.y + (b.h - 7) / 2, mine ? '#7dffa0' : who ? '#7ad0ff' : '#5d5d69', { align: 'r' });
     });
     const ly = 36 + 5 * (L.buttons[0] ? L.buttons[0].h + 2 : 19) + 3;
-    DP.font.wrap(lb.isHost ? 'TOQUE NUMA VAGA PARA MUDAR DE LUGAR. VAGAS SEM PESSOA VIRAM BOTS. QUEM CHEGAR DEPOIS ENTRA PELO MENU > MULTIJOGADOR.' : 'TOQUE NUMA VAGA LIVRE PARA ESCOLHER SEU LUGAR. O ANFITRIÃO INICIA.', Math.floor((W - 16) / 6)).forEach((l, i) => text(ctx, l, 8, ly + i * 9, '#6f6f7c'));
+    DP.font.wrap(lb.isHost ? (lb.p2p ? 'TOQUE EM CONVIDAR PARA GERAR UM CÓDIGO PARA CADA AMIGO. ' : '') + 'TOQUE NUMA VAGA PARA MUDAR DE LUGAR. VAGAS SEM PESSOA VIRAM BOTS.' + (lb.p2p ? '' : ' QUEM CHEGAR DEPOIS ENTRA PELO MENU > MULTIJOGADOR.') : 'TOQUE NUMA VAGA LIVRE PARA ESCOLHER SEU LUGAR. O ANFITRIÃO INICIA.', Math.floor((W - 16) / 6)).forEach((l, i) => text(ctx, l, 8, ly + i * 9, '#6f6f7c'));
     if (ui.mp && ui.mp.err) text(ctx, ui.mp.err, Math.round(W / 2), H - 34, '#ff9d5c', { align: 'c' });
   }
 
