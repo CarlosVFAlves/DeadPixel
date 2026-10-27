@@ -561,7 +561,7 @@ console.log('telas');
 {
   const uctx = { console, Math, Date, Array, Object };
   uctx.window = uctx; uctx.globalThis = uctx; vm.createContext(uctx);
-  for (const f of ['font.js', 'camp.js', 'game.js', 'map.js', 'lobby.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), uctx, { filename: f });
+  for (const f of ['font.js', 'camp.js', 'game.js', 'map.js', 'forge.js', 'lobby.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), uctx, { filename: f });
   const lay = uctx.DP.lobby.layout;
   const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
   let bad = 0; const sizes = [[320, 187], [195, 390], [422, 195], [280, 500], [240, 320], [360, 203], [180, 320], [200, 360]];
@@ -1211,7 +1211,7 @@ console.log('ajuda');
 {
   const uctx = { console, Math, Date, Array, Object };
   uctx.window = uctx; uctx.globalThis = uctx; vm.createContext(uctx);
-  for (const f of ['font.js', 'camp.js', 'game.js', 'map.js', 'lobby.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), uctx, { filename: f });
+  for (const f of ['font.js', 'camp.js', 'game.js', 'map.js', 'forge.js', 'lobby.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), uctx, { filename: f });
   let bad = 0, pagesMin = 99, pagesMax = 0;
   for (const [W, H] of [[320, 187], [195, 390], [422, 195], [280, 500], [240, 320], [180, 320], [480, 270]]) {
     for (const touch of [false, true]) {
@@ -1319,6 +1319,44 @@ console.log('som e variedade');
   const x0 = g.s.x; g.update(1 / 60, { ax: 1, ay: 0 }); const dTrip = g.s.x - x0;
   g.s.tripT = 0; const x1 = g.s.x; g.update(1 / 60, { ax: 1, ay: 0 }); const dRun = g.s.x - x1;
   ok(dTrip < dRun * 0.6 && dTrip > 0, 'tropeçado, o sobrevivente anda à metade da velocidade');
+}
+
+// ---------- Forja de personagens ----------
+console.log('forja');
+{
+  const fctx = { console, Math, Date, Uint8Array, Uint8ClampedArray, Float32Array, Int16Array, Array, Object, JSON };
+  fctx.window = fctx; fctx.globalThis = fctx; vm.createContext(fctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'forge.js'), 'utf8'), fctx, { filename: 'forge.js' });
+  const F = fctx.DP.forge;
+  const count = (fr) => { let n = 0; for (let i = 3; i < fr.rgba.length; i += 4) if (fr.rgba[i]) n++; return n; };
+  const hashOf = (fr) => { let h = 0; for (let i = 0; i < fr.rgba.length; i++) h = (h * 31 + fr.rgba[i]) | 0; return h; };
+  ok(F.on === true && F.mine && F.killerG, 'a forja inicia ligada com personagem padrão');
+  for (const role of ['survivor', 'killer']) {
+    const g = F.defaultGenome(role, 0); let bad = 0, total = 0, cut = 0;
+    for (const res of [16, 32]) for (const an of Object.keys(F.ANIMS[role])) {
+      const A = F.ANIMS[role][an];
+      for (let f = 0; f < A.frames; f++) for (const d of F.DIRS) {
+        const fr = F.renderFrame(g, an, f, d[1], res); total++;
+        if (count(fr) < 60 * (res / 16) * (res / 16)) bad++;
+        let edge = 0; for (let y = 0; y < fr.h; y++) for (let x = 0; x < fr.w; x++) if ((x === 0 || y === 0 || x === fr.w - 1 || y === fr.h - 1) && fr.rgba[(y * fr.w + x) * 4 + 3]) edge++;
+        if (edge) cut++;
+      }
+    }
+    ok(bad === 0, role + ': ' + total + ' quadros (todas as animações, 4 direções, 16 e 32 px) têm pixels');
+    ok(cut === 0, role + ': nenhum quadro é cortado pela borda da célula');
+  }
+  const g0 = F.defaultGenome('survivor', 0);
+  ok(hashOf(F.renderFrame(g0, 'andar', 2, 0, 16)) === hashOf(F.renderFrame(g0, 'andar', 2, 0, 16)), 'renderização é determinística');
+  ok(hashOf(F.renderFrame(g0, 'andar', 0, 0, 16)) !== hashOf(F.renderFrame(g0, 'andar', 3, 0, 16)), 'quadros de andar são diferentes entre si');
+  ok(hashOf(F.renderFrame(g0, 'parado', 0, 0, 16)) !== hashOf(F.renderFrame(g0, 'parado', 0, Math.PI, 16)), 'frente e costas são diferentes');
+  const seen = new Set(); for (let i = 0; i < 40; i++) seen.add(F.key(F.randomGenome('survivor', i)));
+  ok(seen.size >= 38, 'genomas sorteados são variados (' + seen.size + '/40)');
+  const gg = Object.assign({}, g0, { topC: 3 });
+  ok(hashOf(F.renderFrame(g0, 'parado', 0, 0, 16)) !== hashOf(F.renderFrame(gg, 'parado', 0, 0, 16)), 'mudar a cor da roupa muda o desenho');
+  ok(F.layoutFor('survivor').length === Object.values(F.ANIMS.survivor).reduce((a, x) => a + x.frames, 0), 'layout da folha = soma dos quadros');
+  ok(F.dirIndex(Math.PI / 2) === 0 && F.dirIndex(0) === 1 && F.dirIndex(-Math.PI / 2) === 2 && F.dirIndex(Math.PI) === 3, 'direção da tela -> direção da folha');
+  const t0 = Date.now(); for (let i = 0; i < 30; i++) F.renderFrame(g0, 'correr', i % 6, 0, 16); const ms = (Date.now() - t0) / 30;
+  ok(ms < 30, 'um quadro a 16 px leva ' + ms.toFixed(1) + ' ms (o cache cobre o jogo)');
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');

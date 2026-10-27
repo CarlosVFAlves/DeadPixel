@@ -67,8 +67,7 @@
       L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: bw, h: 17, color: '#8a8a99' });
       L.buttons.push({ id: 'help_next', label: 'PÁGINA', x: W - M - bw, y: H - 22, w: bw, h: 17, color: '#ffd23f' });
     } else if (state === 'chars') {
-      L.wide = W >= 280;
-      L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 24, w: L.wide ? 70 : W - 2 * M, h: 18, color: '#8a8a99' });
+      forgeLayout(L, W, H);
     } else if (state === 'shop') {
       const wide = W >= 280, gap = 4, top = 26, cols = wide ? 3 : 2, ch = wide ? 58 : 62;
       const cw = Math.floor((W - 2 * M - (cols - 1) * gap) / cols);
@@ -226,37 +225,87 @@
     }
   }
 
+  // ---------- Forja de personagens (tela PERSONAGENS) ----------
+  const FS = { page: 0, anim: 0, res: 16, dir: -1, role: 'survivor' };
+  const F = () => DP.forge;
+  const ANIM_LABEL = { parado: 'PARADO', andar: 'ANDAR', correr: 'CORRER', pular_andando: 'PULAR ANDANDO', pular_correndo: 'PULAR CORRENDO', atravessar: 'ATRAVESSAR JANELA', tropecar: 'TROPEÇAR', ferido: 'FERIDO', consertar: 'CONSERTAR', carregar: 'CARREGAR PEÇA', pegar: 'PEGAR ITEM', esconder: 'ESCONDER', reagir: 'LEVAR GOLPE', comemorar: 'COMEMORAR', perseguir: 'PERSEGUIR', preparar: 'PREPARAR GOLPE', golpe: 'GOLPE', recuperar: 'RECUPERAR', atordoado: 'ATORDOADO', cambalear: 'CAMBALEAR', quebrar: 'QUEBRAR', sabotar: 'SABOTAR', armario: 'ABRIR ARMÁRIO' };
+  function animList() { return Object.keys(F().ANIMS[FS.role]); }
+  function forgeLayout(L, W, H) {
+    const wide = W >= 280, opts = F().OPTS[FS.role], rh = 12;
+    L.wide = wide;
+    // botões inferiores em linhas
+    const items = [
+      ['fo_back', 'VOLTAR', '#8a8a99'], ['fo_role', FS.role === 'killer' ? 'ASSASSINO' : 'SOBREVIVENTE', '#7dffa0'], ['fo_rand', 'SORTEAR', '#ffd23f'],
+      ['fo_anim', '', '#7ad0ff'], ['fo_res', 'RES ' + FS.res, '#7ad0ff'], ['fo_style', '', '#e9c07a'], ['fo_exp', 'EXPORTAR', '#ffffff'], ['fo_imp', 'IMPORTAR', '#ffffff']
+    ];
+    const cols = wide ? 4 : 2, gap = 3, bw = Math.floor((W - 2 * M - (cols - 1) * gap) / cols), bh = 15, nrows = Math.ceil(items.length / cols);
+    const by0 = H - M - nrows * (bh + gap) + gap;
+    items.forEach((it, i) => L.buttons.push({ id: it[0], label: it[1], x: M + (i % cols) * (bw + gap), y: by0 + Math.floor(i / cols) * (bh + gap), w: bw, h: bh, color: it[2] }));
+    const top = 20, bottom = by0 - 4;
+    // prévia
+    if (wide) L.pv = { x: M, y: top, w: Math.round(W * 0.34), h: bottom - top };
+    else L.pv = { x: M, y: top, w: W - 2 * M, h: Math.min(Math.round((bottom - top) * 0.42), 130) };
+    L.buttons.push({ id: 'fo_dir', ghost: true, x: L.pv.x, y: L.pv.y, w: L.pv.w, h: L.pv.h });
+    // opções (paginadas pelo espaço)
+    const ox = wide ? L.pv.x + L.pv.w + 6 : M, oy = wide ? top : L.pv.y + L.pv.h + 4, ow = W - ox - M;
+    const per = Math.max(2, Math.floor((bottom - oy - (wide ? 0 : 0) - 16) / rh));
+    const pages = Math.ceil(opts.length / per); FS.page = Math.min(FS.page, pages - 1);
+    FS.per = per; L.rows = []; L.pages = pages; L.ox = ox; L.ow = ow; L.oy = oy; L.per = per;
+    for (let r = 0; r < per; r++) {
+      const i = FS.page * per + r; if (i >= opts.length) break;
+      const y = oy + r * rh;
+      L.rows.push({ i, y, o: opts[i] });
+      L.buttons.push({ id: 'fo_o' + i + '_-1', label: '<', x: ox + ow - 76, y, w: 12, h: 11, color: '#e9c07a' });
+      L.buttons.push({ id: 'fo_o' + i + '_1', label: '>', x: ox + ow - 12, y, w: 12, h: 11, color: '#e9c07a' });
+    }
+    if (pages > 1) L.buttons.push({ id: 'fo_page', label: 'PÁGINA ' + (FS.page + 1) + '/' + pages, x: ox, y: oy + per * rh + 2, w: ow, h: 13, color: '#ffd23f' });
+  }
+  function forgeAct(id) {
+    // retorna true se tratou
+    const f = F();
+    if (id.indexOf('fo_o') === 0) { const m = /^fo_o(\d+)_(-?1)$/.exec(id); if (m) { f.edit(FS.role, +m[1], +m[2]); return true; } }
+    switch (id) {
+      case 'fo_role': FS.role = FS.role === 'killer' ? 'survivor' : 'killer'; FS.anim = 0; FS.page = 0; return true;
+      case 'fo_rand': f.randomize(FS.role); return true;
+      case 'fo_anim': FS.anim = (FS.anim + 1) % animList().length; return true;
+      case 'fo_res': FS.res = FS.res === 16 ? 32 : 16; return true;
+      case 'fo_style': f.setOn(!f.on); return true;
+      case 'fo_page': FS.page++; { const n = Math.ceil(f.OPTS[FS.role].length / Math.max(2, FS.per || 6)); if (FS.page >= n) FS.page = 0; } return true;
+      case 'fo_dir': FS.dir = FS.dir >= 3 ? -1 : FS.dir + 1; return true;
+      case 'fo_exp': FS.toast = 'BAIXANDO ' + f.exportDownload(FS.role, FS.res).toUpperCase() + '.PNG E .JSON'; FS.toastT = 3; return true;
+      case 'fo_imp': f.pickImport((r) => { FS.toast = r ? 'IMPORTADO: ' + (r.papel === 'killer' ? 'ASSASSINO' : 'SOBREVIVENTE') + ' (' + r.quadros + ' QUADROS)' : 'IMAGEM NÃO BATE COM A FOLHA EXPORTADA'; FS.toastT = 4; }); return true;
+    }
+    return false;
+  }
+  function forgeLabel(b) {
+    if (b.id === 'fo_anim') { const n = ANIM_LABEL[animList()[FS.anim]] || animList()[FS.anim]; return b.w < 100 ? n.slice(0, Math.floor((b.w - 6) / 6)) : 'ANIM: ' + n.slice(0, Math.floor((b.w - 6) / 6) - 6); }
+    if (b.id === 'fo_style') return b.w < 70 ? (F().on ? 'FORJA' : 'CLÁSSICO') : 'JOGO: ' + (F().on ? 'FORJA' : 'CLÁSSICO');
+    return b.label;
+  }
   function drawChars(ctx, W, H, tm, ui, L) {
     bg(ctx, W, H, tm);
-    title(ctx, W, 'PERSONAGENS', null);
-    // o personagem principal, grande, andando em todas as direções
-    const faces = [Math.PI / 2, 0, -Math.PI / 2, Math.PI];
-    const face = faces[Math.floor(tm / 2.2) % 4];
-    const sc = L.wide ? (H >= 230 ? 6 : 4) : 5;
-    const px0 = L.wide ? Math.round(W * 0.24) : Math.round(W / 2);
-    const feet = L.wide ? Math.round(H * 0.62) : 22 + 21 * sc;
-    rect(ctx, 'rgba(0,0,0,.35)', px0 - 7 * sc, feet - 1, 14 * sc, 2 * sc);
-    R().uiSurvivor(ctx, px0, feet, sc, { id: 0, moving: true, walk: tm * 6, face, tm });
-    // ficha
-    const tx = L.wide ? Math.round(W * 0.46) : M, ty0 = L.wide ? 26 : feet + 12;
-    const tw = L.wide ? W - tx - M : W - 2 * M;
-    text(ctx, 'PIXEL', tx, ty0, '#ffffff');
-    text(ctx, 'SOBREVIVENTE', tx, ty0 + 10, '#7dffa0');
-    const bio = DP.font.wrap('VENDEDOR DE LOJA QUE ATENDEU MAL A BRUXA. RÁPIDO O BASTANTE PARA FUGIR, TEIMOSO O BASTANTE PARA TENTAR DE NOVO.', Math.floor(tw / 6));
-    bio.forEach((l, i) => text(ctx, l, tx, ty0 + 24 + i * 9, '#a9a9b5'));
-    let y = ty0 + 24 + bio.length * 9 + 6;
-    const C = DP.CFG;
-    const bar = (label, val, max, note) => {
-      text(ctx, label, tx, y, '#8a8a99');
-      const bx = tx + 72;
-      for (let i = 0; i < max; i++) rect(ctx, i < val ? '#ffd23f' : '#33333d', bx + i * 7, y, 5, 6);
-      if (tw > 150) text(ctx, note, bx + max * 7 + 4, y, '#6f6f7c');
-      y += 10;
-    };
-    bar('VELOCIDADE', 4, 5, C.RUN.toFixed(1).replace('.', ',') + ' T/S');
-    bar('FURTIVIDADE', 3, 5, 'ANDA ' + (C.RUN * C.WALK).toFixed(1).replace('.', ','));
-    bar('RESISTÊNCIA', 2, 5, '2 VIDAS');
-    bar('AGILIDADE', 3, 5, 'JANELAS');
+    title(ctx, W, 'FORJA DE PERSONAGENS', null);
+    const f = F(), g = f.genomeOf(FS.role), anims = animList(), an = anims[FS.anim % anims.length], A = f.ANIMS[FS.role][an];
+    const pv = L.pv;
+    rect(ctx, 'rgba(0,0,0,.35)', pv.x, pv.y, pv.w, pv.h); frame(ctx, '#33333d', pv.x, pv.y, pv.w, pv.h);
+    const cell = f.CELL[FS.res], sc = Math.max(1, Math.min(Math.floor((pv.w - 4) / (cell[0] * 0.55)), Math.floor((pv.h - 14) / (cell[1] - 12 * FS.res / 16))));
+    const dI = FS.dir < 0 ? Math.floor(tm / 2.2) % 4 : FS.dir;
+    const fr = A.loop ? Math.floor(tm * A.fps) % A.frames : Math.min(A.frames - 1, Math.floor((tm % (A.frames / A.fps + 0.7)) * A.fps));
+    const sp = f.sprite(g, an, fr, dI, FS.res, {});
+    const feetY = pv.y + pv.h - 14 - Math.round(2 * sc) + Math.round(sp.ay * 0) , cx = pv.x + Math.round(pv.w / 2);
+    rect(ctx, 'rgba(0,0,0,.4)', cx - 6 * sc * (FS.res / 16), feetY - sc, 12 * sc * (FS.res / 16), 2 * sc);
+    ctx.drawImage(sp.c, cx - sp.ax * sc, feetY - sp.ay * sc, sp.w * sc, sp.h * sc);
+    text(ctx, ['BAIXO', 'DIREITA', 'CIMA', 'ESQUERDA'][dI] + (FS.dir < 0 ? ' (AUTO)' : ''), pv.x + Math.round(pv.w / 2), pv.y + pv.h - 9, '#6f6f7c', { align: 'c' });
+    // opções
+    for (const r of L.rows) {
+      const o = r.o, v = g[o.k], rx = L.ox, ry = r.y;
+      text(ctx, o.label, rx, ry + 2, '#a9a9b5');
+      const vx = L.ox + L.ow - 62, vw = 46;
+      if (o.color) { rect(ctx, o.color[v], vx + 4, ry + 1, vw - 8, 9); frame(ctx, '#33333d', vx + 4, ry + 1, vw - 8, 9); }
+      else text(ctx, o.names[v], vx + Math.round(vw / 2), ry + 2, '#ffffff', { align: 'c' });
+    }
+    if (FS.toastT > 0) { FS.toastT -= 1 / 60; rect(ctx, '#0b0b10', 0, 4, W, 18); text(ctx, FS.toast, Math.round(W / 2), 10, '#ffb347', { align: 'c' }); }
+    if (f.hasImported()) text(ctx, 'ARTE IMPORTADA ATIVA', Math.round(W / 2), H - 4, '#7dffa0', { align: 'c' });
   }
 
   const SHOP = [
@@ -305,10 +354,11 @@
       const long = ['MODO: PARTIDA (ACAMPAMENTO)', 'MODO: TREINO (ACAMPAMENTO)', 'MODO: TREINO (ARENA PEQUENA)'][ui.mode || 0], mid = ['MODO: PARTIDA', 'MODO: TREINO', 'MODO: ARENA'][ui.mode || 0], short = ['PARTIDA', 'TREINO', 'ARENA'][ui.mode || 0];
       return long.length * 6 + 8 <= b.w ? long : mid.length * 6 + 8 <= b.w ? mid : short;
     }
+    if (b.id.indexOf('fo_') === 0) return forgeLabel(b);
     if (b.id === 'help_next') { const n = DP.lobby.helpCount || 3; return 'PÁGINA ' + (((ui.helpPage || 0) % n) + 1) + '/' + n; }
     if (b.id === 'diff_toggle') { const n = { easy: 'FÁCIL', normal: 'NORMAL', hard: 'DIFÍCIL' }[ui.difficulty]; return b.w < 100 ? 'DIF: ' + n : 'DIFICULDADE: ' + n; }
     return b.label;
   }
 
-  DP.lobby = { layout, drawMenu, drawLobby, drawChars, drawShop, drawHelp, helpPages, labelFor, SHOP };
+  DP.lobby = { forgeAct, FS, layout, drawMenu, drawLobby, drawChars, drawShop, drawHelp, helpPages, labelFor, SHOP };
 })();

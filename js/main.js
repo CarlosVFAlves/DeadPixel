@@ -139,7 +139,9 @@
       case 'resume': if (state === 'pause') state = 'play'; break;
       case 'restart': start(training); break;
       case 'menu': state = 'menu'; game = null; break;
+      case 'fo_back': state = 'menu'; break;
       default:
+        if (id.indexOf('fo_') === 0) { DP.lobby.forgeAct(id); break; }
         if (id.indexOf('card') === 0) toast = { text: DP.lobby.SHOP[+id.slice(4)].name + ': COMPRAS EM BREVE', t: 2.2 };
     }
   }

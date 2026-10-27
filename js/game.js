@@ -945,7 +945,7 @@
         const sp = CFG.RUN * (s.burst > 0 ? CFG.BURST : 1) * (walkMode ? CFG.WALK : 1) * (s.tripT > 0 ? CFG.SURV_TRIP_SLOW : 1);
         moveBy(s, ax * sp * dt, ay * sp * dt, CFG.R_S);
         s.face = Math.atan2(ay, ax);
-        s.walk += dt * (walkMode ? 7 : 11);
+        s.runMode = !walkMode; s.walk += dt * (walkMode ? 7 : 11);
         if (!s.vaultCD) tryVault(ax, ay, len, walkMode, !s.human || s.jumpT > 0);
       } else {
         s.walk = 0; s.chaseT = Math.max(0, s.chaseT - dt * 1.5);
