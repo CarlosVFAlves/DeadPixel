@@ -67,6 +67,10 @@
     } else if (state === 'mp') {
       const bw = Math.min(190, W - 2 * M), bx = cx - bw / 2, games = (ui && ui.mp && ui.mp.games) || [];
       L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: Math.min(70, W - 2 * M), h: 17, color: '#8a8a99' });
+      if (ui && ui.mp && ui.mp.ok === false) {
+        L.buttons.push({ id: 'mp_retry', label: 'TENTAR DE NOVO', x: bx, y: H - 62, w: bw, h: 17, color: '#ffd23f' });
+        if (ui.mp.diag && ui.mp.diag.hasPerm) L.buttons.push({ id: 'mp_perm', label: 'PERMISSÕES', x: bx, y: H - 42, w: bw, h: 17, color: '#7ad0ff' });
+      }
       if (ui && ui.mp && ui.mp.ok) {
         L.buttons.push({ id: 'mp_create', label: 'CRIAR SALA', x: bx, y: 34, w: bw, h: 18, color: '#ffd23f' });
         games.slice(0, Math.max(1, Math.min(4, Math.floor((H - 34 - 18 - 14 - 30 - 22) / 20)))).forEach((gm, i) => L.buttons.push({ id: 'mp_join' + i, label: '', x: bx, y: 70 + i * 20, w: bw, h: 17, color: '#7dffa0' }));
@@ -251,11 +255,17 @@
   // ---------- multijogador ----------
   function drawMp(ctx, W, H, tm, ui, L) {
     bg(ctx, W, H, tm);
-    title(ctx, W, 'MULTIJOGADOR', '1 ASSASSINO + ATÉ 4 SOBREVIVENTES');
+    title(ctx, W, 'MULTIJOGADOR', W < 280 ? 'ATÉ 5 JOGADORES' : '1 ASSASSINO + ATÉ 4 SOBREVIVENTES');
     const mp = ui.mp || {}, cols = Math.floor((W - 16) / 6);
     if (mp.ok === null || mp.ok === undefined) { text(ctx, 'CONECTANDO...', Math.round(W / 2), 40, '#8a8a99', { align: 'c' }); return; }
     if (!mp.ok) {
-      DP.font.wrap('INDISPONÍVEL AQUI. O MULTIJOGADOR USA A SALA DO ARTEFATO: ABRA O JOGO PELO CLAUDE.AI, COM LOGIN, E COMPARTILHE O LINK COM QUEM VAI JOGAR (VISITANTES SEM LOGIN NÃO ENTRAM).', cols).forEach((l, i) => text(ctx, l, 8, 36 + i * 9, '#ff9d5c'));
+      const d = mp.diag || {}, why = d.why;
+      const txt = why === 'SEM-CLAUDE' ? 'ESTA TELA NÃO TEM A CAMADA DO CLAUDE: ABRA O JOGO PELO CLAUDE.AI (NÃO POR ARQUIVO NEM POR ENDEREÇO DIRETO).'
+        : why === 'NEGADA' ? 'A PERMISSÃO DA SALA FOI NEGADA NESTE APARELHO. TOQUE EM PERMISSÕES PARA LIBERAR.'
+        : why === 'INDISPONIVEL' ? 'ESTE ACESSO NÃO TEM A SALA. O CLAUDE SÓ LIGA A SALA PARA QUEM ESTÁ LOGADO E FOI ADMITIDO NO ARTEFATO (MEMBRO OU CONVIDADO); VISITANTE DE LINK PÚBLICO NÃO CONECTA.'
+        : 'A SALA NÃO RESPONDEU PARA ESTE ACESSO. CONFIRA SE A PESSOA ESTÁ LOGADA E ABRIU O JOGO PELO LINK DENTRO DO CLAUDE.AI; TOQUE EM TENTAR DE NOVO.';
+      DP.font.wrap(txt, cols).forEach((l, i) => text(ctx, l, 8, 36 + i * 9, '#ff9d5c'));
+      DP.font.wrap('DIAGNÓSTICO: ' + (why || '-') + ' | PERMISSÃO: ' + (d.hasPerm ? (d.perm || '?') : 'SEM PAINEL') + (d.err ? ' | ' + d.err : '') + (d.permErr ? ' | ' + d.permErr : ''), cols).forEach((l, i) => text(ctx, l, 8, H - 90 + i * 9, '#6f6f7c'));
       return;
     }
     text(ctx, 'SALAS ABERTAS', 8, 58, '#8a8a99');

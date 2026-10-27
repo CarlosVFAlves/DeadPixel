@@ -28,13 +28,29 @@
   // ---------- multijogador (sala do artefato) ----------
   DP.MP_ON = true;
   let mp = null, roomApi = null, roomState = null, mpErr = null, mpErrT = 0;       // roomState: null = conectando, true = pronto, false = indisponível aqui
-  async function ensureRoom() {
-    if (roomState !== null) return;
+  let roomBusy = false, roomDiag = {};
+  // pede acesso à sala: lê a permissão (pede se ainda não foi decidida) e só então tenta usar a capacidade; guarda o motivo para mostrar na tela
+  async function ensureRoom(force) {
+    if (roomState === true || roomBusy) return;
+    roomBusy = true; roomState = null; roomDiag = {};
     try {
-      const r = window.claude && window.claude.use ? await window.claude.use('room') : null;
-      if (r) { roomApi = { me: () => { const m = r.peers().find((p) => p.isMe); return m ? m.peer : 'eu'; }, peers: () => r.peers(), presence: (p) => r.presence(p) }; roomState = true; }
-      else roomState = false;
-    } catch (e) { roomState = false; }
+      const c = window.claude;
+      if (!c || !c.use) { roomState = false; roomDiag.why = 'SEM-CLAUDE'; return; }
+      let perm = null;
+      try { perm = await c.use('permissions'); } catch (e) { roomDiag.permErr = 1; }
+      roomDiag.hasPerm = !!perm; roomDiag.perm = null;
+      if (perm) {
+        try {
+          roomDiag.perm = await perm.state('room');
+          if (roomDiag.perm === 'prompt') { const r = await perm.request(['room']); roomDiag.perm = r && r.room; }
+        } catch (e) { roomDiag.permErr = String((e && (e.code || e.message)) || e).slice(0, 24); }
+      }
+      let r = null;
+      try { r = await c.use('room'); } catch (e) { roomDiag.err = String((e && (e.code || e.message)) || e).slice(0, 24); }
+      if (r) { roomApi = { me: () => { const m = r.peers().find((p) => p.isMe); return m ? m.peer : 'eu'; }, peers: () => r.peers(), presence: (p) => r.presence(p) }; roomState = true; roomDiag.why = 'OK'; }
+      else { roomState = false; roomDiag.why = roomDiag.perm === 'denied' ? 'NEGADA' : roomDiag.perm === 'unavailable' ? 'INDISPONIVEL' : 'NULO'; }
+    } catch (e) { roomState = false; roomDiag.why = 'ERRO'; roomDiag.err = String((e && e.message) || e).slice(0, 24); }
+    finally { roomBusy = false; }
   }
   const sfxFn = (n, p, v, x) => { const f = DP.audio.sfx[n]; if (f) { DP.audio.vol = v === undefined ? 1 : v; f(p, x); DP.audio.vol = 1; } };
   function mpMsg(t) { mpErr = t; mpErrT = 4; }
@@ -47,7 +63,7 @@
     state = 'play'; joy.id = null; joy.active = false; joy.dx = joy.dy = 0; beatT = 0; window.__dp.game = g;
   }
   function mpInfo() {
-    const o = { ok: roomState, games: [], lobby: null, err: mpErr };
+    const o = { ok: roomState, games: [], lobby: null, err: mpErr, diag: roomDiag };
     if (roomState && roomApi) { try { o.games = DP.net.listGames(roomApi); } catch (e) {} }
     if (mp) { try { o.lobby = mp.host ? mp.host.info() : mp.guest.info(); } catch (e) {} }
     return o;
@@ -150,7 +166,9 @@
     DP.audio.init();
     switch (id) {
       case 'go_lobby': state = 'lobby'; break;
-      case 'go_mp': state = 'mp'; ensureRoom(); break;
+      case 'go_mp': state = 'mp'; if (roomState === false) roomState = null; ensureRoom(); break;
+      case 'mp_retry': roomState = null; ensureRoom(true); break;
+      case 'mp_perm': (async () => { try { const perm = await window.claude.use('permissions'); if (perm) { await perm.manage(); } } catch (e) { mpMsg('PAINEL DE PERMISSÕES INDISPONÍVEL'); } roomState = null; ensureRoom(true); })(); break;
       case 'mp_create': if (roomState && DP.net) { mp = { host: DP.net.Host(roomApi, 'J' + String(roomApi.me()).slice(-3).toUpperCase()) }; mp.host.push(); state = 'mplobby'; } break;
       case 'mp_start': if (mp && mp.host) { const g = mp.host.start(DP.createGame, { sfx: sfxFn }); mpBegin(g); } break;
       case 'mp_leave': leaveMp(); state = 'mp'; break;

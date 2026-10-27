@@ -630,6 +630,9 @@ Respostas do usuário às perguntas de design: **sem estado "caído"** (o últim
 ### 13.4 Limitações conhecidas / próximos passos
 Sem reconexão no meio da partida; sem chat; nomes são "J" + 3 letras do identificador; os recordes e fichas não contam em partida multijogador; o assassino-jogador convidado sente a latência do ataque (o bote é decidido no anfitrião); o anfitrião pausa/minimiza = todos congelam; falta afinar balanceamento com humanos de verdade (mais gente = mais difícil para o assassino?).
 
+### 13.5 Relato: "a jogadora 2 sempre vê INDISPONÍVEL AQUI" (v0.0.3)
+**Relato:** a segunda pessoa, logada e até como editora, via "indisponível aqui" ao abrir MULTIJOGADOR. **O que o código fazia:** `claude.use("room")` devolvia `null` e eu mostrava uma mensagem única e **guardava o "não" para sempre** (sem nova tentativa), sem dizer o motivo. **Causas possíveis (a plataforma não distingue o `null`):** (1) acesso por **link público** (a sala só conecta quem é admitido: membro da organização ou convidado); (2) a permissão `room` negada/ainda não decidida neste aparelho; (3) a página aberta fora do visualizador do claude.ai (arquivo, endereço direto: lá `use()` sempre dá `null`). **Mudanças:** a tela agora consulta `permissions.state("room")` e **pede a permissão** se estiver pendente, só então chama `use("room")`; mostra o **motivo** (SEM-CLAUDE / NEGADA / INDISPONIVEL / NULO) com um diagnóstico de uma linha; botões **TENTAR DE NOVO** (não guarda mais o "não") e **PERMISSÕES** (abre o painel da plataforma). **Pendente:** descobrir com a jogadora 2 qual é o motivo mostrado e como ela abre o link (perguntas feitas ao usuário).
+
 ## 11d. Versão 0.0.1 e o bug do HUD que sumia ao pular a janela
 
 **Versionamento (pedido do usuário):** a versão aparece no canto do menu (`DP.VERSION` em `js/game.js`, hoje **0.0.1**) e sobe a cada entrega (0.0.2, 0.0.3...), para sabermos para onde estamos indo. Cada versão publicada deve ter a linha correspondente aqui.
