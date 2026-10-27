@@ -146,6 +146,9 @@ Quando o assassino (você ou a IA) leva um pallet:
 
 O assassino ataca com um bote (arma erguida 0,16 s → bote de 0,3 s): dá para desviar na lateral. Acerto = −1 vida, +30% de velocidade por 1,8 s.
 
+## Testes
+`node tests/sim.js` (lógica, ~3 min) e `node tests/browser-smoke.js arquivo.html` (desenho no Chromium: passa por todos os tipos de objeto e falha se algum quadro lançar erro). Versão atual no menu: ver `DP.VERSION`.
+
 ## Arquivos
 
 | Arquivo | Conteúdo |

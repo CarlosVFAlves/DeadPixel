@@ -1007,7 +1007,7 @@
       const it = game.pInteract;
       if (it && !(game.role === 'survivor' && game.s.acting)) {
         const label = { gen: 'SEGURE E', item: 'SEGURE E: PEGAR', door: 'SEGURE E: ABRIR PORTA', window: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', smash: 'E: QUEBRAR JANELA', kick: 'E: CHUTAR',
-          phone: 'SEGURE E: LIGAR PARA A POLÍCIA', hide: 'SEGURE E: ESCONDER-SE', chest: 'SEGURE E: ABRIR BAÚ', disarm: ka ? 'E: DESARMAR' : 'SEGURE E: DESARMAR', free: 'SEGURE E: SOLTAR COLEGA', arsenal: 'E: PEGAR ARMADILHA', locker: 'E: ABRIR ARMÁRIO', install: 'SEGURE E: INSTALAR', start: it.obj.kind === 'boat' ? 'SEGURE E: EMPURRAR' : 'SEGURE E: LIGAR O MOTOR', board: 'SEGURE E: ENTRAR', sabotage: 'E: SABOTAR' }[it.type];
+          phone: 'SEGURE E: LIGAR PARA A POLÍCIA', hide: 'SEGURE E: ESCONDER-SE', chest: 'SEGURE E: ABRIR BAÚ', disarm: game.role === 'killer' ? 'E: DESARMAR' : 'SEGURE E: DESARMAR', free: 'SEGURE E: SOLTAR COLEGA', arsenal: 'E: PEGAR ARMADILHA', locker: 'E: ABRIR ARMÁRIO', install: 'SEGURE E: INSTALAR', start: it.obj.kind === 'boat' ? 'SEGURE E: EMPURRAR' : 'SEGURE E: LIGAR O MOTOR', board: 'SEGURE E: ENTRAR', sabotage: 'E: SABOTAR' }[it.type];
         const bad = it.type === 'break' || it.type === 'kick' || it.type === 'smash' || it.type === 'sabotage' || it.type === 'locker';
         const lift = it.obj.range ? 34 : it.type === 'gen' ? 14 : it.type === 'phone' ? 22 : 18, ox2 = it.obj.cx === undefined ? it.obj.x : it.obj.cx, oy2 = it.obj.cy === undefined ? it.obj.y : it.obj.cy;
         text(ctx, label, ox2 * TS, oy2 * TS - lift + bob, bad ? '#ff9d5c' : '#7dffa0', { align: 'c' });

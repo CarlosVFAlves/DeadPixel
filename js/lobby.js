@@ -24,15 +24,17 @@
   }
 
   // ---------- layouts ----------
-  function layout(state, W, H) {
+  function layout(state, W, H, ui) {
     const cx = Math.round(W / 2);
     const L = { buttons: [], box: {} };
     if (state === 'menu') {
-      const bw = Math.min(170, W - 24), y0 = Math.round(H * 0.5);
-      L.buttons.push({ id: 'go_lobby', label: 'JOGAR', x: cx - bw / 2, y: y0, w: bw, h: 19, color: '#ffd23f' });
-      L.buttons.push({ id: 'go_help', label: 'COMO JOGAR', x: cx - bw / 2, y: y0 + 22, w: bw, h: 17, color: '#ffffff' });
-      L.buttons.push({ id: 'go_chars', label: 'PERSONAGENS', x: cx - bw / 2, y: y0 + 43, w: bw, h: 17, color: '#7dffa0' });
-      L.buttons.push({ id: 'go_shop', label: 'LOJA', x: cx - bw / 2, y: y0 + 64, w: bw, h: 17, color: '#7ad0ff' });
+      const bw = Math.min(170, W - 24), mpOn = !!DP.MP_ON, y0 = Math.round(H * (mpOn ? 0.42 : 0.5)), st = mpOn ? 19 : 21, bh = mpOn ? 16 : 17;
+      let yy = y0;
+      L.buttons.push({ id: 'go_lobby', label: 'JOGAR', x: cx - bw / 2, y: yy, w: bw, h: 19, color: '#ffd23f' }); yy += 22;
+      if (mpOn) { L.buttons.push({ id: 'go_mp', label: 'MULTIJOGADOR', x: cx - bw / 2, y: yy, w: bw, h: bh, color: '#ff9d5c' }); yy += st; }
+      L.buttons.push({ id: 'go_help', label: 'COMO JOGAR', x: cx - bw / 2, y: yy, w: bw, h: bh, color: '#ffffff' }); yy += st;
+      L.buttons.push({ id: 'go_chars', label: 'PERSONAGENS', x: cx - bw / 2, y: yy, w: bw, h: bh, color: '#7dffa0' }); yy += st;
+      L.buttons.push({ id: 'go_shop', label: 'LOJA', x: cx - bw / 2, y: yy, w: bw, h: bh, color: '#7ad0ff' });
     } else if (state === 'lobby') {
       const wide = W >= 280, gap = 4, top = 22;
       let slotH, sw;
@@ -62,6 +64,19 @@
         L.buttons.push({ id: 'train_toggle', label: '', x: M, y: H - 43, w: bw, h: 17, color: '#7ad0ff', toggle: true });
         L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: bw, h: 17, color: '#8a8a99' });
       }
+    } else if (state === 'mp') {
+      const bw = Math.min(190, W - 2 * M), bx = cx - bw / 2, games = (ui && ui.mp && ui.mp.games) || [];
+      L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: Math.min(70, W - 2 * M), h: 17, color: '#8a8a99' });
+      if (ui && ui.mp && ui.mp.ok) {
+        L.buttons.push({ id: 'mp_create', label: 'CRIAR SALA', x: bx, y: 34, w: bw, h: 18, color: '#ffd23f' });
+        games.slice(0, Math.max(1, Math.min(4, Math.floor((H - 34 - 18 - 14 - 30 - 22) / 20)))).forEach((gm, i) => L.buttons.push({ id: 'mp_join' + i, label: '', x: bx, y: 70 + i * 20, w: bw, h: 17, color: '#7dffa0' }));
+      }
+    } else if (state === 'mplobby') {
+      const bw = Math.min(210, W - 2 * M), bx = cx - bw / 2, lb = (ui && ui.mp && ui.mp.lobby) || { slots: [] }, rh = H < 200 ? 15 : 17, y0 = 36;
+      for (let i = 0; i < 5; i++) L.buttons.push({ id: 'mp_slot' + i, label: '', x: bx, y: y0 + i * (rh + 2), w: bw, h: rh, color: '#7ad0ff', ghost: true });
+      const by = H - 22, half = Math.floor((W - 2 * M - 4) / 2);
+      L.buttons.push({ id: 'mp_leave', label: 'SAIR', x: M, y: by, w: lb.isHost ? Math.min(60, half) : half, h: 17, color: '#8a8a99' });
+      if (lb.isHost) L.buttons.push({ id: 'mp_start', label: 'INICIAR', x: M + Math.min(60, half) + 4, y: by, w: W - 2 * M - Math.min(60, half) - 4, h: 17, color: '#ffd23f' });
     } else if (state === 'help') {
       const bw = Math.min(90, Math.floor((W - 2 * M - 4) / 2));
       L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: bw, h: 17, color: '#8a8a99' });
@@ -113,6 +128,7 @@
     const feet = Math.min(Math.round(H * 0.5) - 10, subY + 14 + 22 * ps);
     R().uiKiller(ctx, cx + 34 * ps / 1.4, feet - 2, ps, { state: 'recover', alpha: 0.28, tm, face: Math.PI });
     R().uiSurvivor(ctx, cx - 18 * ps / 1.4, feet, ps, { id: 0, moving: true, walk: tm * 8, face: 0, tm, human: false });
+    text(ctx, 'V' + DP.VERSION, W - M, 4, '#6f6f7c', { align: 'r' });                                        // versão do jogo
     // rodapé: fichas e histórico
     coin(ctx, M, H - 14);
     text(ctx, String(ui.coins), M + 10, H - 13, '#ffd23f');
@@ -231,6 +247,39 @@
     }
   }
 
+  // ---------- multijogador ----------
+  function drawMp(ctx, W, H, tm, ui, L) {
+    bg(ctx, W, H, tm);
+    title(ctx, W, 'MULTIJOGADOR', '1 ASSASSINO + ATÉ 4 SOBREVIVENTES');
+    const mp = ui.mp || {}, cols = Math.floor((W - 16) / 6);
+    if (mp.ok === null || mp.ok === undefined) { text(ctx, 'CONECTANDO...', Math.round(W / 2), 40, '#8a8a99', { align: 'c' }); return; }
+    if (!mp.ok) {
+      DP.font.wrap('INDISPONÍVEL AQUI. O MULTIJOGADOR USA A SALA DO ARTEFATO: ABRA O JOGO PELO CLAUDE.AI, COM LOGIN, E COMPARTILHE O LINK COM QUEM VAI JOGAR (VISITANTES SEM LOGIN NÃO ENTRAM).', cols).forEach((l, i) => text(ctx, l, 8, 36 + i * 9, '#ff9d5c'));
+      return;
+    }
+    text(ctx, 'SALAS ABERTAS', 8, 58, '#8a8a99');
+    const games = mp.games || [];
+    if (!games.length) DP.font.wrap('NENHUMA AINDA. CRIE UMA E MANDE A PESSOA ABRIR O JOGO E TOCAR EM MULTIJOGADOR.', cols).forEach((l, i) => text(ctx, l, 8, 70 + i * 9, '#6f6f7c'));
+    L.buttons.forEach((b) => { if (b.id.indexOf('mp_join') === 0) { const gm = games[+b.id.slice(7)]; if (gm) text(ctx, gm.code + '  ' + gm.host + '  ' + gm.players + '/5', b.x + b.w / 2, b.y + 5, '#7dffa0', { align: 'c' }); } });
+    if (mp.err) text(ctx, mp.err, Math.round(W / 2), H - 34, '#ff9d5c', { align: 'c' });
+  }
+  function drawMpLobby(ctx, W, H, tm, ui, L) {
+    bg(ctx, W, H, tm);
+    const lb = (ui.mp && ui.mp.lobby) || { slots: [], names: [] };
+    title(ctx, W, 'SALA ' + (lb.code || ''), lb.isHost ? 'VOCÊ É O ANFITRIÃO. A PARTIDA RODA NO SEU APARELHO.' : 'ANFITRIÃO: ' + (lb.hostName || '...'));
+    const labels = ['ASSASSINO', 'SOBREV. 1', 'SOBREV. 2', 'SOBREV. 3', 'SOBREV. 4'];
+    L.buttons.forEach((b) => {
+      if (b.id.indexOf('mp_slot') !== 0) return;
+      const i = +b.id.slice(7), who = lb.slots[i], mine = lb.mine === i;
+      rect(ctx, mine ? 'rgba(125,255,160,.10)' : 'rgba(255,255,255,.04)', b.x, b.y, b.w, b.h); frame(ctx, mine ? '#7dffa0' : who ? '#7ad0ff' : '#3b3b47', b.x, b.y, b.w, b.h, !who);
+      text(ctx, labels[i], b.x + 4, b.y + (b.h - 7) / 2, i === 0 ? '#ff5c5c' : '#cfd3e0');
+      text(ctx, who ? (mine ? 'VOCÊ (' + who + ')' : who) : 'BOT', b.x + b.w - 4, b.y + (b.h - 7) / 2, mine ? '#7dffa0' : who ? '#7ad0ff' : '#5d5d69', { align: 'r' });
+    });
+    const ly = 36 + 5 * (L.buttons[0] ? L.buttons[0].h + 2 : 19) + 3;
+    DP.font.wrap(lb.isHost ? 'TOQUE NUMA VAGA PARA MUDAR DE LUGAR. VAGAS SEM PESSOA VIRAM BOTS. QUEM CHEGAR DEPOIS ENTRA PELO MENU > MULTIJOGADOR.' : 'TOQUE NUMA VAGA LIVRE PARA ESCOLHER SEU LUGAR. O ANFITRIÃO INICIA.', Math.floor((W - 16) / 6)).forEach((l, i) => text(ctx, l, 8, ly + i * 9, '#6f6f7c'));
+    if (ui.mp && ui.mp.err) text(ctx, ui.mp.err, Math.round(W / 2), H - 34, '#ff9d5c', { align: 'c' });
+  }
+
   function drawChars(ctx, W, H, tm, ui, L) {
     bg(ctx, W, H, tm);
     title(ctx, W, 'PERSONAGENS', null);
@@ -310,10 +359,11 @@
       const long = ['MODO: PARTIDA (ACAMPAMENTO)', 'MODO: TREINO (ACAMPAMENTO)', 'MODO: TREINO (ARENA PEQUENA)'][ui.mode || 0], mid = ['MODO: PARTIDA', 'MODO: TREINO', 'MODO: ARENA'][ui.mode || 0], short = ['PARTIDA', 'TREINO', 'ARENA'][ui.mode || 0];
       return long.length * 6 + 8 <= b.w ? long : mid.length * 6 + 8 <= b.w ? mid : short;
     }
+    if (b.id.indexOf('mp_join') === 0) return '';
     if (b.id === 'help_next') { const n = DP.lobby.helpCount || 3; return 'PÁGINA ' + (((ui.helpPage || 0) % n) + 1) + '/' + n; }
     if (b.id === 'diff_toggle') { const n = { easy: 'FÁCIL', normal: 'NORMAL', hard: 'DIFÍCIL' }[ui.difficulty]; return b.w < 100 ? 'DIF: ' + n : 'DIFICULDADE: ' + n; }
     return b.label;
   }
 
-  DP.lobby = { layout, drawMenu, drawLobby, drawChars, drawShop, drawHelp, helpPages, labelFor, SHOP };
+  DP.lobby = { drawMp, drawMpLobby, layout, drawMenu, drawLobby, drawChars, drawShop, drawHelp, helpPages, labelFor, SHOP };
 })();

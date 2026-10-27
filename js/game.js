@@ -125,17 +125,33 @@
     opts = opts || {};
     const rnd = opts.rng || Math.random;
     const sfxOut = opts.sfx || function () {};
-    const sfx = (name, p, extra) => { const v = pendingVol; pendingVol = 1; if (v > 0.03) sfxOut(name, p, v, extra); };
+    // fila de eventos (só o anfitrião do multijogador liga g.record): sons, textos e partículas que as outras telas também precisam ver/ouvir
+    let evId = 0, lastPan = null;
+    const emit = (e) => { if (!g.record) return; e.i = ++evId; g.evq.push(e); if (g.evq.length > 80) g.evq.shift(); };
+    const sfx = (name, p, extra) => {
+      const v = pendingVol, lp = lastPan; pendingVol = 1; lastPan = null;
+      if (g.record) emit({ t: 's', n: name, x: lp ? Math.round(lp.x * 10) / 10 : null, y: lp ? Math.round(lp.y * 10) / 10 : null, ex: extra && extra.surf ? extra : undefined });
+      if (v > 0.03) sfxOut(name, p, v, extra);
+    };
+    // "sentir": tremor, piscada e travada só para quem vive o momento (o dono daquela tela); nas outras telas vai como evento
+    function feel(who, shake, flash, hitstop) {
+      if (who === g.pl) { if (shake) g.shake = Math.max(g.shake, shake); if (flash) g.flash = Math.max(g.flash, flash); if (hitstop && !g.record) g.hitstop = Math.max(g.hitstop, hitstop); }
+      emit({ t: 'f', w: who === g.k ? 'k' : who.id, sh: shake || 0, fl: flash || 0, hs: hitstop || 0 });
+    }
     const training = !!opts.training;
-    const role = opts.role === 'killer' ? 'killer' : 'survivor';
+    const role = opts.role === 'killer' ? 'killer' : 'survivor';       // papel de quem está olhando esta cópia do jogo (a câmera)
+    let KH = opts.killerHuman !== undefined ? !!opts.killerHuman : role === 'killer';          // o assassino é uma pessoa (nesta ou em outra tela)
+    const humanIds = opts.humans || (role === 'survivor' ? [0] : []);                             // quais sobreviventes são pessoas
+    const meIdx = opts.me || 0;                                                                    // qual sobrevivente é o desta tela
+    const replica = !!opts.replica;                                                                // cópia que só mostra o que o anfitrião manda (multijogador)
     // dificuldade é sempre "para quem joga": o que ela muda depende do papel
     const level = ['easy', 'normal', 'hard'].includes(opts.difficulty) ? opts.difficulty : 'normal';
     const dl = { easy: -1, normal: 0, hard: 1 }[level];
     const diff = {
       level, dl,
-      time: role === 'survivor' ? 1 + 0.3 * dl : (1 - 0.25 * dl) * CFG.KILLER_TASK,   // tempo das tarefas (sobrevivente-jogador: mais longo no difícil; com assassino-jogador os bots trabalham mais devagar)
-      bot: role === 'killer' ? 1 + 0.25 * dl : 1,                  // habilidade dos bots sobreviventes (reação, erro, sentidos)
-      kp: role === 'survivor' ? { easy: 0.88, normal: 1, hard: 1.05 }[level] : 1   // força do assassino-IA (velocidade e visão): no fácil é um pouco mais lento que quem corre
+      time: humanIds.length ? 1 + 0.3 * dl : (1 - 0.25 * dl) * CFG.KILLER_TASK,   // tempo das tarefas (sobrevivente-jogador: mais longo no difícil; com assassino-jogador os bots trabalham mais devagar)
+      bot: KH ? 1 + 0.25 * dl : 1,                  // habilidade dos bots sobreviventes (reação, erro, sentidos)
+      kp: !KH ? { easy: 0.88, normal: 1, hard: 1.05 }[level] : 1   // força do assassino-IA (velocidade e visão): no fácil é um pouco mais lento que quem corre
     };
     const routeT = (name) => CFG.ROUTES[name] * diff.time;
     const bots = opts.bots === undefined ? 3 : opts.bots;
@@ -153,14 +169,16 @@
       escapedCount: 0, deadCount: 0, via: { gate: 0, car: 0, boat: 0 }
     };
 
+    g.evq = []; g.record = false;
+
     function makeAI(i) {
       return { route: map.vehicles ? ['police', 'car', 'boat', 'police'][i % 4] : 'police', mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, fT: new Float32Array(W * H), zoneT: 0, planAge: 0, dx: 0, dy: 0, K: null, est: null, hearT: 0, fetch: null, wary: 0, hideLike: rnd(), hideCD: 0, hideGoal: null, hideGoalT: 0, hideUntil: 0, hideSeen: null, lootLike: rnd() };
     }
     g.makeAI = makeAI;      // (testes de equilíbrio: transformar o 'jogador' em bot)
-    const nSurv = 1 + bots;
+    const nSurv = opts.survivors || 1 + bots;
     for (let i = 0; i < nSurv; i++) {
       const sp = map.spawnSurvivors[i % map.spawnSurvivors.length];
-      const human = role === 'survivor' && i === 0;
+      const human = humanIds.includes(i);
       g.survivors.push({
         id: i, x: sp.x, y: sp.y, face: Math.PI / 2,
         hp: map.kind === 'camp' ? CFG.HP_CAMP : CFG.HP, fear: 0, calm: 0, tripT: 0, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
@@ -173,10 +191,10 @@
     k_init();
     function k_init() {
       g.k = {
-        x: (role === 'killer' && map.spawnKillerP ? map.spawnKillerP : map.spawnKiller).x, y: (role === 'killer' && map.spawnKillerP ? map.spawnKillerP : map.spawnKiller).y, face: -Math.PI / 2,
-        state: role === 'killer' ? 'chase' : 'intro', t: 0, dur: 0, trip: 0, tripCD: 0, tripDir: 0, ph: 0, vx: 0, vy: 0, ldx: 0, ldy: 0, hitDone: false, pal: null, brkKind: 'pallet', brk: 0,
+        x: (KH && map.spawnKillerP ? map.spawnKillerP : map.spawnKiller).x, y: (KH && map.spawnKillerP ? map.spawnKillerP : map.spawnKiller).y, face: -Math.PI / 2,
+        state: KH ? 'chase' : 'intro', t: 0, dur: 0, trip: 0, tripCD: 0, tripDir: 0, ph: 0, vx: 0, vy: 0, ldx: 0, ldy: 0, hitDone: false, pal: null, brkKind: 'pallet', brk: 0,
         moving: false, walk: 0, hesitate: false, vault: null,
-        traps: role === 'killer' ? CFG.K_TRAP_START : CFG.K_TRAPS, trapCD: 0, learn: 0, aware: 'patrol', lost: 0, last: null, lastV: null, wait: 0, goal: null, target: null, seenNow: false, genMem: {}, hearT: 0, stealth: false, sneakPrev: false, energy: 1
+        traps: KH ? CFG.K_TRAP_START : CFG.K_TRAPS, trapCD: 0, learn: 0, aware: 'patrol', lost: 0, last: null, lastV: null, wait: 0, goal: null, target: null, seenNow: false, genMem: {}, hearT: 0, stealth: false, sneakPrev: false, energy: 1
       };
     }
 
@@ -254,9 +272,9 @@
     let ai = s.ai;
     const use = (sv) => { s = sv; ai = sv.ai; };
     const alive = (sv) => !sv.dead && !sv.escaped;
-    g.s = g.survivors[0];
+    g.s = g.survivors[meIdx]; g.me = meIdx; g.killerHuman = KH;
     Object.defineProperty(g, 'ai', { get() { return g.survivors[0].ai; } });
-    g.pl = role === 'killer' ? k : g.survivors[0];       // quem a câmera segue
+    g.pl = role === 'killer' ? k : g.survivors[meIdx];       // quem a câmera segue
 
     const field = new Float32Array(W * H);
     let fieldT = 0, fieldTile = -1;
@@ -315,7 +333,7 @@
     }
     // visão: dentro do raio ambiente, ou dentro do cone da lanterna; sempre com linha de vista
     function canSee(ox, oy, face, killerEye, tx, ty, mult) {
-      const V = killerEye ? (role === 'killer' ? CFG.VIS_KP : CFG.VIS_K) : CFG.VIS_S, m = mult || 1;
+      const V = killerEye ? (KH ? CFG.VIS_KP : CFG.VIS_K) : CFG.VIS_S, m = mult || 1;
       const d = Math.hypot(tx - ox, ty - oy);
       if (d > V.cone * m) return false;
       if (d > V.r * m && Math.abs(angDiff(Math.atan2(ty - oy, tx - ox), face)) > V.half) return false;
@@ -441,8 +459,9 @@
     }
 
     // ---------- eventos visuais ----------
-    function popup(text, x, y, color) { g.popups.push({ text, x, y, t: 0, color: color || '#fff' }); }
+    function popup(text, x, y, color) { g.popups.push({ text, x, y, t: 0, color: color || '#fff' }); emit({ t: 'p', tx: text, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, c: color || '#fff' }); }
     function dust(x, y, n, col) {
+      emit({ t: 'd', x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, n, c: col });
       for (let i = 0; i < n; i++) {
         const a = rnd() * Math.PI * 2, sp = 0.6 + rnd() * 2;
         g.fx.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: 0.35 + rnd() * 0.3, c: col || '#8b7355' });
@@ -450,6 +469,7 @@
     }
     const GLASS = ['#d6f2ff', '#9bd3f0', '#6fb4dc', '#ffffff'];
     function glass(x, y, n, dirx, diry) {
+      emit({ t: 'g', x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, n, dx: dirx || 0, dy: diry || 0 });
       for (let i = 0; i < n; i++) {
         const a = rnd() * Math.PI * 2, sp = 1 + rnd() * 3;
         g.fx.push({ x, y, vx: Math.cos(a) * sp + (dirx || 0) * 2, vy: Math.sin(a) * sp + (diry || 0) * 2, t: 0, life: 0.45 + rnd() * 0.5, c: GLASS[(rnd() * GLASS.length) | 0] });
@@ -458,6 +478,7 @@
     // som posicional: estéreo pela direção e volume pela distância até quem joga (só se ouve o que está perto)
     let pendingVol = 1;
     const pan = (x, y) => {
+      lastPan = { x, y: y === undefined ? g.pl.y : y };
       const d = Math.hypot(x - g.pl.x, (y === undefined ? g.pl.y : y) - g.pl.y);
       pendingVol = d < CFG.HEAR_NEAR ? 1 : Math.pow(Math.max(0, 1 - (d - CFG.HEAR_NEAR) / (CFG.HEAR_FAR - CFG.HEAR_NEAR)), 2);
       return clamp((x - g.pl.x) / 10, -0.8, 0.8);
@@ -477,7 +498,7 @@
       e.stepD -= stride; if (e.stepD > stride) e.stepD = 0;
       const p = pan(e.x, e.y), d = Math.hypot(e.x - g.pl.x, e.y - g.pl.y);
       pendingVol = e === g.pl ? 0.3 * loud : pendingVol * loud * clamp(1 - d / range, 0, 1);
-      sfx('step', p, { surf: surfaceAt(e.x, e.y), heavy: !!heavy, alt: (e.stepAlt = !e.stepAlt) });
+      sfx('step', p, { surf: surfaceAt(e.x, e.y), heavy: !!heavy, alt: (e.stepAlt = !e.stepAlt), loud, range });
     }
     function stepTick() {
       for (const sv of g.survivors) {
@@ -527,7 +548,8 @@
     function land(p) {
       p.state = 'down'; p.t = 0; p.respawn = CFG.RESPAWN;
       sfx('slam', pan(p.cx, p.cy));
-      if (Math.hypot(p.cx - g.pl.x, p.cy - g.pl.y) < 9) g.shake = Math.max(g.shake, 2.5);     // só treme a tela de quem está perto
+      if (Math.hypot(p.cx - g.pl.x, p.cy - g.pl.y) < 9) g.shake = Math.max(g.shake, 2.5);     // só treme a tela de quem está perto (nas outras telas: evento 'f' com 'w' = -1)
+      emit({ t: 'f', w: -1, sh: 2.5, fl: 0, hs: 0, x: Math.round(p.cx), y: Math.round(p.cy), r: 9 });
       dust(p.cx + p.dir.x * 0.6, p.cy + p.dir.y * 0.6, 10);
 
       const kd = Math.hypot(k.x - p.cx, k.y - p.cy);
@@ -535,7 +557,7 @@
       if (stunned) {
         k.state = 'stun'; k.t = 0; k.pal = null; k.vault = null; k.aware = 'hunt'; k.lost = 0;
         g.stats.stuns++;
-        if (role === 'killer' || (s && s.human)) { g.hitstop = 0.1; g.shake = 7; g.flash = 0.25; }     // pisca/trava só para quem vive o momento (assassino atordoado ou quem derrubou o pallet)
+        feel(k, 7, 0.25, 0.1); if (s && s.human) feel(s, 7, 0.25, 0.1);        // pisca/trava só para quem vive o momento (assassino atordoado ou quem derrubou o pallet)
         sfx('stun', pan(k.x, k.y));
         popup('ATORDOADO!', k.x, k.y - 1.3, '#ffd23f');
         dust(k.x, k.y, 14, '#d9d2b6');
@@ -573,7 +595,7 @@
     function cutSurvivor() {
       g.stats.cuts++;
       sfx('cut', pan(s.x, s.y));
-      if (s.human) g.flash = Math.max(g.flash, 0.12);
+      if (s.human) feel(s, 0, 0.12);
       if (!training && s.hp > 1) s.hp--;
       else if (!training && s.hp === 1 && rnd() < CFG.GLASS_DEATH) {          // sem corações de sobra, o vidro pode ser fatal
         popup('O VIDRO FOI FATAL...', s.x, s.y - 1.5, '#ff2a2a'); killSurvivor(s); g.stats.glassDeaths = (g.stats.glassDeaths || 0) + 1;
@@ -590,10 +612,11 @@
       g.over = true; g.overT = 0; g.result = result;
       const win = role === 'killer' ? result === 'dead' : result === 'escaped';
       sfx(win ? 'escape' : 'death');
+      emit({ t: 'o', r: result });
     }
     function checkEnd() {
       if (g.over) return;
-      const h = role === 'survivor' ? g.survivors[0] : null;
+      const h = !KH && humanIds.length === 1 ? g.survivors[humanIds[0]] : null;      // a sós contra a IA: morrer ou escapar encerra a partida; em grupo, só quando todos saem
       if (h && h.dead) return over('dead');
       if (h && h.escaped) return over('escaped');
       if (g.survivors.every((v) => !alive(v))) {
@@ -621,9 +644,10 @@
     function hurt() {
       g.stats.hits++;
       s.invuln = 0.7; s.burst = CFG.BURST_T; s.heal = null;
-      if (s.human || role === 'killer') { g.shake = 6; g.flash = 0.3; }       // golpe em bot não pisca a tela de quem joga de sobrevivente
+      if (s.human) feel(s, 6, 0.3);               // golpe em bot não pisca a tela de ninguém; em pessoa, só a dela (e a do assassino)
+      if (KH) feel(k, 6, 0.3);
       sfx('hit', pan(s.x, s.y));
-      popup(role === 'killer' ? 'ACERTOU!' : '-1', s.x, s.y - 1.4, role === 'killer' ? '#ffd23f' : '#ff4d4d');
+      popup(KH ? 'ACERTOU!' : '-1', s.x, s.y - 1.4, KH ? '#ffd23f' : '#ff4d4d');
       k.aware = 'hunt'; k.lost = 0;
       if (training) return;
       s.hp--;
@@ -633,7 +657,8 @@
     // ---------- geradores, skill check, porta ----------
     function alert(x, y) {
       g.pings.push({ x, y, t: g.time });
-      if (k.state === 'intro' || role === 'killer') return;
+      if (KH) { g.pings.push({ x, y, t: g.time }); emit({ t: 'k', x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 }); return; }
+      if (k.state === 'intro') return;
       k.last = { x: x + (rnd() - 0.5) * CFG.HEAR_ERR, y: y + (rnd() - 0.5) * CFG.HEAR_ERR }; k.lastV = { x: 0, y: 0 };
       if (k.aware !== 'hunt') { k.aware = 'search'; k.wait = 0; }
     }
@@ -745,7 +770,7 @@
     function killerPlaceTrap() {
       if (k.traps <= 0 || k.trapCD > 0 || !trapSpotOk(k.x, k.y)) return false;
       k.traps--; k.trapCD = 1; addTrap('k', k.x, k.y); g.stats.trapsSet = (g.stats.trapsSet || 0) + 1;
-      if (role === 'killer') popup('ARMADILHA ARMADA! (' + k.traps + ' RESTAM)', k.x, k.y - 1.5, '#ffd23f');
+      if (KH) popup('ARMADILHA ARMADA! (' + k.traps + ' RESTAM)', k.x, k.y - 1.5, '#ffd23f');
       return true;
     }
     function trapTick(dt) {
@@ -763,13 +788,13 @@
             if (!alive(v) || v.hidden || v.vault || v.trapT > 0 || Math.hypot(v.x - tr.x, v.y - tr.y) >= CFG.TRAP_R) continue;
             v.trapT = CFG.S_TRAP_T; v.x = tr.x; v.y = tr.y; v.heal = null; v.acting = null; tr.victim = v;
             sfx('trapSnap', pan(v.x, v.y)); popup('PRESO!', v.x, v.y - 1.5, '#ff4d4d'); alert(v.x, v.y); g.stats.trapped = (g.stats.trapped || 0) + 1;
-            if (v.human) { g.shake = Math.max(g.shake, 5); g.flash = Math.max(g.flash, 0.2); }
+            if (v.human) feel(v, 5, 0.2);
             break;
           }
         } else if (k.state !== 'intro' && k.state !== 'trapped' && k.state !== 'kvault' && Math.hypot(k.x - tr.x, k.y - tr.y) < CFG.TRAP_R) {
           k.state = 'trapped'; k.t = 0; k.vault = null; k.x = tr.x; k.y = tr.y; tr.victim = k;
           sfx('trapSnap', pan(k.x, k.y)); popup('PRESO!', k.x, k.y - 1.6, '#ffd23f'); g.stats.kTrapped = (g.stats.kTrapped || 0) + 1;
-          if (role === 'killer') { g.shake = Math.max(g.shake, 5); g.flash = Math.max(g.flash, 0.2); }
+          if (KH) feel(k, 5, 0.2);
         }
       }
     }
@@ -779,9 +804,9 @@
       if (result === 'fail' || result === 'miss') {
         g.stats.skillFail++;
         if (o) o.progress = Math.max(0, o.progress - CFG.SKILL_FAIL);
-        if (s.human || role === 'killer') { g.shake = Math.max(g.shake, 5); g.flash = Math.max(g.flash, 0.12); }
+        if (s.human) feel(s, 5, 0.12);
         sfx('bang', pan(s.x, s.y));
-        popup(role === 'killer' ? 'ALGO EXPLODIU!' : 'FALHOU!', s.x, s.y - 1.5, '#ff4d4d');
+        popup(KH ? 'ALGO EXPLODIU!' : 'FALHOU!', s.x, s.y - 1.5, '#ff4d4d');
         alert(s.x, s.y);
       } else {
         g.stats.skillOk++;
@@ -902,10 +927,10 @@
         a: ['POR FAVOR, VENHAM LOGO!', 'OBRIGADO, VAMOS AGUENTAR!', 'QUANTO TEMPO VAI DEMORAR?'] }
     ];
     const pickOf = (arr) => arr[(rnd() * arr.length) | 0];
-    g.call = null;
+    Object.defineProperty(g, 'call', { get() { return g.survivors[meIdx] ? g.survivors[meIdx].call || null : null; } });
     function callBeat(o) {
-      if (!s.human || role !== 'survivor') return;
-      const c = g.call || (g.call = { lines: [], stage: -1, choices: null, last: g.time, done: false });
+      if (!s.human) return;
+      const c = s.call || (s.call = { lines: [], stage: -1, choices: null, last: g.time, done: false });
       const back = c.lines.length && g.time - c.last > 4.5;
       c.last = g.time;
       if (back) c.lines.push({ who: 'att', text: pickOf(['ALÔ? AINDA ESTÁ AÍ?', 'VOLTOU? CONTINUE, ESTOU OUVINDO.']), t: g.time });
@@ -919,17 +944,17 @@
         c.choices = ch;
       }
     }
-    g.chatReply = (i) => {
-      const c = g.call;
+    g.chatReply = (i, sv) => {
+      const c = (sv || g.survivors[meIdx]).call;
       if (!c || !c.choices || !c.choices[i]) return false;
       c.lines.push({ who: 'you', text: c.choices[i], t: g.time }); c.choices = null; c.last = g.time;
       sfx('click');
       return true;
     }
     function callEnd(ph) {
-      const c = g.call; if (!c) return;
+      for (const v of g.survivors) { const c = v.call; if (!c || c.done) continue;
       c.choices = null; c.done = true; c.last = g.time;
-      c.lines.push({ who: 'att', text: 'VIATURA A CAMINHO. CHEGA EM CERCA DE ' + Math.round(CFG.ROUTES.policeEta) + ' SEGUNDOS. AGUENTEM!', t: g.time });
+      c.lines.push({ who: 'att', text: 'VIATURA A CAMINHO. CHEGA EM CERCA DE ' + Math.round(CFG.ROUTES.policeEta) + ' SEGUNDOS. AGUENTEM!', t: g.time }); }
     }
     function callPolice(ph) {
       callEnd(ph);
@@ -1310,7 +1335,7 @@
       k.t += dt;
       const f = Math.max(0, 1 - k.t / CFG.STUMBLE_T);
       let hx, hy;
-      if (role === 'killer') { hx = inp.ax || 0; hy = inp.ay || 0; }
+      if (KH) { hx = inp.ax || 0; hy = inp.ay || 0; }
       else { const tg = k.last || nearestAlive(k) || k; hx = tg.x - k.x; hy = tg.y - k.y; }
       const hl = Math.hypot(hx, hy);
       if (k.trip > 0) {
@@ -1358,7 +1383,7 @@
       }
       if (k.state === 'trapped') {                                      // preso na armadilha: parado; o jogador pode se debater (ESPAÇO/E) para soltar um pouco mais rápido
         k.t += dt; k.moving = false;
-        if (role === 'killer' && (inp.drop || inp.actPress)) k.t += 0.22;
+        if (KH && (inp.drop || inp.actPress)) k.t += 0.22;
         if (k.t >= CFG.K_TRAP_T) { k.state = 'chase'; k.t = 0; popup('SOLTOU-SE', k.x, k.y - 1.6, '#cfcfd8'); }
         return;
       }
@@ -1372,7 +1397,7 @@
         if (p >= 1) { k.state = 'chase'; k.t = 0; k.vault = null; v.win.usedT = g.time; }
         return;
       }
-      const P = role === 'killer';                        // assassino de pessoa: números mais generosos
+      const P = KH;                        // assassino de pessoa: números mais generosos
       if (k.state === 'windup') {
         k.t += dt;
         if (k.t >= (P ? CFG.WINDUP_P : CFG.WINDUP)) { k.state = 'lunge'; k.t = 0; k.hitDone = false; g.stats.lunges++; sfx('lunge', pan(k.x, k.y)); }
@@ -1408,7 +1433,7 @@
         return;
       }
       if (k.state === 'break') {
-        if (role === 'killer' && Math.hypot(inp.ax || 0, inp.ay || 0) > 0.6 && k.t > 0.3) { k.state = 'chase'; k.t = 0; k.pal = null; return; }
+        if (KH && Math.hypot(inp.ax || 0, inp.ay || 0) > 0.6 && k.t > 0.3) { k.state = 'chase'; k.t = 0; k.pal = null; return; }
         k.t += dt;
         const o = k.pal, isWin = k.brkKind === 'window', isSab = k.brkKind === 'sabotage', isLck = k.brkKind === 'locker';
         if (isSab && !sabotageable(o)) { k.pal = null; k.state = 'chase'; k.t = 0; return; }       // alguém embarcou / já foi sabotado
@@ -1432,13 +1457,13 @@
       }
 
       // o assassino (jogador ou IA) só sabe o progresso dos geradores que viu; o gerador é um bloco sólido: olha para a face voltada para ele
-      const kvis = role === 'killer' ? 1 : diff.kp;
+      const kvis = KH ? 1 : diff.kp;
       g.gens.forEach((o, i) => {
         if (o.done) return;
         const dd = Math.hypot(k.x - o.cx, k.y - o.cy) || 1;
         if (canSee(k.x, k.y, k.face, true, o.cx + (k.x - o.cx) / dd * 0.75, o.cy + (k.y - o.cy) / dd * 0.75, kvis)) k.genMem[i] = o.progress;
       });
-      if (role === 'killer') { playerKiller(dt, inp, dx, dy, d); return; }
+      if (KH) { playerKiller(dt, inp, dx, dy, d); return; }
       if (!tgt) return;                                 // todos já saíram da partida
 
       // ---- percepção, com os mesmos limites de uma pessoa: ENXERGA (raio + cone, linha de vista) ou OUVE (ruído, posição aproximada) ----
@@ -1708,7 +1733,7 @@
     }
 
     // o que ESTE sobrevivente sabe do assassino: vê (raio/cone + linha de vista), ouve (posição aproximada) ou só lembra
-    const botSkill = () => (role === 'killer' ? diff.bot : 1);
+    const botSkill = () => (KH ? diff.bot : 1);
     function killerNoise() {
       if (k.state === 'lunge' || k.state === 'windup' || k.state === 'break') return CFG.KN_ACT;
       if (k.state === 'stun' || k.state === 'recover' || k.state === 'intro') return 2;
@@ -1901,7 +1926,7 @@
       for (const o of g.gens) {
         if (o.known) continue;
         const dd = Math.hypot(sv.x - o.cx, sv.y - o.cy) || 1;
-        if (canSee(sv.x, sv.y, sv.face, false, o.cx + (sv.x - o.cx) / dd * 0.75, o.cy + (sv.y - o.cy) / dd * 0.75, 1)) { o.known = true; if (sv.human || role === 'survivor') popupKnown(o); }
+        if (canSee(sv.x, sv.y, sv.face, false, o.cx + (sv.x - o.cx) / dd * 0.75, o.cy + (sv.y - o.cy) / dd * 0.75, 1)) { o.known = true; if (sv.human || !KH) popupKnown(o); }
       }
       for (const c of g.chests) {
         if (c.known) continue;
@@ -1910,7 +1935,7 @@
       }
       for (const e of g.explore) if (!e.seen && Math.hypot(sv.x - e.x, sv.y - e.y) < (e.kind === 'cabin' ? 4.5 : 6)) e.seen = true;
     }
-    function popupKnown(o) { if (g.survivors[0].human) popup('GERADOR ENCONTRADO', o.cx, o.cy - 1.2, '#7dffa0'); }
+    function popupKnown(o) { if (humanIds.length) popup('GERADOR ENCONTRADO', o.cx, o.cy - 1.2, '#7dffa0'); }
 
     // peças e veículos: o que o bot faz com o que carrega e com um veículo pronto
     const partWanted = (it) => { const v = vehByKind(it.veh); return !!v && v.state === 'build' && !v.parts[it.part]; };
@@ -1954,7 +1979,8 @@
     // ---------- loop ----------
     g.tryDrop = () => { use(g.survivors[0]); return tryDrop(); };
 
-    g.update = function (dt, inp) {
+    // inputs (multijogador, só o anfitrião): { s: { [id do sobrevivente]: entrada }, k: entrada do assassino }; sem isso, `inp` vale para o único humano
+    g.update = function (dt, inp, inputs) {
       inp = inp || {};
       if (g.hitstop > 0) { g.hitstop -= dt; return; }
       g.time += dt;
@@ -1979,7 +2005,8 @@
         sv.px = sv.x; sv.py = sv.y;
         sv.interact = findInteract();
         senseWorld(sv, dt);
-        const sin = sv.human ? inp : aiSurvivor(dt);
+        const sin = sv.human ? (inputs && inputs.s ? inputs.s[sv.id] || {} : inp) : aiSurvivor(dt);
+        if (sin.reply !== undefined && sin.reply !== null && sv.human) g.chatReply(sin.reply, sv);
         if (sv.human && sin.drop && !s.skill && !findDroppable()) sin.jump = true;
         if (s.skill && (sin.press || sin.drop || sin.actPress)) pressSkill();
         else if (!sv.hidden && (sin.drop || (sin.actPress && !sv.interact))) { if (!(sin.drop || findDroppable()) && s.item) dropItem(s, s.item); else tryDrop(); }
@@ -2008,9 +2035,10 @@
         if (g.over) return;
       }
 
-      g.vaultHint = (g.survivors[0].human && alive(g.survivors[0]) && !g.survivors[0].hidden && !g.survivors[0].vault) ? findVaultable(g.survivors[0]) : null;
-    g.interact = g.survivors[0].interact;
-      g.kInteract = role === 'killer' ? findKillerInteract() : null;
+      const ms = g.survivors[meIdx];
+      g.vaultHint = (ms.human && alive(ms) && !ms.hidden && !ms.vault) ? findVaultable(ms) : null;
+      g.interact = ms.interact;
+      g.kInteract = KH ? findKillerInteract() : null;
       g.pInteract = role === 'killer' ? g.kInteract : g.interact;
 
       for (const p of g.pallets) {
@@ -2036,7 +2064,7 @@
 
       const kox = k.x, koy = k.y;
       k.spx = kox; k.spy = koy;
-      updateKiller(dt, inp);
+      updateKiller(dt, inputs && inputs.k ? inputs.k : inp);
       k.vx = (k.x - kox) / (dt || 1); k.vy = (k.y - koy) / (dt || 1);
       trapTick(dt);
       stepTick();
@@ -2049,9 +2077,9 @@
         if (l.br <= 0) { l.br = 2.0 + rnd() * 0.5; const pn = pan(l.cx, l.cy); pendingVol = (1 - d / 3.6) * 0.55; sfx('breath', pn); }
       }
       g.nearList = [];
-      for (const sv of g.survivors) if (alive(sv) && sv.near && (role === 'killer' || sv.human)) g.nearList.push({ pal: sv.near, sv });
-      g.near = g.survivors[0].near;
-      const ref = role === 'killer' ? nearestAlive(k) : g.survivors[0];
+      for (const sv of g.survivors) if (alive(sv) && sv.near && (role === 'killer' ? sv.human || KH : sv === g.survivors[meIdx])) g.nearList.push({ pal: sv.near, sv });
+      g.near = g.survivors[meIdx].near;
+      const ref = role === 'killer' ? nearestAlive(k) : g.survivors[meIdx];
       g.dist = ref ? Math.hypot(ref.x - k.x, ref.y - k.y) : 99;
       g.pings = g.pings.filter((q) => g.time - q.t < 4);
 
@@ -2082,10 +2110,187 @@
     g.solid = solid; g.hitsCircle = hitsCircle;
     g.sfxAt = (name, x, y) => sfx(name, pan(x, y));     // som posicional (testes e efeitos avulsos)
     g.dropDirFor = (sv, p) => { use(sv); return dropDir(p); };
+    // ======================================================================================
+    // Multijogador: o anfitrião roda o jogo de verdade (g.snapshot) e as outras telas guardam uma CÓPIA (opts.replica) que só aplica o que chega
+    // (g.applySnapshot), anda os próprios passos na frente (g.predict) e calcula localmente o que depende de quem olha (g.replicaUpdate).
+    // ======================================================================================
+    const r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000;
+    const KST = ['intro', 'chase', 'windup', 'lunge', 'recover', 'stun', 'stumble', 'break', 'kvault', 'trapped'];
+    const PST = ['up', 'falling', 'down', 'broken'], WST = ['closed', 'opening', 'open', 'broken'];
+    const VST = ['build', 'ready', 'started', 'leaving', 'gone'], PHST = ['locked', 'ready', 'coming', 'here'];
+    const VKIND = ['walk', 'run', 'crash', 'pallet'], ACTT = ['gen', 'phone', 'door', 'window', 'hide', 'install', 'start', 'board', 'item', 'chest', 'disarm', 'free'];
+    const IKIND = ['radio', 'part', 'medkit', 'trap'], PARTN = Object.keys(PARTS), BRK = ['pallet', 'window', 'locker', 'sabotage'];
+    const objIdx = (type, o) => type === 'gen' ? g.gens.indexOf(o) : type === 'window' ? g.windows.indexOf(o) : type === 'hide' ? g.lockers.indexOf(o)
+      : (type === 'install' || type === 'start' || type === 'board') ? g.vehicles.indexOf(o) : type === 'item' ? o.id : type === 'chest' ? g.chests.indexOf(o)
+      : type === 'disarm' ? g.traps.indexOf(o) : type === 'free' ? o.id : 0;
+    const idxObj = (type, i) => type === 'gen' ? g.gens[i] : type === 'phone' ? g.phone : type === 'door' ? g.door : type === 'window' ? g.windows[i] : type === 'hide' ? g.lockers[i]
+      : (type === 'install' || type === 'start' || type === 'board') ? g.vehicles[i] : type === 'item' ? g.items.find((q) => q.id === i) : type === 'chest' ? g.chests[i]
+      : type === 'disarm' ? g.traps[i] : type === 'free' ? g.survivors[i] : null;
+    function encSurv(v) {
+      const vt = v.vault, ac = v.acting;
+      return [r2(v.x), r2(v.y), r2(v.face), v.hp, (v.dead ? 1 : 0) | (v.escaped ? 2 : 0) | (v.moving ? 4 : 0) | (v.runMode === false ? 8 : 0) | (v.human ? 16 : 0),
+        r2(v.tripT), r2(v.trapT || 0), r2(v.invuln), r2(v.burst), v.hidden ? g.lockers.indexOf(v.hidden) : -1,
+        vt ? [VKIND.indexOf(vt.kind), r2(vt.t), r2(vt.dur), r2(vt.x0), r2(vt.y0), r2(vt.x1), r2(vt.y1), vt.win ? g.windows.indexOf(vt.win) : -1, vt.did ? 1 : 0, vt.dx || 0, vt.dy || 0] : 0,
+        v.item ? v.item.id : -1, v.tool ? v.tool.id : -1, v.bag.map((b) => b.id),
+        v.heal ? [r2(v.heal.t), v.heal.target.id, v.heal.it.id] : 0, r2(v.fear), ac ? [ACTT.indexOf(ac.type), objIdx(ac.type, ac.obj)] : 0,
+        r2(v.deadAt || 0), r2(v.deadFace || 0), v.skill ? [r2(v.skill.t), r2(v.skill.tz)] : 0, v.det || 0, r2(v.pickP || 0), r2(v.noise || 0),
+        v.call ? [v.call.lines.slice(-5).map((l) => [l.who === 'att' ? 0 : l.who === 'you' ? 1 : 2, l.text, r2(g.time - l.t)]), v.call.choices || 0, v.call.stage, r2(g.time - v.call.last), v.call.done ? 1 : 0] : 0,
+        r2(v.skillCD || 0)];
+    }
+    function decSurv(v, a, local) {
+      if (local || !v._init) { v.x = a[0]; v.y = a[1]; }
+      v.tx = a[0]; v.ty = a[1]; v._init = true;
+      v.face = a[2]; v.hp = a[3]; v.dead = !!(a[4] & 1); v.escaped = !!(a[4] & 2); v.moving = !!(a[4] & 4); v.runMode = (a[4] & 8) ? false : true; v.human = !!(a[4] & 16);
+      v.tripT = a[5]; v.trapT = a[6]; v.invuln = a[7]; v.burst = a[8]; v.hidden = a[9] >= 0 ? g.lockers[a[9]] : null;
+      const vt = a[10]; v.vault = vt ? { kind: VKIND[vt[0]], t: vt[1], dur: vt[2], x0: vt[3], y0: vt[4], x1: vt[5], y1: vt[6], win: vt[7] >= 0 ? g.windows[vt[7]] : null, did: !!vt[8], dx: vt[9], dy: vt[10] } : null;
+      const byId = (id) => (id >= 0 ? g.items.find((q) => q.id === id) || null : null);
+      v.item = byId(a[11]); v.tool = byId(a[12]); v.bag = a[13].map(byId).filter(Boolean);
+      v.heal = a[14] ? { t: a[14][0], target: g.survivors[a[14][1]], it: byId(a[14][2]) } : null; v.fear = a[15];
+      v.acting = a[16] ? { type: ACTT[a[16][0]], obj: idxObj(ACTT[a[16][0]], a[16][1]) } : null; if (v.acting && !v.acting.obj) v.acting = null;
+      v.deadAt = a[17]; v.deadFace = a[18]; v.skill = a[19] ? { t: a[19][0], tz: a[19][1] } : null; v.det = a[20]; v.pickP = a[21]; v.noise = a[22];
+      const c = a[23];
+      v.call = c ? { lines: c[0].map((l) => ({ who: l[0] === 0 ? 'att' : l[0] === 1 ? 'you' : 'sys', text: l[1], t: g.time - l[2] })), choices: c[1] || null, stage: c[2], last: g.time - c[3], done: !!c[4] } : null;
+      v.skillCD = a[24];
+      v.dead = v.dead; v.interactDirty = true;
+    }
+    g.snapshot = function () {
+      const k0 = k;
+      return {
+        T: r2(g.time), O: g.over ? [g.result === 'dead' ? 0 : 1, r2(g.overT)] : 0,
+        st: [g.gensDone, g.escapedCount, g.deadCount, g.stats.stuns, g.stats.trips || 0, g.stats.hits, g.stats.lunges, g.stats.drops, g.stats.vaults, g.stats.breaks, g.via.gate, g.via.car, g.via.boat],
+        s: g.survivors.map(encSurv),
+        k: [r2(k0.x), r2(k0.y), r2(k0.face), KST.indexOf(k0.state), r2(k0.t), r2(k0.dur), r2(k0.trip), (k0.moving ? 1 : 0) | (k0.stealth ? 2 : 0) | (k0.hesitate ? 4 : 0) | (k0.hitDone ? 8 : 0), r2(k0.energy), k0.traps,
+          k0.pal ? [BRK.indexOf(k0.brkKind), k0.brkKind === 'pallet' ? g.pallets.indexOf(k0.pal) : k0.brkKind === 'window' ? g.windows.indexOf(k0.pal) : k0.brkKind === 'locker' ? g.lockers.indexOf(k0.pal) : g.vehicles.indexOf(k0.pal)] : 0,
+          r2(k0.ph), k0.vault ? [r2(k0.vault.dur), r2(k0.vault.x0), r2(k0.vault.y0), r2(k0.vault.x1), r2(k0.vault.y1), k0.vault.win ? g.windows.indexOf(k0.vault.win) : -1, k0.vault.dx || 0, k0.vault.dy || 0] : 0,
+          r2(k0.ldx), r2(k0.ldy), g.gens.map((o, i) => r2(k0.genMem[i] || 0)), r2(k0.vx), r2(k0.vy), r2(k0.brk || 0)],
+        G: g.gens.map((o) => [r3(o.progress), o.done ? 1 : 0, o.known ? 1 : 0, g.time - (o.noisyT || -99) < 1.5 ? 1 : 0]),
+        P: g.pallets.map((p) => [PST.indexOf(p.state), r2(p.t), p.dir.x, p.dir.y]),
+        Wn: g.windows.map((w) => [WST.indexOf(w.state), r2(w.t), r2(w.prog), r2(w.usedT || 0)]),
+        L: g.lockers.map((l) => [l.occ ? l.occ.id : -1, r2(l.t)]),
+        C: g.chests.map((c) => [c.open ? 1 : 0, c.known ? 1 : 0, r2(c.t)]),
+        V: g.vehicles.map((v) => [VST.indexOf(v.state), v.need.map((n) => (v.parts[n] ? 1 : 0)).join(''), v.need.map((n) => r2(v.wp[n] || 0)), v.order.map((n) => v.need.indexOf(n)), r2(v.startP), v.seated, r2(v.leaveT), r2(v.anim), v.pax]),
+        Ph: g.phone ? [PHST.indexOf(g.phone.state), r3(g.phone.progress), r2(g.phone.eta), r2(g.phone.win), g.phone.calls] : 0,
+        D: [g.door.powered ? 1 : 0, g.door.opened ? 1 : 0, r3(g.door.progress), r2(g.door.t), g.door.pass ? 1 : 0],
+        I: g.items.map((it) => [it.id, IKIND.indexOf(it.kind), it.part ? PARTN.indexOf(it.part) : -1, r2(it.x), r2(it.y), it.holder ? it.holder.id : -1, it.on ? 1 : 0, r2(it.batt || 0)]),
+        Tr: g.traps.map((t) => [t.owner === 'k' ? 0 : 1, r2(t.x), r2(t.y), r2(t.arm), t.victim ? (t.victim === k ? -2 : t.victim.id) : -1])
+      };
+    };
+    g.applySnapshot = function (sn, localId) {
+      g.time = sn.T;
+      if (sn.O && !g.over) { g.over = true; g.result = sn.O[0] === 0 ? 'dead' : 'escaped'; g.overT = sn.O[1]; }
+      const st = sn.st; g.gensDone = st[0]; g.escapedCount = st[1]; g.deadCount = st[2]; g.stats.stuns = st[3]; g.stats.trips = st[4]; g.stats.hits = st[5]; g.stats.lunges = st[6]; g.stats.drops = st[7]; g.stats.vaults = st[8]; g.stats.breaks = st[9];
+      g.via.gate = st[10]; g.via.car = st[11]; g.via.boat = st[12];
+      sn.G.forEach((a, i) => { const o = g.gens[i]; o.progress = a[0]; o.done = !!a[1]; o.known = !!a[2]; o.noisyT = a[3] ? g.time : -99; });
+      sn.P.forEach((a, i) => { const p = g.pallets[i]; p.state = PST[a[0]]; p.t = a[1]; p.dir = { x: a[2], y: a[3] }; });
+      sn.Wn.forEach((a, i) => { const w = g.windows[i]; w.state = WST[a[0]]; w.t = a[1]; w.prog = a[2]; w.usedT = a[3]; });
+      sn.C.forEach((a, i) => { const c = g.chests[i]; c.open = !!a[0]; c.known = !!a[1]; c.t = a[2]; });
+      // objetos soltos e armadilhas são recriados; depois os sobreviventes resolvem as referências por id
+      g.items = sn.I.map((a) => { const kind = IKIND[a[1]], it = { id: a[0], kind, x: a[3], y: a[4], cx: a[3], cy: a[4], holder: null, batt: a[7], on: !!a[6] }; if (a[2] >= 0) { it.part = PARTN[a[2]]; it.veh = PARTS[it.part].veh; } return it; });
+      g.traps = sn.Tr.map((a) => ({ owner: a[0] === 0 ? 'k' : 's', x: a[1], y: a[2], cx: a[1], cy: a[2], arm: a[3], victim: null, vic: a[4] }));
+      sn.s.forEach((a, i) => decSurv(g.survivors[i], a, i === localId));
+      g.survivors.forEach((v) => { for (const it of g.items) if (it === v.item || it === v.tool || v.bag.includes(it)) it.holder = v; });
+      g.traps.forEach((t) => { t.victim = t.vic === -2 ? k : t.vic >= 0 ? g.survivors[t.vic] : null; });
+      sn.L.forEach((a, i) => { const l = g.lockers[i]; l.occ = a[0] >= 0 ? g.survivors[a[0]] : null; l.t = a[1]; });
+      sn.V.forEach((a, i) => { const v = g.vehicles[i]; v.state = VST[a[0]]; v.need.forEach((n, j) => { v.parts[n] = a[1][j] === '1'; v.wp[n] = a[2][j]; }); v.order = a[3].map((j) => v.need[j]); v.startP = a[4]; v.seated = a[5]; v.leaveT = a[6]; v.anim = a[7]; v.pax = a[8]; });
+      if (sn.Ph && g.phone) { const p = g.phone; p.state = PHST[sn.Ph[0]]; p.progress = sn.Ph[1]; p.eta = sn.Ph[2]; p.win = sn.Ph[3]; p.calls = sn.Ph[4]; }
+      g.door.powered = !!sn.D[0]; g.door.opened = !!sn.D[1]; g.door.progress = sn.D[2]; g.door.t = sn.D[3]; g.door.pass = !!sn.D[4];
+      const a = sn.k;
+      if (!k._init) { k.x = a[0]; k.y = a[1]; k._init = true; }
+      k.tx = a[0]; k.ty = a[1]; k.face = a[2]; k.state = KST[a[3]]; k.t = a[4]; k.dur = a[5]; k.trip = a[6]; k.moving = !!(a[7] & 1); k.stealth = !!(a[7] & 2); k.hesitate = !!(a[7] & 4); k.hitDone = !!(a[7] & 8); k.energy = a[8]; k.traps = a[9];
+      k.brkKind = a[10] ? BRK[a[10][0]] : 'pallet'; k.pal = a[10] ? (a[10][0] === 0 ? g.pallets[a[10][1]] : a[10][0] === 1 ? g.windows[a[10][1]] : a[10][0] === 2 ? g.lockers[a[10][1]] : g.vehicles[a[10][1]]) : null;
+      k.ph = a[11]; k.vault = a[12] ? { dur: a[12][0], x0: a[12][1], y0: a[12][2], x1: a[12][3], y1: a[12][4], win: a[12][5] >= 0 ? g.windows[a[12][5]] : null, dx: a[12][6], dy: a[12][7] } : null;
+      k.ldx = a[13]; k.ldy = a[14]; a[15].forEach((v, i) => { k.genMem[i] = v; }); k.vx = a[16]; k.vy = a[17]; k.brk = a[18];
+    };
+    // eventos (sons, textos, partículas, pings, tremores): cada tela toca com a própria posição de escuta
+    g.playEvent = function (e) {
+      if (e.t === 'p') g.popups.push({ text: e.tx, x: e.x, y: e.y, t: 0, color: e.c });
+      else if (e.t === 'd') dust(e.x, e.y, e.n, e.c);
+      else if (e.t === 'g') glass(e.x, e.y, e.n, e.dx, e.dy);
+      else if (e.t === 'k') g.pings.push({ x: e.x, y: e.y, t: g.time });
+      else if (e.t === 'f') {
+        if (e.w === -1) { if (Math.hypot(e.x - g.pl.x, e.y - g.pl.y) < e.r) g.shake = Math.max(g.shake, e.sh); }
+        else if ((e.w === 'k' && role === 'killer') || (e.w !== 'k' && role === 'survivor' && e.w === meIdx)) { g.shake = Math.max(g.shake, e.sh); g.flash = Math.max(g.flash, e.fl); }
+      } else if (e.t === 's') {
+        let p, v = 1;
+        if (e.x === null || e.x === undefined) p = 0;
+        else {
+          const d = Math.hypot(e.x - g.pl.x, e.y - g.pl.y);
+          p = clamp((e.x - g.pl.x) / 10, -0.8, 0.8);
+          if (e.ex && e.ex.range) v = d < 0.5 ? 0.3 * e.ex.loud : e.ex.loud * clamp(1 - d / e.ex.range, 0, 1);
+          else v = d < CFG.HEAR_NEAR ? 1 : Math.pow(Math.max(0, 1 - (d - CFG.HEAR_NEAR) / (CFG.HEAR_FAR - CFG.HEAR_NEAR)), 2);
+        }
+        if (v > 0.03) sfxOut(e.n, p, v, e.ex);
+      }
+    };
+    // movimento previsto do jogador desta tela (só quando está livre; o resto vem do anfitrião)
+    g.predict = function (dt, inp) {
+      if (role === 'killer') {
+        if (k.state !== 'chase') return;
+        const ax0 = inp.ax || 0, ay0 = inp.ay || 0, len = Math.hypot(ax0, ay0);
+        if (len < 0.12) { k.moving = false; return; }
+        const ax = len > 1 ? ax0 / len : ax0, ay = len > 1 ? ay0 / len : ay0, sneak = !inp.drop && !!inp.stealth && k.energy > 0.02, sp = (map.kind === 'camp' ? CFG.K_SPEED_P_CAMP : CFG.K_SPEED_P) * (sneak ? CFG.STEALTH_SPEED : 1);
+        const ox = k.x, oy = k.y; moveBy(k, ax * sp * dt, ay * sp * dt, CFG.R_K); k.face = Math.atan2(ay, ax);
+        if (Math.hypot(k.x - ox, k.y - oy) > 0.0005) { k.moving = true; k.walk += dt * 11; } else k.moving = false;
+        return;
+      }
+      const v = g.survivors[meIdx];
+      if (v.dead || v.escaped || v.hidden || v.vault || v.heal || v.trapT > 0) return;
+      let ax = inp.ax || 0, ay = inp.ay || 0; const len = Math.hypot(ax, ay);
+      if (len > 1) { ax /= len; ay /= len; }
+      if (inp.act && len <= 0.12 && v.interact) return;                   // segurando AGIR parado: quem manda é o anfitrião
+      v.moving = len > 0.12;
+      if (!v.moving) { v.walk = 0; return; }
+      const walkMode = !!inp.walk, sp = CFG.RUN * (v.burst > 0 ? CFG.BURST : 1) * (walkMode ? CFG.WALK : 1) * (v.tripT > 0 ? CFG.SURV_TRIP_SLOW : 1);
+      moveBy(v, ax * sp * dt, ay * sp * dt, CFG.R_S); v.face = Math.atan2(ay, ax); v.runMode = !walkMode; v.walk += dt * (walkMode ? 7 : 11);
+    };
+    // a cada quadro da cópia: relógios locais, suavização dos outros jogadores e as dicas que dependem de quem olha
+    g.replicaUpdate = function (dt) {
+      g.time += dt;
+      g.shake = Math.max(0, g.shake - dt * 22); g.flash = Math.max(0, g.flash - dt);
+      for (const pu of g.popups) pu.t += dt; g.popups = g.popups.filter((pu) => pu.t < 1.1);
+      for (const f of g.fx) { f.t += dt; f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.92; f.vy *= 0.92; } g.fx = g.fx.filter((f) => f.t < f.life);
+      g.pings = g.pings.filter((q) => g.time - q.t < 4);
+      for (const p of g.pallets) p.t += dt; for (const w of g.windows) w.t += dt; for (const l of g.lockers) l.t += dt; for (const c of g.chests) c.t += dt; g.door.t += dt;
+      for (const tr of g.traps) if (tr.arm > 0) tr.arm -= dt;
+      const sm = Math.min(1, dt * 14);
+      for (const v of g.survivors) {
+        if (v.vault) v.vault.t = Math.min(v.vault.dur, v.vault.t + dt);
+        if (v.heal) v.heal.t += dt;
+        if (v.moving && v !== g.survivors[meIdx]) v.walk += dt * (v.runMode === false ? 7 : 11);
+        if (v === g.survivors[meIdx] && role === 'survivor') continue;
+        if (v.tx !== undefined) { if (Math.hypot(v.tx - v.x, v.ty - v.y) > 3) { v.x = v.tx; v.y = v.ty; } else { v.x += (v.tx - v.x) * sm; v.y += (v.ty - v.y) * sm; } }
+      }
+      if (k.state !== 'intro') k.t += dt;
+      if (k.moving && role !== 'killer') k.walk += dt * 11;
+      if (role !== 'killer' && k.tx !== undefined) { if (Math.hypot(k.tx - k.x, k.ty - k.y) > 3) { k.x = k.tx; k.y = k.ty; } else { k.x += (k.tx - k.x) * sm; k.y += (k.ty - k.y) * sm; } }
+      for (const v of g.vehicles) if (v.state === 'leaving') v.anim += dt;
+      // dicas locais
+      const ms = g.survivors[meIdx];
+      if (role === 'survivor' && alive(ms)) {
+        use(ms); ms.interact = findInteract(); ms.near = ms.hidden ? null : findDroppable();
+        g.vaultHint = (!ms.hidden && !ms.vault) ? findVaultable(ms) : null; g.interact = ms.interact; g.near = ms.near; g.pInteract = g.interact;
+        g.nearList = ms.near ? [{ pal: ms.near, sv: ms }] : [];
+      } else if (role === 'killer') {
+        g.kInteract = findKillerInteract(); g.pInteract = g.kInteract; g.nearList = [];
+        for (const sv of g.survivors) { if (!alive(sv) || sv.hidden) { sv.near = null; continue; } use(sv); sv.near = findDroppable(); if (sv.near && sv.human) g.nearList.push({ pal: sv.near, sv }); }
+      }
+      const ref = role === 'killer' ? nearestAlive(k) : ms;
+      g.dist = ref ? Math.hypot(ref.x - k.x, ref.y - k.y) : 99;
+      if (g.over) g.overT += dt;
+    };
+    // quem saiu da partida vira bot (sobrevivente) ou o assassino volta a ser a IA
+    g.dropHuman = (key) => {
+      if (key === 'k') { if (!KH) return; KH = false; g.killerHuman = false; k.aware = 'search'; k.last = { x: k.x, y: k.y }; k.lost = 0; if (k.state === 'intro') k.t = 0; return; }
+      const sv = g.survivors[key]; if (!sv || !sv.human) return;
+      sv.human = false; sv.ai = makeAI(key); sv.heal = null; const hi = humanIds.indexOf(key); if (hi >= 0) humanIds.splice(hi, 1);
+    };
+    g.setLocal = (role2, id) => { g.pl = role2 === 'killer' ? k : g.survivors[id]; };
+
     g.CFG = CFG;
     return g;
   }
 
+  DP.VERSION = '0.0.1';          // versão do jogo (aparece no menu); a cada entrega sobe: 0.0.2, 0.0.3...
   DP.createGame = createGame;
   DP.CFG = CFG;
 })(typeof window !== 'undefined' ? window : globalThis);

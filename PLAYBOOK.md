@@ -605,6 +605,15 @@ Respostas do usuário às perguntas de design: **sem estado "caído"** (o últim
 - **Testado:** 30 sementes têm barracão conectado ao acampamento; 12 baús; cura/cancelamento; mochila cheia; colega; bot que se cura; armadilhas dos dois lados, desarmar, soltar, IA armando (≥3 em 6 partidas).
 - **Medida (laboratório bots × assassino-IA):** o "jogador-bot" morre em ~160–170 s em média (1 fuga em 10), mesmo com o aprendizado desligado; no FÁCIL ~260 s. O que mais mudou o resultado foi consertar o bug da janela (o assassino travava olhando o alvo). **A calibrar com jogadores humanos**, que desviam melhor que os bots.
 
+## 11d. Versão 0.0.1 e o bug do HUD que sumia ao pular a janela
+
+**Versionamento (pedido do usuário):** a versão aparece no canto do menu (`DP.VERSION` em `js/game.js`, hoje **0.0.1**) e sobe a cada entrega (0.0.2, 0.0.3...), para sabermos para onde estamos indo. Cada versão publicada deve ter a linha correspondente aqui.
+
+**Bug (relato):** "sempre que pulo uma janela dá uma travada e some todo o HUD". **Causa:** na entrega anterior (armadilhas) acrescentei `disarm: ka ? ...` na tabela de dicas de `drawWorld`, mas `ka` só existe em `drawHUD`; qualquer dica de interação na tela (perto de janela, baú, gerador...) lançava `ReferenceError` a cada quadro, `drawWorld` abortava e o HUD nunca era desenhado. **Correção:** `game.role === 'killer'`. **Por que passou:** os testes de `tests/sim.js` não desenham nada. **Novo:** `node tests/browser-smoke.js [arquivo.html]` abre o jogo no Chromium, vai a cada tipo de objeto (janela, baú, gerador, armário, pallet, arsenal, telefone, carro, item, portão), cria corpo e armadilhas, termina a partida e falha se qualquer quadro lançar erro; rodar **antes de cada publicação** (PC e celular, edições normal e HD). Confirmado que ele pega o bug original.
+
+**Impasse 70:** erro só de desenho não aparece nos testes de lógica: agora há o teste de navegador acima.
+**Próximo pedido já anotado:** depois do multijogador, melhorar a vegetação (grama, arbustos e pinheiros), mantendo o mapa como está.
+
 ## 12. Forja de personagens — ENGAVETADA
 
 **Decisão (dono do projeto):** "ficou péssimo os modelos que você fez; tire todos até conseguirmos fazer um personagem minimamente bonito, e depois sigamos o modelo". Os sprites gerados, a tela construtora, as folhas exportadas (`assets/forja*`) e os testes foram **removidos do jogo**; voltou o desenho clássico por código (estado de 810218a). O código do experimento ficou em `experimental/forja/` (não é carregado pelo jogo).
