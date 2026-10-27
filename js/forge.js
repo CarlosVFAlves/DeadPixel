@@ -665,16 +665,22 @@
   }
   function setOn(v) { S.on = !!v; save(); }
 
-  // baixa um arquivo (PNG ou JSON). No celular/artefato o navegador pode pedir confirmação.
+  // salva um arquivo (PNG ou JSON). No artefato publicado usa a capacidade `downloads` (confirmação do visualizador); fora dele, link de download comum.
   function download(name, blobOrCanvas, type) {
-    const go = (blob) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); };
-    if (blobOrCanvas.toBlob) blobOrCanvas.toBlob(go, 'image/png'); else go(new Blob([blobOrCanvas], { type: type || 'application/json' }));
+    const toBlob = () => new Promise((res) => { if (blobOrCanvas.toBlob) blobOrCanvas.toBlob(res, 'image/png'); else res(new Blob([blobOrCanvas], { type: type || 'application/json' })); });
+    return toBlob().then(async (blob) => {
+      let dl = null;
+      try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (e) { dl = null; }
+      if (dl) { try { await dl.save({ filename: name, data: blob }); return true; } catch (e) { return false; } }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+      return true;
+    });
   }
   function exportDownload(role, res) {
     const sheet = exportSheet(genomeOf(role), res, {});
     const base = 'forja_' + (role === 'killer' ? 'assassino' : 'sobrevivente') + '_' + res + 'px';
-    download(base + '.png', sheet.canvas);
-    setTimeout(() => download(base + '.json', JSON.stringify(sheet.manifest, null, 1), 'application/json'), 400);
+    download(base + '.png', sheet.canvas).then((ok) => { if (ok) return download(base + '.json', JSON.stringify(sheet.manifest, null, 1), 'application/json'); });
     return base;
   }
   function pickImport(done) {
