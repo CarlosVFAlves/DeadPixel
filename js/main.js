@@ -77,11 +77,12 @@
         const close = !!(game && !game.over && game.dist < 2.4 && game.k.state === 'chase');
         const kit = game && game.kInteract;
         list.push({ id: 'drop', label: 'ATACAR', key: 'ESPAÇO', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: close, hot: '#ff5c5c' });
-        list.push({ id: 'act', label: 'AGIR', key: 'E', cap: kit ? ({ break: 'QUEBRAR PALLET', smash: 'QUEBRAR JANELA', kick: 'CHUTAR GERADOR', sabotage: 'SABOTAR', locker: 'ABRIR ARMÁRIO' }[kit.type] || '') : '', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!kit, hot: '#ff9d5c' });
+        list.push({ id: 'act', label: 'AGIR', key: 'E', cap: kit ? ({ break: 'QUEBRAR PALLET', smash: 'QUEBRAR JANELA', kick: 'CHUTAR GERADOR', sabotage: 'SABOTAR', locker: 'ABRIR ARMÁRIO', arsenal: 'PEGAR ARMADILHA', disarm: 'DESARMAR' }[kit.type] || '') : '', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!kit, hot: '#ff9d5c' });
+        list.push({ id: 'use', label: 'ARMAD.', key: 'F', round: true, x: W - 2 * r - 8 - 6 * r2 - 18, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.k.traps > 0), hot: '#ffd23f' });
         list.push({ id: 'stealth', label: 'ESPR.', key: 'SHIFT', round: true, x: W - 2 * r - 8 - 4 * r2 - 12, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.k.stealth), hot: '#9bd3f0' });
       } else {
         const sit = game && game.interact, hid = !!(game && game.s.hidden);
-        const capTxt = hid ? 'SAIR DO ARMÁRIO' : sit ? ({ gen: 'CONSERTAR', item: 'PEGAR', door: 'ABRIR PORTA', window: 'ABRIR JANELA', phone: 'LIGAR PARA A POLÍCIA', install: 'INSTALAR PEÇA', start: sit.obj.kind === 'boat' ? 'EMPURRAR BARCO' : 'LIGAR O MOTOR', board: 'ENTRAR', hide: 'ESCONDER-SE', chest: 'ABRIR BAÚ' }[sit.type] || '') : (game && game.s.item ? 'SOLTAR PEÇA' : '');
+        const capTxt = hid ? 'SAIR DO ARMÁRIO' : sit ? ({ gen: 'CONSERTAR', item: 'PEGAR', door: 'ABRIR PORTA', window: 'ABRIR JANELA', phone: 'LIGAR PARA A POLÍCIA', install: 'INSTALAR PEÇA', start: sit.obj.kind === 'boat' ? 'EMPURRAR BARCO' : 'LIGAR O MOTOR', board: 'ENTRAR', hide: 'ESCONDER-SE', chest: 'ABRIR BAÚ', disarm: 'DESARMAR', free: 'SOLTAR COLEGA' }[sit.type] || '') : (game && game.s.item ? 'SOLTAR PEÇA' : '');
         list.push({ id: 'act', label: 'AGIR', key: 'E', cap: capTxt, round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: !!sit || hid || !!(game && game.s.item) });
         const vh = !!(game && game.vaultHint && !(game.near));
         list.push({ id: 'drop', label: vh ? 'PULAR' : 'PALLET', key: 'ESPAÇO', cap: game && game.near ? 'DERRUBAR PALLET' : vh ? 'PULAR' : '', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.near) || vh });
@@ -139,6 +140,7 @@
       case 'drop': dropQueued = true; break;
       case 'act': actQueued = true; break;
       case 'radio': radioQueued = true; break;
+      case 'use': useQueued = true; break;
       case 'slot0': case 'slot1': case 'slot2': slotQueued = +id.slice(4); break;
       case 'pause': if (state === 'play') state = 'pause'; break;
       case 'resume': if (state === 'pause') state = 'play'; break;

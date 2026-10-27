@@ -590,6 +590,20 @@ A imagem mostra o **nosso próprio screenshot repintado**: terra com pedras e gr
 
 **Pendências pedidas no mesmo lote (ver tarefas):** corpos/estados ferido→caído→morto; variar o portão; kit médico, inventário, baús, armadilhas, assassino começando no barracão; multiplayer.
 
+## 11c. Itens, baús, armadilhas, barracão e corpos (decisões do usuário)
+
+Respostas do usuário às perguntas de design: **sem estado "caído"** (o último golpe mata e deixa o corpo); **mochila de 3 espaços**, kit médico cura 1 vida em ~6 s, peças de veículo ocupam 1 espaço; **armadilha de urso** como primeira armadilha; ordem: corpos → kit/inventário/baús → armadilhas/barracão → portão variável → multiplayer.
+
+- **Corpos:** ao morrer (golpe final ou vidro fatal) o sobrevivente cai (giro de 0,3 s) e fica deitado, com poça de sangue que cresce por 3 s; o que carregava (peça, rádio, kit) cai no chão — antes uma peça de quem morria ficava "presa" ao morto (bug corrigido).
+- **Mochila (`CFG.BAG` = 3):** rádio, peça, kit médico e armadilha dividem os espaços; cheia = "MOCHILA CHEIA". Teclado: `F` usa (kit médico; sem kit, armadilha). Toque: os 3 quadrados no meio da lateral esquerda (tocar usa o item: kit cura, rádio liga/desliga, peça solta, armadilha põe).
+- **Kit médico:** cura **1 vida** (`HEAL_T` 6 s) parado; mexer, agir, tropeçar ou ser acertado cancela e **não gasta** o kit; se você não está ferido, cura um colega ferido a até 1,6 tile. Barra verde sobre o personagem e na mochila.
+- **Baús:** 12 no mapa (até 7 dentro de cabanas, o resto ao ar livre); segurar AGIR ~1,2 s abre (rangido, barulho baixo): 40% kit médico, 20% armadilha, 40% vazio (sorteado ao criar a partida). O item vai direto para a mochila (ou cai à frente se estiver cheia). Baú visto pela equipe pisca de leve no mapa.
+- **Bots:** ferido com kit e assassino longe (>14 tiles) → para e se cura; ferido sem kit → procura baú conhecido (até 55 tiles) ou kit à vista; saudável, só 'saqueadores' (≈50%) abrem baús num raio de 14; ao fugir com uma armadilha na mochila, a deixam no caminho do assassino.
+- **Armadilha de urso:** o assassino leva até 3 (2 se for pessoa) e **arma** aos pés (1,4 s para armar; `F`/botão ARMAD.); a do assassino **prende sobrevivente 4 s** (parado, gritando, o assassino ouve onde); a do sobrevivente **prende o assassino 3,5 s** (o jogador pode se debater com ESPAÇO/E). Cada lado só é pego pela armadilha do outro. **Contra-jogo:** sobrevivente desarma (segura E ~1,2 s) ou solta o colega preso (segura E ~1,5 s); o assassino desarma as dos sobreviventes (E). Visível para o dono sempre e para os outros só de perto (4,2 tiles, com visão).
+- **Barracão do assassino:** casa 9×6 longe da praça (≥38) e do portão (≥30), porta virada para o acampamento (sorteado entre os cantos, fallback por tentativa); o assassino (IA ou jogador) **nasce dentro**; o **arsenal** (estante) repõe 1 armadilha por toque de AGIR (até 3). A IA arma armadilhas ao chegar a um gerador (55%).
+- **Testado:** 30 sementes têm barracão conectado ao acampamento; 12 baús; cura/cancelamento; mochila cheia; colega; bot que se cura; armadilhas dos dois lados, desarmar, soltar, IA armando (≥3 em 6 partidas).
+- **Medida (laboratório bots × assassino-IA):** o "jogador-bot" morre em ~160–170 s em média (1 fuga em 10), mesmo com o aprendizado desligado; no FÁCIL ~260 s. O que mais mudou o resultado foi consertar o bug da janela (o assassino travava olhando o alvo). **A calibrar com jogadores humanos**, que desviam melhor que os bots.
+
 ## 12. Forja de personagens — ENGAVETADA
 
 **Decisão (dono do projeto):** "ficou péssimo os modelos que você fez; tire todos até conseguirmos fazer um personagem minimamente bonito, e depois sigamos o modelo". Os sprites gerados, a tela construtora, as folhas exportadas (`assets/forja*`) e os testes foram **removidos do jogo**; voltou o desenho clássico por código (estado de 810218a). O código do experimento ficou em `experimental/forja/` (não é carregado pelo jogo).

@@ -88,6 +88,9 @@
     whiff(pan) { noise(0.24, 0.32, 2600, 'bandpass', 1.3, pan, 0.02, 420); tone(105, 0.14, 'sine', 0.3, 60, pan, 0.05); noise(0.1, 0.18, 700, 'lowpass', 0.8, pan, 0.08); },
     // baú: tampa rangendo e o conteúdo chacoalhando
     chest(pan) { noise(0.3, 0.3, 700, 'bandpass', 2, pan, 0, 1800); tone(150, 0.14, 'square', 0.1, 220, pan, 0.05); tone(880, 0.07, 'triangle', 0.1, 1200, pan, 0.2); },
+    // armadilha: armar (clique metálico) e disparar (estalo seco com o grito do metal)
+    trapSet(pan) { tone(300, 0.06, 'square', 0.12, 180, pan); noise(0.08, 0.3, 2400, 'bandpass', 4, pan, 0.07); tone(500, 0.05, 'square', 0.1, 330, pan, 0.16); },
+    trapSnap(pan) { noise(0.12, 0.9, 3000, 'highpass', 0.7, pan); tone(110, 0.22, 'square', 0.4, 40, pan); tone(1700, 0.25, 'sawtooth', 0.14, 700, pan, 0.02); },
     // cura concluída: acorde subindo
     heal(pan) { for (let i = 0; i < 3; i++) tone(440 * Math.pow(1.26, i), 0.22, 'triangle', 0.18, 0, pan, i * 0.1); },
     // respiração abafada de quem está escondido (inspira e solta): baixa, só se ouve de muito perto

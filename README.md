@@ -115,6 +115,9 @@ No treino as janelas e os pallets voltam sozinhos depois de ~12 s.
 - A zona amarela/vermelha no chão mostra onde um pallet cairia se o sobrevivente derrubasse agora.
 - A IA do sobrevivente: **sente** você (batimento) a ~11 tiles e **vê** com linha de visão; foge de quem se aproxima; corre até um pallet que esteja no seu caminho, passa para o outro lado e **derruba na hora certa** (prevendo onde você estará, com tempo de reação humano); pula pallets caídos; foge para o portão quando está aberto.
 
+## Mochila, baús, kit médico, armadilhas e o barracão
+Mochila de **3 espaços** (rádio, peça, kit médico, armadilha). **Baús** (12 no mapa) guardam kits e armadilhas: segure `E`. `F` usa o kit (cura 1 vida, ~6 s parado; cura um colega se você não está ferido) e, sem kit, põe a armadilha; no toque, tocar nos quadrados da esquerda. **Armadilha de urso:** a do assassino prende sobrevivente 4 s e a do sobrevivente prende o assassino 3,5 s; dá para desarmar ou soltar um colega com `E`. O assassino nasce no **barracão** (arsenal de armadilhas; `E` repõe). Quem morre fica no chão.
+
 ## Medo (sobrevivente) e passos
 Quanto mais perto o assassino (e vendo você), mais **MEDO** (barra no HUD). Com medo, **correr** faz tropeçar (chance cresce com o quadrado do medo; andar nunca tropeça; depois de tropeçar, 4 s sem outro; derrubar pallet ou pular janela dá coragem). Passos soam por piso e distância; o assassino, mais pesado e de mais longe. O assassino-IA **aprende** com botes errados (antecipa a mira e acompanha o desvio). Quem se esconde no armário respira baixinho.
 

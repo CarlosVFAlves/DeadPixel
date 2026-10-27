@@ -109,6 +109,36 @@
     const LAKE = { x: (lakeW ? 23 : 121) + ri(-3, 3), y: ri(46, 70), rx: ri(17, 20), ry: ri(11, 14) };
     pois.push({ kind: 'plaza', x: PLAZA.x + 0.5, y: PLAZA.y + 0.5, r: 9 });
 
+    // ---------- barracão do assassino: longe da fogueira e do portão, com uma porta virada para o acampamento; dentro, o arsenal de armadilhas ----------
+    const SW = 9, SH = 6;
+    let SHACK = null;
+    {
+      const cands = [[20, 84], [26, 88], [122, 86], [16, 14], [124, 20]].sort(() => rng() - 0.5);
+      for (let tries = 0; tries < 300 && !SHACK; tries++) {
+        const c = tries < cands.length ? cands[tries] : [ri(14, W - 16), ri(12, H - 14)];
+        const x0 = c[0] - 4, y0 = c[1] - 3;
+        if (x0 < 6 || y0 < 6 || x0 + SW > W - 7 || y0 + SH > H - 7) continue;
+        if (Math.hypot(c[0] - PLAZA.x, c[1] - PLAZA.y) < 38 || Math.hypot(c[0] - GX, c[1]) < 30) continue;
+        if (((c[0] - LAKE.x) / (LAKE.rx + 10)) ** 2 + ((c[1] - LAKE.y) / (LAKE.ry + 10)) ** 2 < 1) continue;
+        let busy = false;
+        for (let yy = y0 - 3; yy < y0 + SH + 3 && !busy; yy++) for (let xx = x0 - 3; xx < x0 + SW + 3; xx++) if (occ[idx(xx, yy)]) { busy = true; break; }
+        if (!busy) SHACK = { x: x0, y: y0, w: SW, h: SH, cx: c[0], cy: c[1], south: PLAZA.y > c[1] };
+      }
+      if (SHACK) {
+        const S0 = SHACK;
+        clearRect(S0.x - 2, S0.y - 2, SW + 4, SH + 4, G_DIRT); mark(S0.x - 3, S0.y - 3, SW + 6, SH + 6);
+        for (let yy = 0; yy < SH; yy++) for (let xx = 0; xx < SW; xx++) {
+          const edge = xx === 0 || yy === 0 || xx === SW - 1 || yy === SH - 1, i = idx(S0.x + xx, S0.y + yy);
+          t[i] = edge ? T_WALL : T_FLOOR; indoor[i] = 1; ground[i] = G_PLANK;
+        }
+        const dy0 = S0.south ? S0.y + SH - 1 : S0.y;
+        for (let dx = -1; dx <= 0; dx++) { const i = idx(S0.cx + dx, dy0); t[i] = T_FLOOR; indoor[i] = 0; ground[i] = G_PLANK; }
+        S0.door = { x: S0.cx, y: dy0 + (S0.south ? 1 : -1) };
+        keys.push({ x: S0.cx, y: S0.door.y }); keys.push({ x: S0.cx, y: S0.south ? dy0 - 1 : dy0 + 1 });
+        pois.push({ kind: 'shack', x: S0.cx, y: S0.cy, r: 6 });
+      }
+    }
+
     // ---------- escolha das cabanas ----------
     const specs = [];
     const order = ANCHORS.slice().sort(() => rng() - 0.5);
@@ -313,19 +343,28 @@
 
     // ---------- pontos de partida ----------
     const sp = [[-6, -3], [6, -3], [-5, 4], [5, 4]].map((o) => ({ x: PLAZA.x + o[0] + 0.5, y: PLAZA.y + o[1] + 0.5 }));
-    let kc = null;                                            // assassino-IA: nasce longe, num canto sorteado fora da água
-    for (const c of [[20, 84], [26, 88], [122, 86], [16, 14], [124, 20]].sort(() => rng() - 0.5)) {
-      let wet = false; for (let yy = c[1] - 3; yy <= c[1] + 3; yy++) for (let xx = c[0] - 3; xx <= c[0] + 3; xx++) if (t[idx(xx, yy)] === T_WATER) wet = true;
-      if (!wet && Math.hypot(c[0] - PLAZA.x, c[1] - PLAZA.y) > 38) { kc = c; break; }
+    let spawnKiller, spawnKillerP, arsenal = null;
+    if (SHACK) {                                                // assassino (IA ou jogador): nasce dentro do barracão; o arsenal fica na parede dos fundos
+      const back = SHACK.south ? SHACK.y + 1 : SHACK.y + SHACK.h - 2, ax = SHACK.cx + 2;
+      t[idx(ax, back)] = T_CHEST;
+      arsenal = { tx: ax, ty: back, nx: 0, ny: SHACK.south ? 1 : -1 };
+      spawnKiller = { x: SHACK.cx + 0.5 - 2, y: SHACK.y + SHACK.h / 2 + 0.5 }; spawnKillerP = spawnKiller;
+      pois.push({ kind: 'killer', x: spawnKiller.x, y: spawnKiller.y, r: 5 });
+    } else {                                                    // (sem espaço para o barracão: ponto de partida antigo)
+      let kc = null;
+      for (const c of [[20, 84], [26, 88], [122, 86], [16, 14], [124, 20]].sort(() => rng() - 0.5)) {
+        let wet = false; for (let yy = c[1] - 3; yy <= c[1] + 3; yy++) for (let xx = c[0] - 3; xx <= c[0] + 3; xx++) if (t[idx(xx, yy)] === T_WATER) wet = true;
+        if (!wet && Math.hypot(c[0] - PLAZA.x, c[1] - PLAZA.y) > 38) { kc = c; break; }
+      }
+      if (!kc) kc = [20, 84];
+      clearRect(kc[0] - 2, kc[1] - 2, 5, 5, G_DIRT);
+      spawnKiller = { x: kc[0] + 0.5, y: kc[1] + 0.5 };
+      pois.push({ kind: 'killer', x: spawnKiller.x, y: spawnKiller.y, r: 5 });
+      let kpx = PLAZA.x;
+      for (const off of [0, 12, -12, 20, -20]) { let wet = false; for (let yy = PLAZA.y + 13; yy <= PLAZA.y + 19; yy++) for (let xx = PLAZA.x + off - 3; xx <= PLAZA.x + off + 3; xx++) if (t[idx(xx, yy)] === T_WATER) wet = true; if (!wet) { kpx = PLAZA.x + off; break; } }
+      clearRect(kpx - 2, PLAZA.y + 14, 5, 5, G_DIRT);
+      spawnKillerP = { x: kpx + 0.5, y: PLAZA.y + 16.5 };
     }
-    if (!kc) kc = [20, 84];
-    clearRect(kc[0] - 2, kc[1] - 2, 5, 5, G_DIRT);
-    const spawnKiller = { x: kc[0] + 0.5, y: kc[1] + 0.5 };
-    pois.push({ kind: 'killer', x: spawnKiller.x, y: spawnKiller.y, r: 5 });
-    let kpx = PLAZA.x;                                        // assassino-jogador: nasce perto do acampamento (a ~16 tiles da fogueira), fora da água
-    for (const off of [0, 12, -12, 20, -20]) { let wet = false; for (let yy = PLAZA.y + 13; yy <= PLAZA.y + 19; yy++) for (let xx = PLAZA.x + off - 3; xx <= PLAZA.x + off + 3; xx++) if (t[idx(xx, yy)] === T_WATER) wet = true; if (!wet) { kpx = PLAZA.x + off; break; } }
-    clearRect(kpx - 2, PLAZA.y + 14, 5, 5, G_DIRT);
-    const spawnKillerP = { x: kpx + 0.5, y: PLAZA.y + 16.5 };
 
     // ---------- conectividade ----------
     const seen = new Uint8Array(W * H), q = new Int32Array(W * H);
@@ -367,6 +406,7 @@
       if (t[s0] === T_TREE) t[s0] = T_FLOOR;
     }
     const pts = keys.concat(sp.map((p) => ({ x: Math.floor(p.x), y: Math.floor(p.y) })), [{ x: Math.floor(spawnKillerP.x), y: Math.floor(spawnKillerP.y) }, { x: Math.floor(spawnKiller.x), y: Math.floor(spawnKiller.y) }, { x: Math.floor(dockEnd.x), y: Math.floor(dockEnd.y) }]);
+    if (SHACK) pts.push({ x: SHACK.cx, y: SHACK.door.y });
     for (const g of gens.concat([phone])) for (const d of [[0, 1], [1, 0], [-1, 0], [0, -1]]) { const x = g.tx + d[0], y = g.ty + d[1]; if (t[idx(x, y)] === T_FLOOR || t[idx(x, y)] === T_TREE) { pts.push({ x, y }); break; } }
     flood(root0);
     for (const p of pts) { if (!seen[idx(p.x, p.y)]) { carveTo(p.x, p.y); flood(root0); } }
@@ -403,7 +443,7 @@
       kind: 'camp', W, H, t, ground, indoor, pallets, gens, phone, vehicles, lockers, chests, door, windows, NEED: 5,
       parking: PK, plaza: PLAZA, itemSpots, radios: 4, pois, explore, lake: LAKE, dock: { x: dockX, y: dockY, endX: dockEnd.x, endY: dockEnd.y },
       cabins: specs.map((s) => ({ x: s.x, y: s.y, w: s.m.w, h: s.m.h, id: s.n })),
-      spawnSurvivors: sp, spawnKiller, spawnKillerP
+      shack: SHACK, arsenal, spawnSurvivors: sp, spawnKiller, spawnKillerP
     };
   }
 

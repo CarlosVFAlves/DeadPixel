@@ -1493,5 +1493,54 @@ console.log('som e variedade');
   ok(h.hp === 2 && h.bag.length === 0, 'bot ferido com kit se cura quando o assassino está longe');
 }
 
+{
+  // barracão do assassino e armadilhas de urso
+  const mk = (seed, role, bots) => { const g = DP.createGameAny({ map: 'camp', rng: seeded(seed), bots: bots === undefined ? 0 : bots, role: role || 'survivor' }); return g; };
+  let g = mk(111);
+  const sh = g.map.shack;
+  ok(sh && g.arsenal && g.k.x > sh.x && g.k.x < sh.x + sh.w && g.k.y > sh.y && g.k.y < sh.y + sh.h, 'o assassino-IA nasce dentro do barracão');
+  const gk = mk(111, 'killer');
+  ok(gk.k.x > sh.x && gk.k.x < sh.x + sh.w && gk.k.y > sh.y && gk.k.y < sh.y + sh.h && gk.k.traps === 2, 'o assassino-jogador também nasce no barracão, com 2 armadilhas');
+  // o arsenal repõe uma armadilha por toque
+  const ka = gk.k; ka.traps = 0; ka.x = gk.arsenal.stand.x; ka.y = gk.arsenal.stand.y; ka.state = 'chase';
+  gk.update(1 / 60, {}); ok(gk.kInteract && gk.kInteract.type === 'arsenal', 'perto do arsenal aparece a ação de pegar armadilha');
+  gk.update(1 / 60, { actPress: true }); gk.update(1 / 60, { actPress: true });
+  ok(ka.traps >= 1, 'AGIR no arsenal dá armadilhas (até 3)');
+  // pôr uma armadilha e prender um sobrevivente
+  ka.traps = 2; ka.x = 60.5; ka.y = 60.5; gk.update(1 / 60, { use: true });
+  ok(gk.traps.length === 1 && ka.traps === 1 && gk.traps[0].owner === 'k', 'F: o assassino põe uma armadilha aos pés');
+  const sv = gk.survivors[0]; sv.x = 60.5; sv.y = 60.5; sv.hidden = null; sv.vault = null; gk.traps[0].arm = 0;
+  gk.update(1 / 60, {});
+  ok(sv.trapT > 3 && gk.traps[0].victim === sv, 'sobrevivente que pisa fica preso');
+  const px0 = sv.x, py0 = sv.y; for (let i = 0; i < 120; i++) gk.update(1 / 60, {});
+  ok(sv.x === px0 && sv.y === py0 && sv.trapT > 0, 'preso: não anda');
+  for (let i = 0; i < 60 * 4; i++) gk.update(1 / 60, {});
+  ok(!(sv.trapT > 0) && gk.traps.length === 0, 'depois de ~4 s se solta e a armadilha some');
+  // armadilha do sobrevivente prende o assassino; a dele não o prende
+  g = mk(112, 'survivor', 1); g.k.state = 'chase'; g.k.aware = 'hunt';
+  const me = g.survivors[0], tk = g.spawnItem('trap', me.x, me.y); tk.holder = me; me.bag.push(tk); me.x = 50.5; me.y = 50.5; g.s.skillCD = 999;
+  g.update(1 / 60, { use: true });
+  ok(g.traps.length === 1 && g.traps[0].owner === 's' && me.bag.length === 0, 'sobrevivente põe a armadilha da mochila');
+  g.traps[0].arm = 0; g.k.x = 50.5; g.k.y = 50.5; g.k.state = 'chase';
+  g.update(1 / 60, {});
+  ok(g.k.state === 'trapped', 'o assassino que pisa fica preso');
+  for (let i = 0; i < 60 * 4; i++) g.update(1 / 60, {});
+  ok(g.k.state !== 'trapped' && g.traps.length === 0, 'e se solta depois de ~3,5 s');
+  // desarmar e soltar colega
+  g = mk(113, 'survivor', 1); g.k.state = 'intro'; g.k.t = -999;
+  const a = g.survivors[0], b = g.survivors[1]; a.skillCD = 999;
+  g.traps.push({ owner: 'k', x: a.x + 0.8, y: a.y, cx: a.x + 0.8, cy: a.y, arm: 0, victim: null });
+  g.update(1 / 60, {}); ok(a.interact && a.interact.type === 'disarm', 'perto de uma armadilha do assassino aparece "desarmar"');
+  for (let i = 0; i < 100; i++) g.update(1 / 60, { act: true });
+  ok(g.traps.length === 0, 'segurar AGIR desarma');
+  b.trapT = 4; b.x = a.x + 1; b.y = a.y;
+  g.update(1 / 60, {}); ok(a.interact && a.interact.type === 'free', 'colega preso: aparece "soltar"');
+  for (let i = 0; i < 120; i++) g.update(1 / 60, { act: true });
+  ok(!(b.trapT > 0), 'segurar AGIR solta o colega');
+  // IA do assassino arma armadilhas nos geradores
+  let placed = 0; for (let seed = 1; seed <= 6; seed++) { const gg = mk(120 + seed, 'survivor', 3); for (let i = 0; i < 60 * 240; i++) { gg.update(1 / 60, {}); if (gg.over) break; } placed += gg.stats.trapsSet || 0; }
+  ok(placed >= 3, `o assassino-IA arma armadilhas (${placed} em 6 partidas de 4 min)`);
+}
+
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
 process.exit(fails ? 1 : 0);

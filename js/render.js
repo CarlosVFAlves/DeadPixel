@@ -229,6 +229,7 @@
       else { lift = arc * 5; lean = arc * 2; }
     }
     if (s.tripT > 0 && !s.vault) { tuck = true; lean = 2; vx = Math.cos(s.face); vy = Math.sin(s.face); }
+    if (s.trapT > 0) { tuck = true; lean = Math.round(Math.sin(tm * 40)); vx = 1; vy = 0; armsUp = true; }         // preso: se debate com os braços para cima
     if (s.invuln > 0 && !s.vault && Math.floor(tm * 20) % 2) return;
     const id = s.id % 4, hurt = s.hp < game.hpMax;
     const step = Math.floor(s.walk) % 2;
@@ -328,7 +329,7 @@
     const step = Math.floor(k.walk) % 2;
     const dormant = k.state === 'intro';
     const stun = k.state === 'stun';
-    const stumble = k.state === 'stumble';
+    const stumble = k.state === 'stumble' || k.state === 'trapped';
     const trip = stumble && k.trip > 0;
     // cambaleia de um lado para o outro; no tombo se joga para a frente
     const wob = stun ? Math.round(Math.sin(tm * 18) * 1.5) : stumble ? Math.round(Math.sin(tm * 13 + k.ph) * 2.2) : 0;
@@ -657,6 +658,26 @@
       px(ctx, '#5a4a32', x - 1, y - 5, 2, 2);
     }
   }
+  // armadilha de urso: mandíbulas abertas (armada) ou fechadas (disparou); quem a vê: o dono sempre, os outros só de perto
+  function drawTrap(ctx, tr, game, tm) {
+    const x = Math.round(tr.x * TS), y = Math.round(tr.y * TS);
+    const armed = tr.arm <= 0 && !tr.victim, blink = tr.arm > 0 ? (Math.floor(tm * 8) % 2) : 0;
+    px(ctx, 'rgba(0,0,0,.4)', x - 6, y, 12, 3);
+    if (!armed && !tr.victim) { px(ctx, '#15171b', x - 6, y - 4, 12, 5); px(ctx, blink ? '#c9ced6' : '#6a707c', x - 5, y - 3, 10, 3); return; }
+    if (tr.victim) { px(ctx, '#15171b', x - 5, y - 4, 10, 5); px(ctx, '#8a8f9a', x - 4, y - 3, 8, 3); px(ctx, '#c9ced6', x - 4, y - 3, 8, 1); return; }
+    px(ctx, '#15171b', x - 7, y - 4, 14, 6); px(ctx, '#7a808c', x - 6, y - 3, 12, 4); px(ctx, '#c9ced6', x - 6, y - 3, 12, 1);
+    for (let i = 0; i < 6; i++) px(ctx, '#15171b', x - 6 + i * 2, y - 2, 1, 2);
+    px(ctx, '#5a4a32', x - 1, y - 3, 2, 2); px(ctx, '#ffd23f', x, y - 3, 1, 1);
+  }
+  // arsenal do assassino: estante de ferro com armadilhas penduradas
+  function drawArsenal(ctx, a, game, tm) {
+    const X = a.tx * TS, Y = a.ty * TS;
+    px(ctx, 'rgba(0,0,0,.45)', X + 1, Y + 11, 14, 4);
+    px(ctx, '#15171b', X, Y + 1, 16, 13); px(ctx, '#2b2f38', X + 1, Y + 2, 14, 11); px(ctx, '#46526a', X + 1, Y + 2, 14, 1);
+    px(ctx, '#15171b', X + 1, Y + 7, 14, 1);
+    for (let i = 0; i < 3; i++) { const bx = X + 2 + i * 4; px(ctx, '#8a8f9a', bx, Y + 3, 3, 3); px(ctx, '#c9ced6', bx, Y + 3, 3, 1); px(ctx, '#8a8f9a', bx, Y + 9, 3, 3); px(ctx, '#c9ced6', bx, Y + 9, 3, 1); }
+    px(ctx, '#d02a2a', X + 13, Y + 3, 1, 1);
+  }
   // baú de madeira com cinta de metal: fechado ou aberto (aberto mostra o forro escuro)
   function drawChest(ctx, c, game, tm) {
     const X = c.tx * TS, Y = c.ty * TS, open = c.open, pulse = !open && c.known ? 0.5 + 0.5 * Math.sin(tm * 3 + c.tx) : 0;
@@ -798,7 +819,7 @@
     return cv;
   }
   function drawRoofs(ctx, game, dt) {
-    const cabs = game.map.cabins;
+    const cabs = game.map.shack ? game.map.cabins.concat([{ x: game.map.shack.x, y: game.map.shack.y, w: game.map.shack.w, h: game.map.shack.h, id: 'shack' }]) : game.map.cabins;
     if (!cabs || !cabs.length) return;
     if (!R.roof) R.roof = {};
     const pl = game.pl;
@@ -949,6 +970,11 @@
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
     for (const l of game.lockers) list.push({ y: l.cy + 0.4, f: () => drawLocker(ctx, l, game, tm) });
     for (const c of game.chests) list.push({ y: c.cy + 0.3, f: () => drawChest(ctx, c, game, tm) });
+    if (game.arsenal) list.push({ y: game.arsenal.cy + 0.3, f: () => drawArsenal(ctx, game.arsenal, game, tm) });
+    for (const tr of game.traps) {
+      const mine = tr.owner === (game.role === 'killer' ? 'k' : 's');
+      if (full || mine || (Math.hypot(pl.x - tr.x, pl.y - tr.y) < 4.2 && game.canSee(pl, tr.x, tr.y)) || tr.victim) list.push({ y: tr.y - 0.1, f: () => drawTrap(ctx, tr, game, tm) });
+    }
     if (game.phone) list.push({ y: game.phone.cy, f: () => drawPhone(ctx, game.phone, game, tm) });
     if (game.phone && game.phone.state === 'here') list.push({ y: ((game.map.parking || { y: 5 }).y + 5), f: () => drawPolice(ctx, game.phone, game, tm) });
     for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
@@ -978,10 +1004,10 @@
       const it = game.pInteract;
       if (it && !(game.role === 'survivor' && game.s.acting)) {
         const label = { gen: 'SEGURE E', item: 'SEGURE E: PEGAR', door: 'SEGURE E: ABRIR PORTA', window: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', smash: 'E: QUEBRAR JANELA', kick: 'E: CHUTAR',
-          phone: 'SEGURE E: LIGAR PARA A POLÍCIA', hide: 'SEGURE E: ESCONDER-SE', chest: 'SEGURE E: ABRIR BAÚ', locker: 'E: ABRIR ARMÁRIO', install: 'SEGURE E: INSTALAR', start: it.obj.kind === 'boat' ? 'SEGURE E: EMPURRAR' : 'SEGURE E: LIGAR O MOTOR', board: 'SEGURE E: ENTRAR', sabotage: 'E: SABOTAR' }[it.type];
+          phone: 'SEGURE E: LIGAR PARA A POLÍCIA', hide: 'SEGURE E: ESCONDER-SE', chest: 'SEGURE E: ABRIR BAÚ', disarm: ka ? 'E: DESARMAR' : 'SEGURE E: DESARMAR', free: 'SEGURE E: SOLTAR COLEGA', arsenal: 'E: PEGAR ARMADILHA', locker: 'E: ABRIR ARMÁRIO', install: 'SEGURE E: INSTALAR', start: it.obj.kind === 'boat' ? 'SEGURE E: EMPURRAR' : 'SEGURE E: LIGAR O MOTOR', board: 'SEGURE E: ENTRAR', sabotage: 'E: SABOTAR' }[it.type];
         const bad = it.type === 'break' || it.type === 'kick' || it.type === 'smash' || it.type === 'sabotage' || it.type === 'locker';
-        const lift = it.obj.range ? 34 : it.type === 'gen' ? 14 : it.type === 'phone' ? 22 : 18;
-        text(ctx, label, it.obj.cx * TS, it.obj.cy * TS - lift + bob, bad ? '#ff9d5c' : '#7dffa0', { align: 'c' });
+        const lift = it.obj.range ? 34 : it.type === 'gen' ? 14 : it.type === 'phone' ? 22 : 18, ox2 = it.obj.cx === undefined ? it.obj.x : it.obj.cx, oy2 = it.obj.cy === undefined ? it.obj.y : it.obj.cy;
+        text(ctx, label, ox2 * TS, oy2 * TS - lift + bob, bad ? '#ff9d5c' : '#7dffa0', { align: 'c' });
       }
     }
     // textos flutuantes
@@ -1064,6 +1090,7 @@
       const ey = ly;
       text(ctx, 'ESPREITA', 4, ey, k.stealth ? '#9bd3f0' : '#8a8a99');
       px(ctx, '#2a2a33', 52, ey + 1, 30, 4); px(ctx, k.stealth ? '#9bd3f0' : (k.energy < 0.15 ? '#ff9d5c' : '#5d7a8a'), 53, ey + 2, Math.round(28 * k.energy), 2);
+      text(ctx, 'ARMADILHAS ' + k.traps + '/' + game.cfg.K_TRAPS, 4, ey + 10, k.traps ? '#ffd23f' : '#6f6f7c');
     }
     const gd = game.door.powered;
     const ph = game.phone;
