@@ -38,9 +38,10 @@ Princípios herdados do protótipo anterior:
 | 12.2 | **Playtest 2b** | Botões claros (tecla em cada botão, legenda da ação, dica do skill check), tela COMO JOGAR, marcador "você" no minimapa deixa de ser vermelho, correção da saída do armário, armário redesenhado. |
 | 12.3 | **Edição Luz (HD)** | Variante opcional (`python3 tools/build-single.py saida.html --hd` ou `?hd` na URL): caminho 1 da 10.10 (mesma grade de 16 px, mais luz). A versão padrão não muda. |
 | 12.4 | **Playtest 3** | Visão só pela lanterna (raio ambiente 3) + telhados nas cabanas, som por distância, armário/veículo sempre desenhados, mapa que muda a cada partida (portão, praça, estacionamento, telefone, lago a leste/oeste, cais, carro, boat), ESPAÇO pula, SHIFT corre, assassino-IA desiste de loops. |
+| 12.5 | **Cansaço da perseguição + folhas-molde** | Anti-loop por mecânica (cansaço → tropeço) em vez de a IA desistir; ferramenta que exporta folhas-molde de textura (`tools/export-sheets.js`) para repintura. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
-Marcos de qualidade: **258 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
+Marcos de qualidade: **262 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
 
 ## 3. Arquitetura (resumo)
 
@@ -468,7 +469,7 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 | Bots com sentidos humanos, exploração, rotas | ✅ (sem trapaças de visão; exceção declarada do assassino-IA) |
 | Tempos maiores (fusível 45 s, peças 35/40 s, polícia 150 s) | ✅ |
 | Dificuldade, telemetria, lobby com modos | ✅ |
-| Testes automáticos | ✅ 258 checagens, ~30 s |
+| Testes automáticos | ✅ 262 checagens, ~30 s |
 | Matar o assassino | ⛔ fora da v0.1 (protótipo à parte) |
 
 **Como jogar uma partida típica (bots + você, sobrevivente):** abra o mapa (M), vá às cabanas, segure E nos geradores (acerte os skill checks com Espaço), pegue o rádio se vir um (Q liga), se achar peças leve-as ao carro (estacionamento) ou ao barco (cais). Com 5 geradores a energia liga: ligue no telefone, resista ~2,5 min e corra para o portão quando a polícia abrir.
@@ -535,6 +536,16 @@ Pedido: uma versão **sem mexer na atual**, para ver o estilo da imagem de refer
 **Medidas após a visão menor:** assassino-IA vs "jogador-bot": 3/16 fugas, partida média 218 s (antes 4/16 e 292 s): o assassino-IA ficou um pouco mais forte porque os bots notam o perigo mais tarde. Equipe de bots sem assassino: 474–1036 s (antes 318–471 s, porque exploram com vista menor). A calibrar com gente.
 
 **Impasses:** 62) o assassino de teste ("justo") travava num laço de chutar gerador enquanto um sobrevivente consertava a 3 tiles (artefato do robô de teste, não do jogo); 63) a regra de espaço "pular ou derrubar": só marca `jump` se não houver pallet derrubável (`findDroppable`), para o mesmo botão não fazer as duas coisas.
+
+### 11.11 Anti-loop por mecânica: cansaço da perseguição
+
+**Problema (playtest):** dava para rodar o assassino em círculo em pallet/janela por 1 minuto; "um jogador rei do loop acaba com o assassino só correndo". Desistência da IA (tentada antes) foi **removida**: a solução tem de ser uma mecânica.
+**Regra:** enquanto o sobrevivente **corre** com o assassino a menos de 10 tiles e com linha de vista, acumula `chaseT`. Depois de `CHASE_SAFE` = 9 s, a cada segundo há uma chance de **tropeçar** = `TRIP_BASE` 4% + 1,4% por segundo acima dos 9 s. Tropeçar: 1,3 s a 50% da velocidade, barulho, sensação de queda; depois o cansaço volta a 60% do limite. **Alívio:** derrubar um pallet −9 s; pular janela/pallet −4 s; andar, parar, esconder-se ou perder o assassino de vista diminui 1,5× mais rápido que sobe. HUD: barra **CANSAÇO** (verde → amarela → vermelha).
+**Resultado medido (12 sementes, assassino colado a 4 tiles em campo aberto):** o tropeço vem em média aos **18 s** (nunca antes de 9 s; em 45 s ocorre em 12/12). Andando, nunca. Ou seja, dá tempo de usar pallet e janela, mas não dá para rodar para sempre; quem precisa de distância tem de usar o mapa. Vale para bots (paridade) e para os dois papéis.
+**Impasse 64:** `TRIP_T` já existia (tropeço do assassino) e meu novo valor sobrescrevia o antigo na tabela; renomeei para `SURV_TRIP_T`/`SURV_TRIP_SLOW`.
+
+### 11.12 Folhas-molde de textura (teste a 16 px)
+`node tools/export-sheets.js` gera em `assets/template/` (também em `assets/folhas-molde.zip`): 4 sobreviventes, assassino, chão/árvores, móveis, veículos e itens, **ampliados 8×** sobre fundo magenta (= transparente), mais `_com_grade.png` (só para conferir nomes) e `manifest.json` com o retângulo de cada célula. Ver `assets/template/LEIA-ME.md`. Próximo passo: o **importador de atlas** (carregar a folha repintada, com o desenho por código como reserva).
 
 ### 10.11 Textura/skins detalhadas (a imagem refeita pelo GPT) — para discussão, nada implementado
 A imagem mostra o **nosso próprio screenshot repintado**: terra com pedras e gravetos, grama em tufos, árvores com tronco e raízes, personagem com volume e luz de lanterna granulada. Isso **não é "só aplicar"**: nosso jogo desenha tudo por código com 16×16 px; aquele nível de detalhe vem de **arte pronta** (pintada ou gerada). Caminho prático proposto:

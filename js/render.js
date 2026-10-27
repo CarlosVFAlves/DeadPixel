@@ -23,7 +23,7 @@
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS, r = hash(x, y);
-        const fl = t[i] === 0 || t[i] === 3 || t[i] === 6 || t[i] === 7 || t[i] === 8 || t[i] === 9;
+        const fl = t[i] === 0 || t[i] === 3 || (t[i] === 6 && !game.map.bare) || t[i] === 7 || t[i] === 8 || t[i] === 9;
         const gk = ground ? ground[i] : 0;
         if (indoor[i] && fl) {
           // piso de tábuas
@@ -228,6 +228,7 @@
       else if (kind === 'run') { lift = arc * 6; lean = arc * 1.5; tuck = p > 0.25 && p < 0.75; }
       else { lift = arc * 5; tuck = p > 0.3 && p < 0.7; }
     }
+    if (s.tripT > 0 && !s.vault) { tuck = true; lean = 2; vx = Math.cos(s.face); vy = Math.sin(s.face); }
     if (s.invuln > 0 && !s.vault && Math.floor(tm * 20) % 2) return;
     const id = s.id % 4, hurt = s.hp < game.hpMax;
     const step = Math.floor(s.walk) % 2;
@@ -946,6 +947,10 @@
       const vs = game.vehicles.map((v) => (v.kind === 'car' ? 'CARRO ' : 'BARCO ') + (v.state === 'gone' || v.state === 'leaving' ? 'SAIU' : v.state === 'started' ? 'LIGADO' : v.state === 'ready' ? 'PRONTO' : v.order.length + '/' + v.need.length));
       text(ctx, vs.join(W < 260 ? ' ' : '  '), 4, ly, '#cfd3e0'); ly += 10;
     }
+    if (!ka && s.chaseT > 2) {                                                 // cansaço da perseguição: barra que enche; no vermelho o tropeço é questão de tempo
+      const f = Math.min(1, s.chaseT / (game.cfg.CHASE_SAFE + 12)), col = s.chaseT < game.cfg.CHASE_SAFE ? '#7dffa0' : s.chaseT < game.cfg.CHASE_SAFE + 6 ? '#ffd23f' : '#ff4d4d';
+      text(ctx, 'CANSAÇO', 4, ly, col); px(ctx, '#2a2a33', 50, ly + 1, 30, 4); px(ctx, col, 51, ly + 2, Math.round(28 * f), 2); ly += 10;
+    }
     if (!ka && s.item && s.item.part) { text(ctx, 'LEVANDO: ' + game.partName(s.item), 4, ly + (s.tool ? 10 : 0), '#9bd3f0'); }
     if (!ka && s.tool) {                                                       // rádio: 3 faixas de proximidade + pilha
       const on = s.tool.on, col = ['#4d4d59', '#7dffa0', '#ffd23f', '#ff4d4d'][on ? s.det : 0];
@@ -1198,7 +1203,7 @@
   // cx,cy = pés; sc = ampliação inteira; o = { id, face, moving, tm, alpha, hp, human }
   function uiSurvivor(ctx, cx, cy, sc, o) {
     o = o || {};
-    const fake = { x: 0, y: -5 / TS, face: o.face === undefined ? Math.PI / 2 : o.face, hp: o.hp || 2, invuln: 0, vault: null, id: o.id || 0, walk: o.walk || 0, moving: !!o.moving, human: !!o.human };
+    const fake = { x: 0, y: -5 / TS, face: o.face === undefined ? Math.PI / 2 : o.face, hp: o.hp || 2, invuln: 0, vault: o.vault || null, tripT: o.tripT || 0, id: o.id || 0, walk: o.walk || 0, moving: !!o.moving, human: !!o.human };
     ctx.save(); ctx.translate(Math.round(cx), Math.round(cy)); ctx.scale(sc, sc);
     ctx.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
     drawSurvivor(ctx, fake, UI_GAME, o.tm || 0);
@@ -1215,5 +1220,7 @@
 
   function reset() { R.staticCv = null; R.seen = null; R.mapCv = null; R.roof = null; }
 
-  DP.render = { uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawMini, miniRect, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
+  // peças internas expostas só para a ferramenta que exporta as folhas-molde de textura (tools/export-sheets.js)
+  const internals = { buildStatic, drawLocker, drawGen, drawPhone, drawVehicle, drawPolice, drawPalletUp, drawPalletFlat, drawBroken, drawWindow, drawItem, roofCanvas, hash, TS };
+  DP.render = { internals, uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawMini, miniRect, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
 })(typeof window !== 'undefined' ? window : globalThis);

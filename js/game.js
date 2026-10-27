@@ -75,7 +75,9 @@
 
     // tempos base (s) das tarefas de rota; multiplicados pela dificuldade (ver createGame)
     ROUTES: { fuse: 45, door: 3, phone: 30, policeEta: 150, policeWindow: 120, carPart: 35, carStart: 10, boatPart: 40, boatStart: 15, leaveWait: 10 },
-    LOOP_GIVEUP: 35, LOOP_IGNORE: 20,   // assassino-IA: após 35 s correndo atrás do mesmo sobrevivente sem acertar, ignora-o por 20 s
+    // cansaço da perseguição (anti-loop): correr com o assassino colado acumula cansaço; depois de CHASE_SAFE s o risco de TROPEÇAR cresce rápido
+    CHASE_SAFE: 9, TRIP_BASE: 0.04, TRIP_RAMP: 0.014, SURV_TRIP_T: 1.3, SURV_TRIP_SLOW: 0.5, CHASE_CLOSE: 10,
+    CHASE_PALLET: 9, CHASE_VAULT: 4,   // um pallet que acerta o assassino alivia 9 s de cansaço; pular janela/pallet alivia 4 s
     HEAR_NEAR: 5, HEAR_FAR: 30,   // som: volume cheio até 5 tiles, some aos 30
     HIDE_T: 0.6, LOCKER_OPEN_T: 1.1, LOCKER_RANGE: 1.5,   // armários: entrar (segurar), o assassino abre em ~1 s
     SABOTAGE_T: 2.5,         // assassino: tempo para sabotar um veículo (tira a última peça)
@@ -156,7 +158,7 @@
       const human = role === 'survivor' && i === 0;
       g.survivors.push({
         id: i, x: sp.x, y: sp.y, face: Math.PI / 2,
-        hp: map.kind === 'camp' ? CFG.HP_CAMP : CFG.HP, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
+        hp: map.kind === 'camp' ? CFG.HP_CAMP : CFG.HP, chaseT: 0, tripT: 0, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
         noise: 0, acting: null, skill: null, skillCD: 4 + i * 1.7, tick: 0,
         dead: false, escaped: false, near: null, interact: null, human, item: null, tool: null, pickP: 0, pickFor: null, det: 0,
         ai: human ? null : makeAI(i), usedWin: 0
@@ -474,7 +476,7 @@
       if (g.over || s.vault) return false;
       const p = findDroppable();
       if (!p) return false;
-      p.state = 'falling'; p.t = 0; p.dir = dropDir(p);
+      p.state = 'falling'; p.t = 0; p.dir = dropDir(p); s.chaseT = Math.max(0, s.chaseT - CFG.CHASE_PALLET);
       g.stats.drops++;
       sfx('creak', pan(p.cx, p.cy));
       return true;
@@ -570,7 +572,7 @@
       g.shake = 6; g.flash = 0.3;
       sfx('hit', pan(s.x, s.y));
       popup(role === 'killer' ? 'ACERTOU!' : '-1', s.x, s.y - 1.4, role === 'killer' ? '#ffd23f' : '#ff4d4d');
-      k.aware = 'hunt'; k.lost = 0; k.chaseT = 0;
+      k.aware = 'hunt'; k.lost = 0;
       if (training) return;
       s.hp--;
       if (s.hp <= 0) killSurvivor(s);
@@ -836,7 +838,7 @@
 
     // ---------- pular: pallet caído e janelas ----------
     function startVault(v) {
-      s.vault = v; s.jumpT = 0;
+      s.vault = v; s.jumpT = 0; s.chaseT = Math.max(0, s.chaseT - CFG.CHASE_VAULT);
       g.stats.vaults++;
       sfx(v.kind === 'crash' ? 'glass' : 'vault', pan(s.x, s.y));
     }
@@ -917,6 +919,7 @@
       s.burst = Math.max(0, s.burst - dt);
       s.vaultCD = Math.max(0, s.vaultCD - dt);
       s.jumpT = Math.max(0, (s.jumpT || 0) - dt);
+      s.tripT = Math.max(0, s.tripT - dt);
       if (inp.jump) s.jumpT = 0.3;                                       // ESPAÇO: pular (vale por 0,3 s, para apertar um pouco antes de chegar)
       if (s.vault) { advanceVault(dt); return; }
       let ax = inp.ax || 0, ay = inp.ay || 0;
@@ -932,13 +935,20 @@
       }
       if (s.moving) {
         s.noise = walkMode ? CFG.NOISE_WALK : CFG.NOISE_MOVE;
-        const sp = CFG.RUN * (s.burst > 0 ? CFG.BURST : 1) * (walkMode ? CFG.WALK : 1);
+        // cansaço da perseguição: correndo com o assassino colado, o risco de tropeçar sobe com o tempo (pallet/janela dão alívio)
+        const close = Math.hypot(k.x - s.x, k.y - s.y) < CFG.CHASE_CLOSE && k.state !== 'intro' && k.state !== 'stun' && k.state !== 'stumble' && hasLOS(k, s);
+        s.chaseT = close && !walkMode ? s.chaseT + dt : Math.max(0, s.chaseT - dt * 1.5);
+        if (s.chaseT > CFG.CHASE_SAFE && s.tripT <= 0 && rnd() < (CFG.TRIP_BASE + (s.chaseT - CFG.CHASE_SAFE) * CFG.TRIP_RAMP) * dt) {
+          s.tripT = CFG.SURV_TRIP_T; s.chaseT = CFG.CHASE_SAFE * 0.6; g.stats.trips = (g.stats.trips || 0) + 1;
+          sfx('trip', pan(s.x, s.y)); popup('TROPEÇOU!', s.x, s.y - 1.5, '#ff9d5c'); dust(s.x, s.y + 0.3, 6, '#8b7355'); s.noise = CFG.NOISE_MOVE * 1.6;
+        }
+        const sp = CFG.RUN * (s.burst > 0 ? CFG.BURST : 1) * (walkMode ? CFG.WALK : 1) * (s.tripT > 0 ? CFG.SURV_TRIP_SLOW : 1);
         moveBy(s, ax * sp * dt, ay * sp * dt, CFG.R_S);
         s.face = Math.atan2(ay, ax);
         s.walk += dt * (walkMode ? 7 : 11);
         if (!s.vaultCD) tryVault(ax, ay, len, walkMode, !s.human || s.jumpT > 0);
       } else {
-        s.walk = 0;
+        s.walk = 0; s.chaseT = Math.max(0, s.chaseT - dt * 1.5);
         if (s.human && s.jumpT > 0 && !s.vaultCD) tryVault(Math.cos(s.face), Math.sin(s.face), 1, true, true);   // parado de frente para a janela/pallet: pula
       }
       // porta principal aberta: quem chega nela escapa
@@ -1186,14 +1196,10 @@
       for (const v of g.survivors) {
         if (!alive(v) || v.hidden) continue;
         const vd = Math.hypot(v.x - k.x, v.y - k.y);
-        if (v.id === k.ignoreId && g.time < k.ignoreUntil && vd > 3) continue;       // cansou de rodar atrás desse: procura outro por um tempo
         if (canSee(k.x, k.y, k.face, true, v.x, v.y, kvis)) { if (vd < sd) { sd = vd; seen = v; } }
         else if (vd < v.noise && vd < hd) { hd = vd; heard = v; }
       }
       k.seenNow = !!seen;
-      // anti-loop: perseguir o mesmo alvo por muito tempo sem acertar (pallets e janelas em círculo) faz o assassino-IA desistir dele por um tempo
-      if (seen && k.aware === 'hunt') k.chaseT = (k.chaseT || 0) + dt; else k.chaseT = Math.max(0, (k.chaseT || 0) - dt * 0.5);
-      if (k.chaseT > CFG.LOOP_GIVEUP) { k.ignoreId = seen ? seen.id : -1; k.ignoreUntil = g.time + CFG.LOOP_IGNORE; k.chaseT = 0; k.aware = 'patrol'; k.goal = null; k.target = null; seen = null; k.seenNow = false; popup('...', k.x, k.y - 1.6, '#8a8a99'); }
       if (seen) {
         k.target = seen;
         k.aware = 'hunt'; k.lost = 0;

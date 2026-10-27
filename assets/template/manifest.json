@@ -1,0 +1,2759 @@
+{
+ "survivor_0_azul": {
+  "width": 768,
+  "height": 2048,
+  "scale": 8,
+  "logicalTile": 16,
+  "cells": [
+   {
+    "name": "parado / baixo",
+    "x": 0,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 0,
+    "pose": "parado",
+    "dir": "baixo"
+   },
+   {
+    "name": "parado / esquerda",
+    "x": 192,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 1,
+    "pose": "parado",
+    "dir": "esquerda"
+   },
+   {
+    "name": "parado / direita",
+    "x": 384,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 2,
+    "pose": "parado",
+    "dir": "direita"
+   },
+   {
+    "name": "parado / cima",
+    "x": 576,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 3,
+    "pose": "parado",
+    "dir": "cima"
+   },
+   {
+    "name": "andando A / baixo",
+    "x": 0,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 0,
+    "pose": "andando A",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando A / esquerda",
+    "x": 192,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 1,
+    "pose": "andando A",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando A / direita",
+    "x": 384,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 2,
+    "pose": "andando A",
+    "dir": "direita"
+   },
+   {
+    "name": "andando A / cima",
+    "x": 576,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 3,
+    "pose": "andando A",
+    "dir": "cima"
+   },
+   {
+    "name": "andando B / baixo",
+    "x": 0,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 0,
+    "pose": "andando B",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando B / esquerda",
+    "x": 192,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 1,
+    "pose": "andando B",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando B / direita",
+    "x": 384,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 2,
+    "pose": "andando B",
+    "dir": "direita"
+   },
+   {
+    "name": "andando B / cima",
+    "x": 576,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 3,
+    "pose": "andando B",
+    "dir": "cima"
+   },
+   {
+    "name": "pulo correndo / baixo",
+    "x": 0,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 0,
+    "pose": "pulo correndo",
+    "dir": "baixo"
+   },
+   {
+    "name": "pulo correndo / esquerda",
+    "x": 192,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 1,
+    "pose": "pulo correndo",
+    "dir": "esquerda"
+   },
+   {
+    "name": "pulo correndo / direita",
+    "x": 384,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 2,
+    "pose": "pulo correndo",
+    "dir": "direita"
+   },
+   {
+    "name": "pulo correndo / cima",
+    "x": 576,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 3,
+    "pose": "pulo correndo",
+    "dir": "cima"
+   },
+   {
+    "name": "pulo andando / baixo",
+    "x": 0,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 0,
+    "pose": "pulo andando",
+    "dir": "baixo"
+   },
+   {
+    "name": "pulo andando / esquerda",
+    "x": 192,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 1,
+    "pose": "pulo andando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "pulo andando / direita",
+    "x": 384,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 2,
+    "pose": "pulo andando",
+    "dir": "direita"
+   },
+   {
+    "name": "pulo andando / cima",
+    "x": 576,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 3,
+    "pose": "pulo andando",
+    "dir": "cima"
+   },
+   {
+    "name": "atravessa vidro / baixo",
+    "x": 0,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 0,
+    "pose": "atravessa vidro",
+    "dir": "baixo"
+   },
+   {
+    "name": "atravessa vidro / esquerda",
+    "x": 192,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 1,
+    "pose": "atravessa vidro",
+    "dir": "esquerda"
+   },
+   {
+    "name": "atravessa vidro / direita",
+    "x": 384,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 2,
+    "pose": "atravessa vidro",
+    "dir": "direita"
+   },
+   {
+    "name": "atravessa vidro / cima",
+    "x": 576,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 3,
+    "pose": "atravessa vidro",
+    "dir": "cima"
+   },
+   {
+    "name": "tropeçando / baixo",
+    "x": 0,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 0,
+    "pose": "tropeçando",
+    "dir": "baixo"
+   },
+   {
+    "name": "tropeçando / esquerda",
+    "x": 192,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 1,
+    "pose": "tropeçando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "tropeçando / direita",
+    "x": 384,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 2,
+    "pose": "tropeçando",
+    "dir": "direita"
+   },
+   {
+    "name": "tropeçando / cima",
+    "x": 576,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 3,
+    "pose": "tropeçando",
+    "dir": "cima"
+   },
+   {
+    "name": "ferido / baixo",
+    "x": 0,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 0,
+    "pose": "ferido",
+    "dir": "baixo"
+   },
+   {
+    "name": "ferido / esquerda",
+    "x": 192,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 1,
+    "pose": "ferido",
+    "dir": "esquerda"
+   },
+   {
+    "name": "ferido / direita",
+    "x": 384,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 2,
+    "pose": "ferido",
+    "dir": "direita"
+   },
+   {
+    "name": "ferido / cima",
+    "x": 576,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 3,
+    "pose": "ferido",
+    "dir": "cima"
+   }
+  ]
+ },
+ "survivor_1_vermelha": {
+  "width": 768,
+  "height": 2048,
+  "scale": 8,
+  "logicalTile": 16,
+  "cells": [
+   {
+    "name": "parado / baixo",
+    "x": 0,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 0,
+    "pose": "parado",
+    "dir": "baixo"
+   },
+   {
+    "name": "parado / esquerda",
+    "x": 192,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 1,
+    "pose": "parado",
+    "dir": "esquerda"
+   },
+   {
+    "name": "parado / direita",
+    "x": 384,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 2,
+    "pose": "parado",
+    "dir": "direita"
+   },
+   {
+    "name": "parado / cima",
+    "x": 576,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 3,
+    "pose": "parado",
+    "dir": "cima"
+   },
+   {
+    "name": "andando A / baixo",
+    "x": 0,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 0,
+    "pose": "andando A",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando A / esquerda",
+    "x": 192,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 1,
+    "pose": "andando A",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando A / direita",
+    "x": 384,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 2,
+    "pose": "andando A",
+    "dir": "direita"
+   },
+   {
+    "name": "andando A / cima",
+    "x": 576,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 3,
+    "pose": "andando A",
+    "dir": "cima"
+   },
+   {
+    "name": "andando B / baixo",
+    "x": 0,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 0,
+    "pose": "andando B",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando B / esquerda",
+    "x": 192,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 1,
+    "pose": "andando B",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando B / direita",
+    "x": 384,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 2,
+    "pose": "andando B",
+    "dir": "direita"
+   },
+   {
+    "name": "andando B / cima",
+    "x": 576,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 3,
+    "pose": "andando B",
+    "dir": "cima"
+   },
+   {
+    "name": "pulo correndo / baixo",
+    "x": 0,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 0,
+    "pose": "pulo correndo",
+    "dir": "baixo"
+   },
+   {
+    "name": "pulo correndo / esquerda",
+    "x": 192,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 1,
+    "pose": "pulo correndo",
+    "dir": "esquerda"
+   },
+   {
+    "name": "pulo correndo / direita",
+    "x": 384,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 2,
+    "pose": "pulo correndo",
+    "dir": "direita"
+   },
+   {
+    "name": "pulo correndo / cima",
+    "x": 576,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 3,
+    "pose": "pulo correndo",
+    "dir": "cima"
+   },
+   {
+    "name": "pulo andando / baixo",
+    "x": 0,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 0,
+    "pose": "pulo andando",
+    "dir": "baixo"
+   },
+   {
+    "name": "pulo andando / esquerda",
+    "x": 192,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 1,
+    "pose": "pulo andando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "pulo andando / direita",
+    "x": 384,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 2,
+    "pose": "pulo andando",
+    "dir": "direita"
+   },
+   {
+    "name": "pulo andando / cima",
+    "x": 576,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 3,
+    "pose": "pulo andando",
+    "dir": "cima"
+   },
+   {
+    "name": "atravessa vidro / baixo",
+    "x": 0,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 0,
+    "pose": "atravessa vidro",
+    "dir": "baixo"
+   },
+   {
+    "name": "atravessa vidro / esquerda",
+    "x": 192,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 1,
+    "pose": "atravessa vidro",
+    "dir": "esquerda"
+   },
+   {
+    "name": "atravessa vidro / direita",
+    "x": 384,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 2,
+    "pose": "atravessa vidro",
+    "dir": "direita"
+   },
+   {
+    "name": "atravessa vidro / cima",
+    "x": 576,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 3,
+    "pose": "atravessa vidro",
+    "dir": "cima"
+   },
+   {
+    "name": "tropeçando / baixo",
+    "x": 0,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 0,
+    "pose": "tropeçando",
+    "dir": "baixo"
+   },
+   {
+    "name": "tropeçando / esquerda",
+    "x": 192,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 1,
+    "pose": "tropeçando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "tropeçando / direita",
+    "x": 384,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 2,
+    "pose": "tropeçando",
+    "dir": "direita"
+   },
+   {
+    "name": "tropeçando / cima",
+    "x": 576,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 3,
+    "pose": "tropeçando",
+    "dir": "cima"
+   },
+   {
+    "name": "ferido / baixo",
+    "x": 0,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 0,
+    "pose": "ferido",
+    "dir": "baixo"
+   },
+   {
+    "name": "ferido / esquerda",
+    "x": 192,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 1,
+    "pose": "ferido",
+    "dir": "esquerda"
+   },
+   {
+    "name": "ferido / direita",
+    "x": 384,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 2,
+    "pose": "ferido",
+    "dir": "direita"
+   },
+   {
+    "name": "ferido / cima",
+    "x": 576,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 3,
+    "pose": "ferido",
+    "dir": "cima"
+   }
+  ]
+ },
+ "survivor_2_verde": {
+  "width": 768,
+  "height": 2048,
+  "scale": 8,
+  "logicalTile": 16,
+  "cells": [
+   {
+    "name": "parado / baixo",
+    "x": 0,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 0,
+    "pose": "parado",
+    "dir": "baixo"
+   },
+   {
+    "name": "parado / esquerda",
+    "x": 192,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 1,
+    "pose": "parado",
+    "dir": "esquerda"
+   },
+   {
+    "name": "parado / direita",
+    "x": 384,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 2,
+    "pose": "parado",
+    "dir": "direita"
+   },
+   {
+    "name": "parado / cima",
+    "x": 576,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 3,
+    "pose": "parado",
+    "dir": "cima"
+   },
+   {
+    "name": "andando A / baixo",
+    "x": 0,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 0,
+    "pose": "andando A",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando A / esquerda",
+    "x": 192,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 1,
+    "pose": "andando A",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando A / direita",
+    "x": 384,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 2,
+    "pose": "andando A",
+    "dir": "direita"
+   },
+   {
+    "name": "andando A / cima",
+    "x": 576,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 3,
+    "pose": "andando A",
+    "dir": "cima"
+   },
+   {
+    "name": "andando B / baixo",
+    "x": 0,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 0,
+    "pose": "andando B",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando B / esquerda",
+    "x": 192,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 1,
+    "pose": "andando B",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando B / direita",
+    "x": 384,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 2,
+    "pose": "andando B",
+    "dir": "direita"
+   },
+   {
+    "name": "andando B / cima",
+    "x": 576,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 3,
+    "pose": "andando B",
+    "dir": "cima"
+   },
+   {
+    "name": "pulo correndo / baixo",
+    "x": 0,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 0,
+    "pose": "pulo correndo",
+    "dir": "baixo"
+   },
+   {
+    "name": "pulo correndo / esquerda",
+    "x": 192,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 1,
+    "pose": "pulo correndo",
+    "dir": "esquerda"
+   },
+   {
+    "name": "pulo correndo / direita",
+    "x": 384,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 2,
+    "pose": "pulo correndo",
+    "dir": "direita"
+   },
+   {
+    "name": "pulo correndo / cima",
+    "x": 576,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 3,
+    "pose": "pulo correndo",
+    "dir": "cima"
+   },
+   {
+    "name": "pulo andando / baixo",
+    "x": 0,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 0,
+    "pose": "pulo andando",
+    "dir": "baixo"
+   },
+   {
+    "name": "pulo andando / esquerda",
+    "x": 192,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 1,
+    "pose": "pulo andando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "pulo andando / direita",
+    "x": 384,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 2,
+    "pose": "pulo andando",
+    "dir": "direita"
+   },
+   {
+    "name": "pulo andando / cima",
+    "x": 576,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 3,
+    "pose": "pulo andando",
+    "dir": "cima"
+   },
+   {
+    "name": "atravessa vidro / baixo",
+    "x": 0,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 0,
+    "pose": "atravessa vidro",
+    "dir": "baixo"
+   },
+   {
+    "name": "atravessa vidro / esquerda",
+    "x": 192,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 1,
+    "pose": "atravessa vidro",
+    "dir": "esquerda"
+   },
+   {
+    "name": "atravessa vidro / direita",
+    "x": 384,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 2,
+    "pose": "atravessa vidro",
+    "dir": "direita"
+   },
+   {
+    "name": "atravessa vidro / cima",
+    "x": 576,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 3,
+    "pose": "atravessa vidro",
+    "dir": "cima"
+   },
+   {
+    "name": "tropeçando / baixo",
+    "x": 0,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 0,
+    "pose": "tropeçando",
+    "dir": "baixo"
+   },
+   {
+    "name": "tropeçando / esquerda",
+    "x": 192,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 1,
+    "pose": "tropeçando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "tropeçando / direita",
+    "x": 384,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 2,
+    "pose": "tropeçando",
+    "dir": "direita"
+   },
+   {
+    "name": "tropeçando / cima",
+    "x": 576,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 3,
+    "pose": "tropeçando",
+    "dir": "cima"
+   },
+   {
+    "name": "ferido / baixo",
+    "x": 0,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 0,
+    "pose": "ferido",
+    "dir": "baixo"
+   },
+   {
+    "name": "ferido / esquerda",
+    "x": 192,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 1,
+    "pose": "ferido",
+    "dir": "esquerda"
+   },
+   {
+    "name": "ferido / direita",
+    "x": 384,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 2,
+    "pose": "ferido",
+    "dir": "direita"
+   },
+   {
+    "name": "ferido / cima",
+    "x": 576,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 3,
+    "pose": "ferido",
+    "dir": "cima"
+   }
+  ]
+ },
+ "survivor_3_amarela": {
+  "width": 768,
+  "height": 2048,
+  "scale": 8,
+  "logicalTile": 16,
+  "cells": [
+   {
+    "name": "parado / baixo",
+    "x": 0,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 0,
+    "pose": "parado",
+    "dir": "baixo"
+   },
+   {
+    "name": "parado / esquerda",
+    "x": 192,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 1,
+    "pose": "parado",
+    "dir": "esquerda"
+   },
+   {
+    "name": "parado / direita",
+    "x": 384,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 2,
+    "pose": "parado",
+    "dir": "direita"
+   },
+   {
+    "name": "parado / cima",
+    "x": 576,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 3,
+    "pose": "parado",
+    "dir": "cima"
+   },
+   {
+    "name": "andando A / baixo",
+    "x": 0,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 0,
+    "pose": "andando A",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando A / esquerda",
+    "x": 192,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 1,
+    "pose": "andando A",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando A / direita",
+    "x": 384,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 2,
+    "pose": "andando A",
+    "dir": "direita"
+   },
+   {
+    "name": "andando A / cima",
+    "x": 576,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 3,
+    "pose": "andando A",
+    "dir": "cima"
+   },
+   {
+    "name": "andando B / baixo",
+    "x": 0,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 0,
+    "pose": "andando B",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando B / esquerda",
+    "x": 192,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 1,
+    "pose": "andando B",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando B / direita",
+    "x": 384,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 2,
+    "pose": "andando B",
+    "dir": "direita"
+   },
+   {
+    "name": "andando B / cima",
+    "x": 576,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 3,
+    "pose": "andando B",
+    "dir": "cima"
+   },
+   {
+    "name": "pulo correndo / baixo",
+    "x": 0,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 0,
+    "pose": "pulo correndo",
+    "dir": "baixo"
+   },
+   {
+    "name": "pulo correndo / esquerda",
+    "x": 192,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 1,
+    "pose": "pulo correndo",
+    "dir": "esquerda"
+   },
+   {
+    "name": "pulo correndo / direita",
+    "x": 384,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 2,
+    "pose": "pulo correndo",
+    "dir": "direita"
+   },
+   {
+    "name": "pulo correndo / cima",
+    "x": 576,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 3,
+    "pose": "pulo correndo",
+    "dir": "cima"
+   },
+   {
+    "name": "pulo andando / baixo",
+    "x": 0,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 0,
+    "pose": "pulo andando",
+    "dir": "baixo"
+   },
+   {
+    "name": "pulo andando / esquerda",
+    "x": 192,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 1,
+    "pose": "pulo andando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "pulo andando / direita",
+    "x": 384,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 2,
+    "pose": "pulo andando",
+    "dir": "direita"
+   },
+   {
+    "name": "pulo andando / cima",
+    "x": 576,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 3,
+    "pose": "pulo andando",
+    "dir": "cima"
+   },
+   {
+    "name": "atravessa vidro / baixo",
+    "x": 0,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 0,
+    "pose": "atravessa vidro",
+    "dir": "baixo"
+   },
+   {
+    "name": "atravessa vidro / esquerda",
+    "x": 192,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 1,
+    "pose": "atravessa vidro",
+    "dir": "esquerda"
+   },
+   {
+    "name": "atravessa vidro / direita",
+    "x": 384,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 2,
+    "pose": "atravessa vidro",
+    "dir": "direita"
+   },
+   {
+    "name": "atravessa vidro / cima",
+    "x": 576,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 3,
+    "pose": "atravessa vidro",
+    "dir": "cima"
+   },
+   {
+    "name": "tropeçando / baixo",
+    "x": 0,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 0,
+    "pose": "tropeçando",
+    "dir": "baixo"
+   },
+   {
+    "name": "tropeçando / esquerda",
+    "x": 192,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 1,
+    "pose": "tropeçando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "tropeçando / direita",
+    "x": 384,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 2,
+    "pose": "tropeçando",
+    "dir": "direita"
+   },
+   {
+    "name": "tropeçando / cima",
+    "x": 576,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 3,
+    "pose": "tropeçando",
+    "dir": "cima"
+   },
+   {
+    "name": "ferido / baixo",
+    "x": 0,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 0,
+    "pose": "ferido",
+    "dir": "baixo"
+   },
+   {
+    "name": "ferido / esquerda",
+    "x": 192,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 1,
+    "pose": "ferido",
+    "dir": "esquerda"
+   },
+   {
+    "name": "ferido / direita",
+    "x": 384,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 2,
+    "pose": "ferido",
+    "dir": "direita"
+   },
+   {
+    "name": "ferido / cima",
+    "x": 576,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 3,
+    "pose": "ferido",
+    "dir": "cima"
+   }
+  ]
+ },
+ "killer": {
+  "width": 768,
+  "height": 2048,
+  "scale": 8,
+  "logicalTile": 16,
+  "cells": [
+   {
+    "name": "parado / baixo",
+    "x": 0,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 0,
+    "pose": "parado",
+    "dir": "baixo"
+   },
+   {
+    "name": "parado / esquerda",
+    "x": 192,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 1,
+    "pose": "parado",
+    "dir": "esquerda"
+   },
+   {
+    "name": "parado / direita",
+    "x": 384,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 2,
+    "pose": "parado",
+    "dir": "direita"
+   },
+   {
+    "name": "parado / cima",
+    "x": 576,
+    "y": 0,
+    "w": 192,
+    "h": 256,
+    "row": 0,
+    "col": 3,
+    "pose": "parado",
+    "dir": "cima"
+   },
+   {
+    "name": "andando A / baixo",
+    "x": 0,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 0,
+    "pose": "andando A",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando A / esquerda",
+    "x": 192,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 1,
+    "pose": "andando A",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando A / direita",
+    "x": 384,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 2,
+    "pose": "andando A",
+    "dir": "direita"
+   },
+   {
+    "name": "andando A / cima",
+    "x": 576,
+    "y": 256,
+    "w": 192,
+    "h": 256,
+    "row": 1,
+    "col": 3,
+    "pose": "andando A",
+    "dir": "cima"
+   },
+   {
+    "name": "andando B / baixo",
+    "x": 0,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 0,
+    "pose": "andando B",
+    "dir": "baixo"
+   },
+   {
+    "name": "andando B / esquerda",
+    "x": 192,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 1,
+    "pose": "andando B",
+    "dir": "esquerda"
+   },
+   {
+    "name": "andando B / direita",
+    "x": 384,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 2,
+    "pose": "andando B",
+    "dir": "direita"
+   },
+   {
+    "name": "andando B / cima",
+    "x": 576,
+    "y": 512,
+    "w": 192,
+    "h": 256,
+    "row": 2,
+    "col": 3,
+    "pose": "andando B",
+    "dir": "cima"
+   },
+   {
+    "name": "preparando golpe / baixo",
+    "x": 0,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 0,
+    "pose": "preparando golpe",
+    "dir": "baixo"
+   },
+   {
+    "name": "preparando golpe / esquerda",
+    "x": 192,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 1,
+    "pose": "preparando golpe",
+    "dir": "esquerda"
+   },
+   {
+    "name": "preparando golpe / direita",
+    "x": 384,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 2,
+    "pose": "preparando golpe",
+    "dir": "direita"
+   },
+   {
+    "name": "preparando golpe / cima",
+    "x": 576,
+    "y": 768,
+    "w": 192,
+    "h": 256,
+    "row": 3,
+    "col": 3,
+    "pose": "preparando golpe",
+    "dir": "cima"
+   },
+   {
+    "name": "golpe (bote) / baixo",
+    "x": 0,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 0,
+    "pose": "golpe (bote)",
+    "dir": "baixo"
+   },
+   {
+    "name": "golpe (bote) / esquerda",
+    "x": 192,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 1,
+    "pose": "golpe (bote)",
+    "dir": "esquerda"
+   },
+   {
+    "name": "golpe (bote) / direita",
+    "x": 384,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 2,
+    "pose": "golpe (bote)",
+    "dir": "direita"
+   },
+   {
+    "name": "golpe (bote) / cima",
+    "x": 576,
+    "y": 1024,
+    "w": 192,
+    "h": 256,
+    "row": 4,
+    "col": 3,
+    "pose": "golpe (bote)",
+    "dir": "cima"
+   },
+   {
+    "name": "atordoado / baixo",
+    "x": 0,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 0,
+    "pose": "atordoado",
+    "dir": "baixo"
+   },
+   {
+    "name": "atordoado / esquerda",
+    "x": 192,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 1,
+    "pose": "atordoado",
+    "dir": "esquerda"
+   },
+   {
+    "name": "atordoado / direita",
+    "x": 384,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 2,
+    "pose": "atordoado",
+    "dir": "direita"
+   },
+   {
+    "name": "atordoado / cima",
+    "x": 576,
+    "y": 1280,
+    "w": 192,
+    "h": 256,
+    "row": 5,
+    "col": 3,
+    "pose": "atordoado",
+    "dir": "cima"
+   },
+   {
+    "name": "cambaleando / baixo",
+    "x": 0,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 0,
+    "pose": "cambaleando",
+    "dir": "baixo"
+   },
+   {
+    "name": "cambaleando / esquerda",
+    "x": 192,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 1,
+    "pose": "cambaleando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "cambaleando / direita",
+    "x": 384,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 2,
+    "pose": "cambaleando",
+    "dir": "direita"
+   },
+   {
+    "name": "cambaleando / cima",
+    "x": 576,
+    "y": 1536,
+    "w": 192,
+    "h": 256,
+    "row": 6,
+    "col": 3,
+    "pose": "cambaleando",
+    "dir": "cima"
+   },
+   {
+    "name": "quebrando / baixo",
+    "x": 0,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 0,
+    "pose": "quebrando",
+    "dir": "baixo"
+   },
+   {
+    "name": "quebrando / esquerda",
+    "x": 192,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 1,
+    "pose": "quebrando",
+    "dir": "esquerda"
+   },
+   {
+    "name": "quebrando / direita",
+    "x": 384,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 2,
+    "pose": "quebrando",
+    "dir": "direita"
+   },
+   {
+    "name": "quebrando / cima",
+    "x": 576,
+    "y": 1792,
+    "w": 192,
+    "h": 256,
+    "row": 7,
+    "col": 3,
+    "pose": "quebrando",
+    "dir": "cima"
+   }
+  ]
+ },
+ "tiles": {
+  "width": 1536,
+  "height": 2048,
+  "scale": 8,
+  "logicalTile": 16,
+  "cells": [
+   {
+    "name": "grama #1",
+    "x": 0,
+    "y": 0,
+    "w": 128,
+    "h": 128,
+    "kind": "grama",
+    "index": 0
+   },
+   {
+    "name": "grama #2",
+    "x": 128,
+    "y": 0,
+    "w": 128,
+    "h": 128,
+    "kind": "grama",
+    "index": 1
+   },
+   {
+    "name": "grama #3",
+    "x": 256,
+    "y": 0,
+    "w": 128,
+    "h": 128,
+    "kind": "grama",
+    "index": 2
+   },
+   {
+    "name": "grama #4",
+    "x": 384,
+    "y": 0,
+    "w": 128,
+    "h": 128,
+    "kind": "grama",
+    "index": 3
+   },
+   {
+    "name": "grama #5",
+    "x": 512,
+    "y": 0,
+    "w": 128,
+    "h": 128,
+    "kind": "grama",
+    "index": 4
+   },
+   {
+    "name": "grama #6",
+    "x": 640,
+    "y": 0,
+    "w": 128,
+    "h": 128,
+    "kind": "grama",
+    "index": 5
+   },
+   {
+    "name": "grama #7",
+    "x": 768,
+    "y": 0,
+    "w": 128,
+    "h": 128,
+    "kind": "grama",
+    "index": 6
+   },
+   {
+    "name": "grama #8",
+    "x": 896,
+    "y": 0,
+    "w": 128,
+    "h": 128,
+    "kind": "grama",
+    "index": 7
+   },
+   {
+    "name": "terra #1",
+    "x": 0,
+    "y": 128,
+    "w": 128,
+    "h": 128,
+    "kind": "terra",
+    "index": 0
+   },
+   {
+    "name": "terra #2",
+    "x": 128,
+    "y": 128,
+    "w": 128,
+    "h": 128,
+    "kind": "terra",
+    "index": 1
+   },
+   {
+    "name": "terra #3",
+    "x": 256,
+    "y": 128,
+    "w": 128,
+    "h": 128,
+    "kind": "terra",
+    "index": 2
+   },
+   {
+    "name": "terra #4",
+    "x": 384,
+    "y": 128,
+    "w": 128,
+    "h": 128,
+    "kind": "terra",
+    "index": 3
+   },
+   {
+    "name": "terra #5",
+    "x": 512,
+    "y": 128,
+    "w": 128,
+    "h": 128,
+    "kind": "terra",
+    "index": 4
+   },
+   {
+    "name": "terra #6",
+    "x": 640,
+    "y": 128,
+    "w": 128,
+    "h": 128,
+    "kind": "terra",
+    "index": 5
+   },
+   {
+    "name": "terra #7",
+    "x": 768,
+    "y": 128,
+    "w": 128,
+    "h": 128,
+    "kind": "terra",
+    "index": 6
+   },
+   {
+    "name": "terra #8",
+    "x": 896,
+    "y": 128,
+    "w": 128,
+    "h": 128,
+    "kind": "terra",
+    "index": 7
+   },
+   {
+    "name": "areia #1",
+    "x": 0,
+    "y": 256,
+    "w": 128,
+    "h": 128,
+    "kind": "areia",
+    "index": 0
+   },
+   {
+    "name": "areia #2",
+    "x": 128,
+    "y": 256,
+    "w": 128,
+    "h": 128,
+    "kind": "areia",
+    "index": 1
+   },
+   {
+    "name": "areia #3",
+    "x": 256,
+    "y": 256,
+    "w": 128,
+    "h": 128,
+    "kind": "areia",
+    "index": 2
+   },
+   {
+    "name": "areia #4",
+    "x": 384,
+    "y": 256,
+    "w": 128,
+    "h": 128,
+    "kind": "areia",
+    "index": 3
+   },
+   {
+    "name": "areia #5",
+    "x": 512,
+    "y": 256,
+    "w": 128,
+    "h": 128,
+    "kind": "areia",
+    "index": 4
+   },
+   {
+    "name": "areia #6",
+    "x": 640,
+    "y": 256,
+    "w": 128,
+    "h": 128,
+    "kind": "areia",
+    "index": 5
+   },
+   {
+    "name": "areia #7",
+    "x": 768,
+    "y": 256,
+    "w": 128,
+    "h": 128,
+    "kind": "areia",
+    "index": 6
+   },
+   {
+    "name": "areia #8",
+    "x": 896,
+    "y": 256,
+    "w": 128,
+    "h": 128,
+    "kind": "areia",
+    "index": 7
+   },
+   {
+    "name": "cascalho #1",
+    "x": 0,
+    "y": 384,
+    "w": 128,
+    "h": 128,
+    "kind": "cascalho",
+    "index": 0
+   },
+   {
+    "name": "cascalho #2",
+    "x": 128,
+    "y": 384,
+    "w": 128,
+    "h": 128,
+    "kind": "cascalho",
+    "index": 1
+   },
+   {
+    "name": "cascalho #3",
+    "x": 256,
+    "y": 384,
+    "w": 128,
+    "h": 128,
+    "kind": "cascalho",
+    "index": 2
+   },
+   {
+    "name": "cascalho #4",
+    "x": 384,
+    "y": 384,
+    "w": 128,
+    "h": 128,
+    "kind": "cascalho",
+    "index": 3
+   },
+   {
+    "name": "cascalho #5",
+    "x": 512,
+    "y": 384,
+    "w": 128,
+    "h": 128,
+    "kind": "cascalho",
+    "index": 4
+   },
+   {
+    "name": "cascalho #6",
+    "x": 640,
+    "y": 384,
+    "w": 128,
+    "h": 128,
+    "kind": "cascalho",
+    "index": 5
+   },
+   {
+    "name": "cascalho #7",
+    "x": 768,
+    "y": 384,
+    "w": 128,
+    "h": 128,
+    "kind": "cascalho",
+    "index": 6
+   },
+   {
+    "name": "cascalho #8",
+    "x": 896,
+    "y": 384,
+    "w": 128,
+    "h": 128,
+    "kind": "cascalho",
+    "index": 7
+   },
+   {
+    "name": "tábua da varanda/cais #1",
+    "x": 0,
+    "y": 512,
+    "w": 128,
+    "h": 128,
+    "kind": "tábua da varanda/cais",
+    "index": 0
+   },
+   {
+    "name": "tábua da varanda/cais #2",
+    "x": 128,
+    "y": 512,
+    "w": 128,
+    "h": 128,
+    "kind": "tábua da varanda/cais",
+    "index": 1
+   },
+   {
+    "name": "tábua da varanda/cais #3",
+    "x": 256,
+    "y": 512,
+    "w": 128,
+    "h": 128,
+    "kind": "tábua da varanda/cais",
+    "index": 2
+   },
+   {
+    "name": "tábua da varanda/cais #4",
+    "x": 384,
+    "y": 512,
+    "w": 128,
+    "h": 128,
+    "kind": "tábua da varanda/cais",
+    "index": 3
+   },
+   {
+    "name": "tábua da varanda/cais #5",
+    "x": 512,
+    "y": 512,
+    "w": 128,
+    "h": 128,
+    "kind": "tábua da varanda/cais",
+    "index": 4
+   },
+   {
+    "name": "tábua da varanda/cais #6",
+    "x": 640,
+    "y": 512,
+    "w": 128,
+    "h": 128,
+    "kind": "tábua da varanda/cais",
+    "index": 5
+   },
+   {
+    "name": "tábua da varanda/cais #7",
+    "x": 768,
+    "y": 512,
+    "w": 128,
+    "h": 128,
+    "kind": "tábua da varanda/cais",
+    "index": 6
+   },
+   {
+    "name": "tábua da varanda/cais #8",
+    "x": 896,
+    "y": 512,
+    "w": 128,
+    "h": 128,
+    "kind": "tábua da varanda/cais",
+    "index": 7
+   },
+   {
+    "name": "piso interno #1",
+    "x": 0,
+    "y": 640,
+    "w": 128,
+    "h": 128,
+    "kind": "piso interno",
+    "index": 0
+   },
+   {
+    "name": "piso interno #2",
+    "x": 128,
+    "y": 640,
+    "w": 128,
+    "h": 128,
+    "kind": "piso interno",
+    "index": 1
+   },
+   {
+    "name": "piso interno #3",
+    "x": 256,
+    "y": 640,
+    "w": 128,
+    "h": 128,
+    "kind": "piso interno",
+    "index": 2
+   },
+   {
+    "name": "piso interno #4",
+    "x": 384,
+    "y": 640,
+    "w": 128,
+    "h": 128,
+    "kind": "piso interno",
+    "index": 3
+   },
+   {
+    "name": "piso interno #5",
+    "x": 512,
+    "y": 640,
+    "w": 128,
+    "h": 128,
+    "kind": "piso interno",
+    "index": 4
+   },
+   {
+    "name": "piso interno #6",
+    "x": 640,
+    "y": 640,
+    "w": 128,
+    "h": 128,
+    "kind": "piso interno",
+    "index": 5
+   },
+   {
+    "name": "piso interno #7",
+    "x": 768,
+    "y": 640,
+    "w": 128,
+    "h": 128,
+    "kind": "piso interno",
+    "index": 6
+   },
+   {
+    "name": "piso interno #8",
+    "x": 896,
+    "y": 640,
+    "w": 128,
+    "h": 128,
+    "kind": "piso interno",
+    "index": 7
+   },
+   {
+    "name": "água #1",
+    "x": 0,
+    "y": 768,
+    "w": 128,
+    "h": 128,
+    "kind": "água",
+    "index": 0
+   },
+   {
+    "name": "água #2",
+    "x": 128,
+    "y": 768,
+    "w": 128,
+    "h": 128,
+    "kind": "água",
+    "index": 1
+   },
+   {
+    "name": "água #3",
+    "x": 256,
+    "y": 768,
+    "w": 128,
+    "h": 128,
+    "kind": "água",
+    "index": 2
+   },
+   {
+    "name": "água #4",
+    "x": 384,
+    "y": 768,
+    "w": 128,
+    "h": 128,
+    "kind": "água",
+    "index": 3
+   },
+   {
+    "name": "água #5",
+    "x": 512,
+    "y": 768,
+    "w": 128,
+    "h": 128,
+    "kind": "água",
+    "index": 4
+   },
+   {
+    "name": "água #6",
+    "x": 640,
+    "y": 768,
+    "w": 128,
+    "h": 128,
+    "kind": "água",
+    "index": 5
+   },
+   {
+    "name": "água #7",
+    "x": 768,
+    "y": 768,
+    "w": 128,
+    "h": 128,
+    "kind": "água",
+    "index": 6
+   },
+   {
+    "name": "água #8",
+    "x": 896,
+    "y": 768,
+    "w": 128,
+    "h": 128,
+    "kind": "água",
+    "index": 7
+   },
+   {
+    "name": "parede de tijolo #1",
+    "x": 0,
+    "y": 896,
+    "w": 128,
+    "h": 128,
+    "kind": "parede de tijolo",
+    "index": 0
+   },
+   {
+    "name": "parede de tijolo #2",
+    "x": 128,
+    "y": 896,
+    "w": 128,
+    "h": 128,
+    "kind": "parede de tijolo",
+    "index": 1
+   },
+   {
+    "name": "parede de tijolo #3",
+    "x": 256,
+    "y": 896,
+    "w": 128,
+    "h": 128,
+    "kind": "parede de tijolo",
+    "index": 2
+   },
+   {
+    "name": "parede de tijolo #4",
+    "x": 384,
+    "y": 896,
+    "w": 128,
+    "h": 128,
+    "kind": "parede de tijolo",
+    "index": 3
+   },
+   {
+    "name": "parede de tijolo #5",
+    "x": 512,
+    "y": 896,
+    "w": 128,
+    "h": 128,
+    "kind": "parede de tijolo",
+    "index": 4
+   },
+   {
+    "name": "parede de tijolo #6",
+    "x": 640,
+    "y": 896,
+    "w": 128,
+    "h": 128,
+    "kind": "parede de tijolo",
+    "index": 5
+   },
+   {
+    "name": "parede de tijolo #7",
+    "x": 768,
+    "y": 896,
+    "w": 128,
+    "h": 128,
+    "kind": "parede de tijolo",
+    "index": 6
+   },
+   {
+    "name": "parede de tijolo #8",
+    "x": 896,
+    "y": 896,
+    "w": 128,
+    "h": 128,
+    "kind": "parede de tijolo",
+    "index": 7
+   },
+   {
+    "name": "árvore #1",
+    "x": 0,
+    "y": 1024,
+    "w": 384,
+    "h": 384,
+    "kind": "árvore",
+    "index": 0
+   },
+   {
+    "name": "árvore #2",
+    "x": 384,
+    "y": 1024,
+    "w": 384,
+    "h": 384,
+    "kind": "árvore",
+    "index": 1
+   },
+   {
+    "name": "árvore #3",
+    "x": 768,
+    "y": 1024,
+    "w": 384,
+    "h": 384,
+    "kind": "árvore",
+    "index": 2
+   },
+   {
+    "name": "árvore #4",
+    "x": 1152,
+    "y": 1024,
+    "w": 384,
+    "h": 384,
+    "kind": "árvore",
+    "index": 3
+   },
+   {
+    "name": "árvore #5",
+    "x": 0,
+    "y": 1408,
+    "w": 384,
+    "h": 384,
+    "kind": "árvore",
+    "index": 4
+   },
+   {
+    "name": "árvore #6",
+    "x": 384,
+    "y": 1408,
+    "w": 384,
+    "h": 384,
+    "kind": "árvore",
+    "index": 5
+   },
+   {
+    "name": "árvore #7",
+    "x": 768,
+    "y": 1408,
+    "w": 384,
+    "h": 384,
+    "kind": "árvore",
+    "index": 6
+   },
+   {
+    "name": "árvore #8",
+    "x": 1152,
+    "y": 1408,
+    "w": 384,
+    "h": 384,
+    "kind": "árvore",
+    "index": 7
+   },
+   {
+    "name": "caixote #1",
+    "x": 0,
+    "y": 1792,
+    "w": 256,
+    "h": 256,
+    "kind": "caixote",
+    "index": 0
+   },
+   {
+    "name": "caixote #2",
+    "x": 256,
+    "y": 1792,
+    "w": 256,
+    "h": 256,
+    "kind": "caixote",
+    "index": 1
+   }
+  ]
+ },
+ "props_moveis": {
+  "width": 1024,
+  "height": 1792,
+  "scale": 8,
+  "logicalTile": 16,
+  "cells": [
+   {
+    "name": "armário fechado, frente para baixo",
+    "x": 0,
+    "y": 0,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "armário aberto, frente para baixo",
+    "x": 256,
+    "y": 0,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "armário fechado, frente para cima",
+    "x": 512,
+    "y": 0,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "armário aberto, frente para cima",
+    "x": 768,
+    "y": 0,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "armário fechado, frente para direita",
+    "x": 0,
+    "y": 256,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "armário aberto, frente para direita",
+    "x": 256,
+    "y": 256,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "armário fechado, frente para esquerda",
+    "x": 512,
+    "y": 256,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "armário aberto, frente para esquerda",
+    "x": 768,
+    "y": 256,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "gerador vazio",
+    "x": 0,
+    "y": 512,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "gerador na metade",
+    "x": 256,
+    "y": 512,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "gerador pronto",
+    "x": 512,
+    "y": 512,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "telefone sem energia",
+    "x": 768,
+    "y": 512,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "telefone pronto",
+    "x": 0,
+    "y": 768,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "telefone chamando",
+    "x": 256,
+    "y": 768,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "pallet de pé (porta horizontal)",
+    "x": 512,
+    "y": 768,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "pallet caído (h)",
+    "x": 768,
+    "y": 768,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "pallet quebrado (h)",
+    "x": 0,
+    "y": 1024,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "janela closed (h)",
+    "x": 256,
+    "y": 1024,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "janela open (h)",
+    "x": 512,
+    "y": 1024,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "janela broken (h)",
+    "x": 768,
+    "y": 1024,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "pallet de pé (porta vertical)",
+    "x": 0,
+    "y": 1280,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "pallet caído (v)",
+    "x": 256,
+    "y": 1280,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "pallet quebrado (v)",
+    "x": 512,
+    "y": 1280,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "janela closed (v)",
+    "x": 768,
+    "y": 1280,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "janela open (v)",
+    "x": 0,
+    "y": 1536,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "janela broken (v)",
+    "x": 256,
+    "y": 1536,
+    "w": 256,
+    "h": 256
+   }
+  ]
+ },
+ "props_veiculos": {
+  "width": 768,
+  "height": 2048,
+  "scale": 8,
+  "logicalTile": 16,
+  "cells": [
+   {
+    "name": "carro (capô aberto, sem peças)",
+    "x": 0,
+    "y": 0,
+    "w": 512,
+    "h": 640
+   },
+   {
+    "name": "carro (ligado)",
+    "x": 0,
+    "y": 640,
+    "w": 512,
+    "h": 640
+   },
+   {
+    "name": "barco (sem peças)",
+    "x": 0,
+    "y": 1280,
+    "w": 640,
+    "h": 384
+   },
+   {
+    "name": "barco (ligado)",
+    "x": 0,
+    "y": 1664,
+    "w": 640,
+    "h": 384
+   }
+  ]
+ },
+ "props_itens": {
+  "width": 1024,
+  "height": 768,
+  "scale": 8,
+  "logicalTile": 16,
+  "cells": [
+   {
+    "name": "item: radio",
+    "x": 0,
+    "y": 0,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "item: battery",
+    "x": 256,
+    "y": 0,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "item: ckey",
+    "x": 512,
+    "y": 0,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "item: bkey",
+    "x": 0,
+    "y": 256,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "item: cfuel",
+    "x": 256,
+    "y": 256,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "item: bfuel",
+    "x": 512,
+    "y": 256,
+    "w": 256,
+    "h": 256
+   },
+   {
+    "name": "item: prop",
+    "x": 0,
+    "y": 512,
+    "w": 256,
+    "h": 256
+   }
+  ]
+ }
+}

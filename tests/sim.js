@@ -1289,13 +1289,36 @@ console.log('som e variedade');
 }
 
 {
-  // assassino-IA desiste de quem o faz girar em círculos (loop de pallet/janela) e procura outro por um tempo
-  const g = DP.createGameAny({ map: 'camp', rng: seeded(71), role: 'survivor', bots: 1, training: true });
-  const v = g.survivors[0], b = g.survivors[1];
-  v.skillCD = 999; b.x = 3; b.y = 3;
-  g.k.state = 'chase'; g.k.aware = 'hunt'; g.k.x = v.x - 6; g.k.y = v.y; g.k.face = 0; g.k.chaseT = 34.9; g.k.lost = 0;
-  runFor(g, 0.5, {});
-  ok(g.k.ignoreId === v.id && g.k.ignoreUntil > g.time + 15, 'depois de ~35 s atrás do mesmo alvo sem acertar, o assassino-IA o ignora por 20 s');
+  // cansaço da perseguição (anti-loop): correr com o assassino colado faz o sobrevivente tropeçar cada vez mais provável
+  const firstTrip = [], walkTrips = [];
+  for (let seed = 1; seed <= 12; seed++) {
+    const g = DP.createGame({ rng: seeded(seed * 13), bots: 0, training: true });
+    const k = g.k; g.s.skillCD = 999;
+    let t1 = -1;
+    for (let i = 0; i < 60 * 45; i++) {
+      g.s.x = 26.5; g.s.y = 5.5; k.x = 22.5; k.y = 5.5; k.state = 'recover'; k.dur = 99; k.t = 0; g.s.vault = null;
+      g.update(1 / 60, { ax: 1, ay: 0 });
+      if (t1 < 0 && g.stats.trips) { t1 = g.time; break; }
+    }
+    firstTrip.push(t1);
+    const w = DP.createGame({ rng: seeded(seed * 13), bots: 0, training: true }); w.s.skillCD = 999;
+    for (let i = 0; i < 60 * 40; i++) { w.s.x = 26.5; w.s.y = 5.5; w.k.x = 22.5; w.k.y = 5.5; w.k.state = 'recover'; w.k.dur = 99; w.k.t = 0; w.update(1 / 60, { ax: 1, ay: 0, walk: true }); }
+    walkTrips.push(w.stats.trips || 0);
+  }
+  const ok1 = firstTrip.every((t) => t < 0 || t > 9), n = firstTrip.filter((t) => t > 0).length, avg = firstTrip.filter((t) => t > 0).reduce((a, b) => a + b, 0) / Math.max(1, n);
+  ok(ok1 && n >= 11, `nunca tropeça antes de ${DP.CFG.CHASE_SAFE} s de perseguição e quase sempre antes de 45 s (${n}/12, em média aos ${avg.toFixed(0)} s)`);
+  ok(avg > 12 && avg < 30, 'o tropeço vem depois de uns 15–25 s de corrida: dá tempo de usar pallet/janela, mas não de rodar para sempre');
+  ok(walkTrips.every((x) => x === 0), 'andando (sem correr) o cansaço não acumula');
+  // alívio: pallet derrubado e janela pulada reduzem o cansaço; tropeçar deixa lento
+  const g = DP.createGame({ rng: seeded(5), bots: 0, training: true });
+  g.s.skillCD = 999; const p = g.pallets.find((q) => q.orient === 'v' && q.tx === 5);
+  g.s.x = p.cx - 0.9; g.s.y = p.cy; g.k.x = p.cx + 2.2; g.k.y = p.cy; g.k.state = 'chase'; g.s.chaseT = 14;
+  g.tryDrop();
+  ok(g.s.chaseT <= 14 - g.cfg.CHASE_PALLET + 0.01, 'derrubar o pallet alivia o cansaço');
+  g.s.tripT = 1; g.s.x = 26.5; g.s.y = 5.5; g.k.x = 2; g.k.y = 2; g.k.state = 'recover'; g.k.dur = 99;
+  const x0 = g.s.x; g.update(1 / 60, { ax: 1, ay: 0 }); const dTrip = g.s.x - x0;
+  g.s.tripT = 0; const x1 = g.s.x; g.update(1 / 60, { ax: 1, ay: 0 }); const dRun = g.s.x - x1;
+  ok(dTrip < dRun * 0.6 && dTrip > 0, 'tropeçado, o sobrevivente anda à metade da velocidade');
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
