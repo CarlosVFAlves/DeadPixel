@@ -214,50 +214,7 @@
   const JK = ['#3d6fb5', '#b5503d', '#3db56f', '#c9a43d'], JL = ['#5b8ad0', '#d0705b', '#5bd08d', '#e0c05b'];
   const JD = ['#2f548a', '#8a3b2b', '#2b8a52', '#9c7e2b'], HAIR = ['#3a2418', '#1c1c1c', '#6b4a22', '#c9b27a'];
 
-  // sprites da Forja (js/forge.js): escolhe animação/quadro pelo estado do jogo
-  function forgeOn() { return !!(DP.forge && DP.forge.on); }
-  function drawForgeSurvivor(ctx, s, game, tm) {
-    const F = DP.forge, hurt = s.hp < game.hpMax;
-    let anim = 'parado', fr = Math.floor(tm * 3) % 4, p = 0;
-    if (s.vault) {
-      const v = s.vault; p = Math.min(1, v.t / v.dur); anim = v.kind === 'walk' ? 'pular_andando' : v.kind === 'crash' ? 'atravessar' : 'pular_correndo';
-      fr = Math.min(4, Math.floor(p * 5));
-    } else if (s.tripT > 0) { anim = 'tropecar'; fr = Math.min(4, Math.floor((1 - s.tripT / 1.3) * 5)); }
-    else if (s.acting && !s.moving) { anim = 'consertar'; fr = Math.floor(tm * 8) % 6; }
-    else if (s.moving) { anim = s.runMode === false ? 'andar' : 'correr'; fr = Math.floor(s.walk) % 6; }
-    else if (hurt) { anim = 'ferido'; fr = Math.floor(tm * 5) % 4; }
-    const g = s.id === 0 && F.mine ? F.mine : F.defaultGenome('survivor', s.id % 4);
-    const sp = F.sprite(g, anim, fr, F.dirIndex(s.face), 16, { hurt, useImp: s.id === 0 });
-    const x0 = Math.round(s.x * TS), y0 = Math.round(s.y * TS) + 5;
-    px(ctx, 'rgba(0,0,0,.4)', x0 - 4, y0 - 1, 8, 2);
-    ctx.drawImage(sp.c, x0 - sp.ax, y0 - sp.ay);
-    if (s.human && game.role === 'survivor') {
-      const mb = Math.round(Math.sin(tm * 5)), hy = y0 - 25;
-      px(ctx, '#ffffff', x0 - 2, hy - 6 + mb, 5, 1); px(ctx, '#ffffff', x0 - 1, hy - 5 + mb, 3, 1); px(ctx, '#ffffff', x0, hy - 4 + mb, 1, 1);
-    }
-  }
-  function drawForgeKiller(ctx, k, game, tm) {
-    const F = DP.forge, W = game.cfg || {};
-    let anim = 'parado', fr = Math.floor(tm * 3) % 4;
-    const st = k.state;
-    if (st === 'windup') { anim = 'preparar'; fr = Math.min(3, Math.floor(k.t / (W.WINDUP || 0.16) * 4)); }
-    else if (st === 'lunge') { anim = 'golpe'; fr = Math.min(3, Math.floor(k.t / 0.22 * 4)); }
-    else if (st === 'recover') { anim = 'recuperar'; fr = Math.min(3, Math.floor(k.t / (k.dur || 0.8) * 4)); }
-    else if (st === 'stun') { anim = 'atordoado'; fr = Math.floor(tm * 6) % 4; }
-    else if (st === 'stumble') { anim = 'cambalear'; fr = Math.floor(tm * 9) % 6; }
-    else if (st === 'break') { anim = 'quebrar'; fr = Math.floor(k.t * 10) % 6; }
-    else if (k.moving) { anim = st === 'chase' ? 'perseguir' : 'andar'; fr = Math.floor(k.walk) % 6; }
-    const sp = F.sprite(F.killerG || F.defaultGenome('killer'), anim, fr, F.dirIndex(k.face), 16, { useImp: true });
-    const x = Math.round(k.x * TS), y = Math.round(k.y * TS) + 6;
-    px(ctx, 'rgba(0,0,0,.45)', x - 6, y - 1, 12, 3);
-    const trip = st === 'stumble' && k.trip > 0;
-    ctx.drawImage(sp.c, x - sp.ax, y - sp.ay + (trip ? 3 : 0));
-    if (st === 'stun') for (let i = 0; i < 3; i++) { const an = tm * 7 + i * 2.09; px(ctx, '#ffd23f', x + Math.cos(an) * 7 - 1, y - 27 + Math.sin(an) * 2, 2, 2); }
-    if (st === 'intro') { ctx.fillStyle = 'rgba(11,11,16,.55)'; ctx.fillRect(x - 8, y - 29, 16, 30); }
-  }
-
   function drawSurvivor(ctx, s, game, tm) {
-    if (forgeOn()) { if (s.invuln > 0 && !s.vault && Math.floor(tm * 20) % 2) return; return drawForgeSurvivor(ctx, s, game, tm); }
     const d = dir4(s.face);
     const x0 = Math.round(s.x * TS), y0 = Math.round(s.y * TS) + 5;
     // pose do pulo: arco, corpo inclinado para o lado em que passa, pernas encolhidas
@@ -322,7 +279,6 @@
 
   const CFGT = 0.4;   // = CFG.TRIP_T
   function drawKiller(ctx, k, game, tm) {
-    if (forgeOn()) return drawForgeKiller(ctx, k, game, tm);
     const d = dir4(k.face);
     const x = Math.round(k.x * TS), y = Math.round(k.y * TS) + 6;
     const step = Math.floor(k.walk) % 2;
@@ -1247,7 +1203,7 @@
   // cx,cy = pés; sc = ampliação inteira; o = { id, face, moving, tm, alpha, hp, human }
   function uiSurvivor(ctx, cx, cy, sc, o) {
     o = o || {};
-    const fake = { x: 0, y: -5 / TS, face: o.face === undefined ? Math.PI / 2 : o.face, hp: o.hp || 2, invuln: 0, vault: o.vault || null, tripT: o.tripT || 0, id: o.id || 0, walk: o.walk || 0, moving: !!o.moving, human: !!o.human, runMode: o.run !== false, acting: o.acting || null };
+    const fake = { x: 0, y: -5 / TS, face: o.face === undefined ? Math.PI / 2 : o.face, hp: o.hp || 2, invuln: 0, vault: o.vault || null, tripT: o.tripT || 0, id: o.id || 0, walk: o.walk || 0, moving: !!o.moving, human: !!o.human };
     ctx.save(); ctx.translate(Math.round(cx), Math.round(cy)); ctx.scale(sc, sc);
     ctx.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
     drawSurvivor(ctx, fake, UI_GAME, o.tm || 0);
@@ -1255,7 +1211,7 @@
   }
   function uiKiller(ctx, cx, cy, sc, o) {
     o = o || {};
-    const fake = { x: 0, y: -6 / TS, face: o.face === undefined ? Math.PI / 2 : o.face, state: o.state || 'recover', t: o.t || 0, dur: 0.8, trip: 0, ph: 0, walk: o.walk || 0, moving: !!o.moving };
+    const fake = { x: 0, y: -6 / TS, face: o.face === undefined ? Math.PI / 2 : o.face, state: o.state || 'recover', t: 0, trip: 0, ph: 0, walk: o.walk || 0, moving: !!o.moving };
     ctx.save(); ctx.translate(Math.round(cx), Math.round(cy)); ctx.scale(sc, sc);
     ctx.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
     drawKiller(ctx, fake, UI_GAME, o.tm || 0);

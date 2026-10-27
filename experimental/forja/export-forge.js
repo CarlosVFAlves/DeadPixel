@@ -4,7 +4,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
 (async () => {
-  const sc = +(process.argv[2] || 6), res = +(process.argv[3] || 16), root = path.join(__dirname, '..');
+  const sc = +(process.argv[2] || 6), res = +(process.argv[3] || 16), root = path.join(__dirname, '..', '..');
   const b = await chromium.launch(), p = await b.newPage();
   await p.setContent('<canvas></canvas>');
   await p.addScriptTag({ content: 'window.DP={};' + fs.readFileSync(path.join(root, 'js', 'forge.js'), 'utf8') });

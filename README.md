@@ -9,7 +9,7 @@ Inspirado em *Dead by Daylight* e *Friday the 13th* (só na ideia: nomes e cená
 
 **Dead Pixel** abre numa tela com três entradas:
 - **JOGAR** → sala de espera com **4 vagas de jogador** (você é o J1; as outras ficam "aguardando" e viram bots) e o **assassino apagado** (IA). Toque no assassino para **jogar com ele** (então os 4 sobreviventes são bots). Opção **TREINO** e **INICIAR PARTIDA**. Teclado: `Enter` inicia, `T` treino, `1`/`2` papel, `Esc` volta.
-- **PERSONAGENS** → a **Forja de personagens**: monta seu sobrevivente/assassino (pele, cabelo, roupa, calça, calçado, chapéu, óculos, mochila, cachecol, porte, altura; máscara, casaco, arma...), vê em todas as animações e direções, exporta folhas PNG e importa arte repintada. Detalhes em `PLAYBOOK.md` §12.
+- **PERSONAGENS** → só o personagem principal (**Pixel**), andando nas quatro direções, com atributos.
 - **LOJA** → protótipo: 6 cartas "em breve" e o saldo de **fichas** (você ganha fichas ao fim de cada partida, fora do treino).
 
 ## O acampamento (mapa grande, 144×96 tiles)
@@ -139,12 +139,6 @@ Quando o assassino (você ou a IA) leva um pallet:
 5. **Mind game:** em ~55% dos encontros o assassino **hesita** diante de um pallet de pé que está entre vocês ("ELE HESITA..."). Derrubar cedo demais gasta o pallet; esperar demais te deixa ao alcance do golpe.
 
 O assassino ataca com um bote (arma erguida 0,16 s → bote de 0,3 s): dá para desviar na lateral. Acerto = −1 vida, +30% de velocidade por 1,8 s.
-
-## Forja de personagens (`js/forge.js`)
-Personagens gerados por código (sem imagens): esqueleto + poses por parâmetros, elipsoides/caixas com buffer de profundidade, luz em faixas, contorno e rosto por decalques. Uma célula = 40×40 unidades (16 px) ou 80×80 (32 px). Sobrevivente: parado, andar, correr, pular andando/correndo, atravessar janela, tropeçar, ferido, consertar, carregar, pegar, esconder, reagir, comemorar. Assassino: parado, andar, perseguir, preparar, golpe, recuperar, atordoado, cambalear, quebrar, sabotar, armário. Quatro direções desenhadas de verdade (não espelhadas).
-- **No jogo:** botão `JOGO: FORJA/CLÁSSICO` na tela PERSONAGENS liga/desliga (o desenho antigo continua como reserva). Seu personagem fica salvo no navegador (`dp_forge`); os outros sobreviventes usam os 4 modelos padrão.
-- **Exportar:** `node tools/export-forge.js [escala] [res]` grava `assets/forja/` (uma folha por animação, ampliada, fundo magenta = transparente + `manifest.json`); ou o botão EXPORTAR da tela (PNG + JSON do que você montou).
-- **Importar:** botão IMPORTAR aceita a folha completa ou uma folha de animação (nome `sobrevivente_andar.png`, `assassino_golpe.png`...). A arte importada vale para o seu sobrevivente/assassino (por enquanto, até a sessão fechar).
 
 ## Arquivos
 

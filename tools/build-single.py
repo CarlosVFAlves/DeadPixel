@@ -7,7 +7,7 @@ HD = '--hd' in sys.argv
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 js = ('window.DP = window.DP || {}; DP.style = { hd: true, label: "EDIÇÃO LUZ" };\n' if HD else '') + ''.join(open(os.path.join(root, 'js', f + '.js'), encoding='utf8').read() + '\n'
-             for f in ['font', 'audio', 'camp', 'map', 'game', 'forge', 'render', 'lobby', 'main'])
+             for f in ['font', 'audio', 'camp', 'map', 'game', 'render', 'lobby', 'main'])
 html = f"""<title>{"Dead Pixel HD" if HD else "Dead Pixel"}</title>
 <style>
   :root {{ --bg: #0b0b10; --fg: #e8e6ef; color-scheme: dark; }}

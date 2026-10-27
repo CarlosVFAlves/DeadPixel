@@ -566,40 +566,18 @@ A imagem mostra o **nosso próprio screenshot repintado**: terra com pedras e gr
   3. **Sprites prontos (PNG)** de um artista/pacote: a melhor qualidade, mas quebra a regra "tudo gerado por código" (os arquivos viram dados embutidos no artefato).
 - **Perguntas para decidir:** qual caminho? A regra "tudo por código" pode ser relaxada? A ambientação continua o acampamento ou muda (hospital, como na imagem)? Skins só trocam paleta ou são sprites novos?
 
-## 12. Forja de personagens (geração + construtor + exportação)
+## 12. Forja de personagens — ENGAVETADA
 
-**Pedido:** uma ferramenta que, dado um personagem montado (como um *character builder*), produza todas as poses/direções/animações necessárias, exportável para repintura por IA (GPT, vídeo MiniMax) e reimportável. Testar a 16 px antes de 32 px; skins com o máximo de detalhe.
+**Decisão (dono do projeto):** "ficou péssimo os modelos que você fez; tire todos até conseguirmos fazer um personagem minimamente bonito, e depois sigamos o modelo". Os sprites gerados, a tela construtora, as folhas exportadas (`assets/forja*`) e os testes foram **removidos do jogo**; voltou o desenho clássico por código (estado de 810218a). O código do experimento ficou em `experimental/forja/` (não é carregado pelo jogo).
 
-### 12.1 Estudo do repositório de referência
-`idlerunner00/procedural-pixel-creatures` (Godot/C#, licença MIT; só ideias, nada copiado). O que adotei, reescrito em JS:
-- **Genoma = genes + sementes** (`bipedFamily`, `GeneSchema`): o personagem é um objeto pequeno de índices; variar um gene muda só aquela parte.
-- **Rig por parâmetros** (`RigDriver`): uma pose é um punhado de ângulos (tronco, cabeça, ombro/cotovelo, quadril/joelho) em vez de desenho por quadro; animações são funções do tempo.
-- **Rasterizador analítico com z-buffer** (`CreatureRenderer`): primitivas (elipsoides, cápsulas, caixas) lançadas por pixel com profundidade; **luz em faixas** (toon) com tons de sombra/luz deslocados de matiz; **contorno seletivo** (externo + interno nas descontinuidades de profundidade); rosto por **decalques**.
-- **Exportador de folhas com metadados** (`SpritesheetExporter`): PNG + JSON (células, quadros, fps, âncora).
-Não adotei: 8 direções (usamos 4 reais; o código aceita qualquer ângulo, `renderFrame(g, anim, quadro, yaw)`), famílias de criaturas, evolução/genética.
+### 12.1 O que foi tentado (registro)
+Inspirado em `idlerunner00/procedural-pixel-creatures` (MIT; só ideias): genoma de genes, esqueleto com poses por parâmetros, rasterizador de elipsoides/caixas com z-buffer, luz em faixas, contorno, rosto por decalques, exportador de folhas com manifesto, importador de folhas repintadas, construtor na tela PERSONAGENS, 14+11 animações, cache de sprites.
 
-### 12.2 Como funciona (`js/forge.js`, sem DOM no núcleo → testável no Node)
-- **Modelo:** ~20 unidades de altura (1 unidade = 1 px a 16 px/tile; 2 px a 32). Câmera inclinada ~30° como o jogo; luz fixa vinda de cima/esquerda.
-- **Primitivas:** `elip` (raio-elipsoide orientado, normal exata), cadeia de esferas (cápsulas afuniladas: braços, pernas, rabo), `caixa` (interseção raio-caixa com chanfro nas quinas: tronco, mochila, sapatos). Cabelo/chapéus = elipsoides deslocadas para cima/trás (a testa aparece à frente, a linha da franja nasce da interseção).
-- **Cor:** cada material tem uma rampa de 4 tons gerada de **uma cor** (sombra esfria e dessatura, luz esquenta).
-- **Genes do sobrevivente (16):** pele, cabelo (curto, longo, rabo, moicano, cachos, coque, raspado) + cor, roupa (camiseta, jaqueta, moletom, colete) + cor, calça (jeans, shorts, cargo) + cor, calçado (tênis, bota) + cor, chapéu (nenhum, boné, touca, capuz) + cor, óculos, mochila, cachecol, porte, altura. **Assassino (10):** pele, máscara (lisa, caveira, sorriso, saco) + cor, casaco (longo, curto, avental) + cor, capuz, cabelo, arma (facão, machado, cano), calça, porte.
-- **Animações:** sobrevivente (14): parado 4q, andar 6, correr 6, pular andando 5, pular correndo 5, atravessar janela 5, tropeçar 5, ferido 4, consertar 6, carregar 6, pegar 4, esconder 4, reagir 4, comemorar 6. Assassino (11): parado, andar, perseguir, preparar golpe, golpe, recuperar, atordoado, cambalear, quebrar, sabotar, abrir armário. As que o jogo ainda não dispara (carregar, pegar, esconder, reagir, comemorar, sabotar, armário) já existem para a folha e para quando as regras pedirem.
-- **Ligação ao jogo (`render.js`):** o estado vira animação+quadro (pulo: `v.kind`; tropeço; consertando; correndo×andando via `s.runMode`; ferido; assassino: windup/lunge/recover/stun/stumble/break/chase). Sprites vão para **cache** (por genoma+pose+quadro+direção), então o custo em jogo é só `drawImage`. Um quadro novo leva ~0,7 ms.
-- **Tela PERSONAGENS = construtor:** prévia animada (auto-gira; toque na prévia fixa a direção), `‹ ›` por gene (paginado conforme o espaço), SORTEAR, trocar sobrevivente/assassino, escolher animação, RES 16/32 (só na prévia/exportação), JOGO: FORJA/CLÁSSICO, EXPORTAR, IMPORTAR. Salva no navegador (`dp_forge`).
-- **Exportar:** `exportSheet` (colunas = baixo, direita, cima, esquerda; linhas = animação×quadro) + `manifest.json` (célula, âncora dos pés, fps, repete, genoma). `tools/export-forge.js` gera `assets/forja/` com uma folha por animação (ampliada, fundo magenta) para mandar ao GPT.
-- **Importar:** `importSheet` reconhece folha completa ou de uma animação (pelo nome do arquivo), troca o fundo magenta por transparência e passa a usar as células no **seu** sobrevivente/assassino; sem a arte, o desenho por código segue como reserva. Por ora a arte importada é reduzida ao tamanho da célula do jogo (16 px/tile) e **não persiste** entre sessões.
+### 12.2 Por que falhou
+- A 16 px por tile, um boneco **modelado em 3D e reduzido a pixels** sai borrado: rosto de ~2 pixels, contornos escuros engolem os detalhes, sombreamento vira ruído. Mesmo depois de câmera frontal e contornos leves, não chegou perto da clareza do desenho feito à mão em pixels (cabeça quadrada, olhos de 1 pixel, cores chapadas).
+- Lições: a 16 px o bom resultado vem de **desenhar pixel a pixel** (silhueta forte, poucas cores, rosto legível), não de renderizar geometria. A Forja só faz sentido com um **personagem-modelo bonito** (desenhado à mão, ou repintado pela IA a partir do molde `assets/template/`) servindo de referência; depois as variações (cores, roupas, acessórios) e poses seguem esse modelo.
 
-### 12.3 O que o teste a 16 px mostrou
-- 16 px: legível (cabeça, roupa, chapéu, cabelo, mochila distinguem-se), mas **rosto = 2 pixels**: olhos e óculos são o máximo. 32 px (preview/exportação): dá volume, brilho no olho, boné e costuras; é onde "skin com detalhe" começa a valer, mas **o jogo ainda desenha o mundo a 16 px/tile**: usar os quadros de 32 px no jogo exige o mapa estático 2× (decisão pendente, ver §10.11).
-- Células: 40×40 (16 px) ou 80×80 (32 px); a de 24×32 do molde antigo cortava machado e braços erguidos.
-
-### 12.4 Impasses
-65) Os primeiros bonecos tinham "colarinho amarelo" e sombras laranja: a rampa deslocava o matiz de tons de pele para o amarelo; agora sombras quentes vão para o vermelho/roxo e dessaturam. 66) Braços sumiam dentro do tronco (mesmo material e mesma profundidade): ombros deslocados para fora e manga em tom mais escuro. 67) Agachar (consertar, tropeçar) afundava os pés: se o tornozelo mais baixo passa do chão, a pose sobe (`low`). 68) A célula de 24×32 cortava machados e braços: 40×40 com pés 7 unidades acima da base (teste automático garante que nenhum quadro toca a borda). 69) A fonte não tinha o caractere `<`.
-
-### 12.4b Nitidez (feedback: "não está nítido, tudo bugado")
-Comparado lado a lado com o desenho antigo, o sprite da Forja a 16 px estava sujo: câmera a 30° mostrava mais o topo da cabeça que o rosto, contornos quase pretos (externo + interno) engoliam olhos e braços, sombras muito escuras. Correções: **câmera quase frontal (~11°)** para o rosto ocupar a cabeça; **sem contorno interno a 16 px** (só a 32); contorno externo mais leve; rampa de tons mais suave e faixas de luz menos escuras; porte um pouco maior; braços do "andar" menos balançados (na vista de frente viravam borrões no peito). Lição: a 16 px, menos efeito = mais legibilidade; a profundidade fina só vale a 32 px.
-
-### 12.5 Próximos passos
-- Importador **persistente** (IndexedDB) e por animação mesclável; ferramenta quadros→atlas para saída de vídeo (recorte de croma, âncora dos pés, redução com vizinho mais próximo, empacotamento).
-- Decidir **32 px no jogo** (mapa estático 2×, blocos) para usar a Forja em alta; mais genes (rosto, cicatrizes, cores de pele customizáveis, roupas por set da loja).
-- Ligar as animações restantes (carregar peça, pegar item, esconder, reagir, sabotar, abrir armário) às regras e conectar a LOJA aos genes (jaqueta neon, boné, máscara de sangue).
+### 12.3 Próximos passos propostos
+1. Fazer **um** sobrevivente bonito: pelo fluxo molde → GPT (já existem as folhas em `assets/template/`) ou desenhando-o em pixels com base em referência; aprovar a 16 px e depois a 32 px.
+2. Importador de atlas (carregar a folha aprovada, com o desenho por código como reserva).
+3. Só então variar (paleta, roupas, acessórios) **a partir do modelo aprovado** e, se valer a pena, retomar o gerador/animador de `experimental/forja/`.
