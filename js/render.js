@@ -447,14 +447,14 @@
   function vehPos(v, game) {
     if (v.state !== 'leaving') return { x: v.cx, y: v.cy, ang: v.kind === 'boat' ? 0 : -Math.PI / 2, alpha: 1 };
     if (v.kind === 'boat') return { x: v.cx + v.anim * 3.4, y: v.cy + Math.sin(v.anim * 2) * 0.15, ang: 0, alpha: v.anim > 5 ? Math.max(0, 1 - (v.anim - 5) / 1.5) : 1 };
-    const pk = game.map.parking || { y: 5 }, gx = game.door.cx, py = pk.y + 1.6, pts = [[v.cx, v.cy], [v.cx, py], [gx, py], [gx, -5]];
+    const pk = game.map.parking || { y: 5, h: 12 }, gx = game.door.cx, S = game.door.side === 'S', py = S ? pk.y + pk.h - 1.6 : pk.y + 1.6, pts = [[v.cx, v.cy], [v.cx, py], [gx, py], [gx, S ? game.map.H + 5 : -5]];
     let d = Math.max(0, v.anim - 0.5) * 4.6;
     for (let i = 0; i < pts.length - 1; i++) {
       const dx = pts[i + 1][0] - pts[i][0], dy = pts[i + 1][1] - pts[i][1], L = Math.hypot(dx, dy);
       if (d <= L || i === pts.length - 2) { const f = Math.min(1, d / L); return { x: pts[i][0] + dx * f, y: pts[i][1] + dy * f, ang: Math.atan2(dy, dx), alpha: 1 }; }
       d -= L;
     }
-    return { x: v.cx, y: v.cy, ang: -Math.PI / 2, alpha: 1 };
+    return { x: v.cx, y: v.cy, ang: S ? Math.PI / 2 : -Math.PI / 2, alpha: 1 };
   }
   function drawVehicle(ctx, v, game, tm) {
     const P = vehPos(v, game), cxp = Math.round(P.x * TS), cyp = Math.round(P.y * TS);
@@ -502,9 +502,9 @@
   }
   // viatura da polícia: chega pelo portão e estaciona no estacionamento enquanto a janela está aberta
   function drawPolice(ctx, ph, game, tm) {
-    const pk = game.map.parking || { y: 5, h: 12 }, ty0 = pk.y + 4.2, el = game.cfg.ROUTES.policeWindow - ph.win, y = el < 2.6 ? -3 + (ty0 + 3) * Math.min(1, el / 2.6) : ty0, x = game.door.cx - 4.8;
+    const pk = game.map.parking || { y: 5, h: 12 }, S = game.door.side === 'S', Hm = game.map.H, ty0 = S ? pk.y + pk.h - 4.2 : pk.y + 4.2, el = game.cfg.ROUTES.policeWindow - ph.win, f0 = Math.min(1, el / 2.6), y = el < 2.6 ? (S ? Hm + 3 - (Hm + 3 - ty0) * f0 : -3 + (ty0 + 3) * f0) : ty0, x = game.door.cx - 4.8;
     const cx = Math.round(x * TS), cy = Math.round(y * TS), flash = Math.floor(tm * 5) % 2;
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI);
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(S ? 0 : Math.PI);
     px(ctx, 'rgba(0,0,0,.38)', -13, -20, 28, 46);
     const g = ctx.createLinearGradient(0, -22, 0, -64); g.addColorStop(0, 'rgba(255,255,230,.34)'); g.addColorStop(1, 'rgba(255,255,230,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-9, -22); ctx.lineTo(9, -22); ctx.lineTo(26, -64); ctx.lineTo(-26, -64); ctx.closePath(); ctx.fill();
@@ -602,8 +602,9 @@
 
   // porta principal (2 tiles): trancada → energizada → folhas abrindo
   function drawDoor(ctx, d, game, tm) {
-    const X = d.tx * TS, Y = d.ty * TS, Wd = d.w * TS;
+    const X = d.tx * TS, Y = d.ty * TS, Wd = d.w * TS, south = d.side === 'S';
     const open = d.opened || d.pass, p = open ? Math.min(1, d.t / 0.9) : 0;
+    if (south) { ctx.save(); ctx.translate(0, 2 * Y + TS); ctx.scale(1, -1); }      // portão ao sul: o mesmo desenho espelhado na vertical
     px(ctx, '#17151c', X, Y, Wd, TS);
     if (open) px(ctx, 'rgba(210,255,225,' + (0.45 + 0.35 * p) + ')', X + 1, Y, Wd - 2, TS);
     const leaf = Math.round((Wd / 2 - 1) * (1 - p));
@@ -623,8 +624,10 @@
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.moveTo(X, Y + TS); ctx.lineTo(X + Wd, Y + TS); ctx.lineTo(X + Wd + 16, Y + TS + 52); ctx.lineTo(X - 16, Y + TS + 52); ctx.closePath(); ctx.fill();
     }
-    text(ctx, 'SAÍDA', X + Wd / 2, Y + TS + 3, d.powered ? '#7dffa0' : '#8a8a99', { align: 'c' });
-    if (d.progress > 0 && !open) { px(ctx, '#000', X + 2, Y + TS + 13, Wd - 4, 3); px(ctx, '#7dffa0', X + 3, Y + TS + 14, Math.round((Wd - 6) * d.progress), 1); }
+    if (south) ctx.restore();
+    const ty = south ? Y - 10 : Y + TS + 3, by = south ? Y - 17 : Y + TS + 13;
+    text(ctx, 'SAÍDA', X + Wd / 2, ty, d.powered ? '#7dffa0' : '#8a8a99', { align: 'c' });
+    if (d.progress > 0 && !open) { px(ctx, '#000', X + 2, by, Wd - 4, 3); px(ctx, '#7dffa0', X + 3, by + 1, Math.round((Wd - 6) * d.progress), 1); }
   }
 
   // ---------- itens ----------
@@ -976,7 +979,7 @@
       if (full || mine || (Math.hypot(pl.x - tr.x, pl.y - tr.y) < 4.2 && game.canSee(pl, tr.x, tr.y)) || tr.victim) list.push({ y: tr.y - 0.1, f: () => drawTrap(ctx, tr, game, tm) });
     }
     if (game.phone) list.push({ y: game.phone.cy, f: () => drawPhone(ctx, game.phone, game, tm) });
-    if (game.phone && game.phone.state === 'here') list.push({ y: ((game.map.parking || { y: 5 }).y + 5), f: () => drawPolice(ctx, game.phone, game, tm) });
+    if (game.phone && game.phone.state === 'here') list.push({ y: ((game.map.parking || { y: 5, h: 12 }).y + (game.door.side === 'S' ? (game.map.parking || { h: 12 }).h - 5 : 5)), f: () => drawPolice(ctx, game.phone, game, tm) });
     for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
     for (const v of game.survivors) if (!v.dead && !v.escaped && !v.hidden && (v === pl || vis(v.x, v.y))) { list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) }); if (v.item) list.push({ y: v.y + 0.02, f: () => drawCarry(ctx, v) }); }
     for (const v of game.survivors) if (v.heal && !v.dead && (v === pl || vis(v.x, v.y))) list.push({ y: v.y + 0.5, f: () => { const bx = Math.round(v.x * TS) - 7, by = Math.round(v.y * TS) - 26; px(ctx, '#000', bx - 1, by - 1, 16, 5); px(ctx, '#2a4a30', bx, by, 14, 3); px(ctx, '#7dffa0', bx, by, Math.round(14 * v.heal.t / game.cfg.HEAL_T), 3); px(ctx, '#d02a2a', Math.round(v.x * TS) - 1, by - 5, 2, 4); px(ctx, '#d02a2a', Math.round(v.x * TS) - 2, by - 4, 4, 2); } });
@@ -1214,7 +1217,7 @@
     game.gens.forEach((o) => { if (kr || o.known) { px(ctx, o.done ? '#7dffa0' : (game.time - (o.noisyT || -99) < 1.5 ? '#ffffff' : '#ffb347'), X(o.cx) - 1, Y(o.cy) - 1, 3, 3); } });
     if (game.phone) px(ctx, game.phone.state === 'locked' ? '#4a6a8a' : '#7ad0ff', X(game.phone.cx) - 1, Y(game.phone.cy) - 1, 3, 3);
     for (const v of game.vehicles) if (v.state !== 'gone') px(ctx, v.kind === 'car' ? '#c9a0ff' : '#4aa3e8', X(v.cx) - 1, Y(v.cy) - 1, 3, 3);
-    px(ctx, game.door.opened ? '#7dffa0' : '#ffd23f', X(game.door.cx) - 2, Y(0), 4, 2);
+    px(ctx, game.door.opened ? '#7dffa0' : '#ffd23f', X(game.door.cx) - 2, Y(game.door.side === 'S' ? game.map.H - 0.8 : 0), 4, 2);
     if (kr) for (const q of game.pings) if (game.time - q.t < 6 && Math.floor(tm * 4) % 2) px(ctx, '#ff4d4d', X(q.x) - 1, Y(q.y) - 1, 3, 3);
     const me = game.pl;
     px(ctx, '#000', X(me.x) - 2, Y(me.y) - 2, 5, 5); px(ctx, kr ? '#ff4d4d' : (Math.floor(tm * 3) % 2 ? '#ffffff' : '#7ad0ff'), X(me.x) - 1, Y(me.y) - 1, 3, 3);
@@ -1260,7 +1263,7 @@
     }
     // portão e lugares conhecidos
     const dr = game.door;
-    px(ctx, dr.opened ? '#7dffa0' : '#ffd23f', X(dr.cx) - 4, Y(0) - 1, 8, 3);
+    px(ctx, dr.opened ? '#7dffa0' : '#ffd23f', X(dr.cx) - 4, Y(dr.side === 'S' ? game.map.H : 0) - 1, 8, 3);
     for (const p of game.map.pois || []) {
       const lab = { parking: sc < 3 ? 'ESTAC.' : 'ESTACIONAMENTO', plaza: 'FOGUEIRA', dock: 'CAIS', lake: 'LAGO', phone: 'TELEFONE' }[p.kind];
       if (lab) text(ctx, lab, X(p.x), Y(p.y) + (p.kind === 'dock' ? 5 : p.kind === 'plaza' ? 12 : p.kind === 'phone' ? 4 : -3), '#fff', { align: 'c', shadow: 'rgba(0,0,0,.95)' });

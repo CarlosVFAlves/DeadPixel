@@ -246,7 +246,8 @@
     g.partName = (it) => PARTS[it.part].name + ' (' + (it.veh === 'car' ? 'CARRO' : 'BARCO') + ')';
     // telefone (só no mapa grande): com energia ligada, segurar AGIR liga para a polícia; ela chega depois de um tempo e abre o portão por uma janela
     g.phone = map.phone ? { tx: map.phone.tx, ty: map.phone.ty, cx: map.phone.tx + 0.5, cy: map.phone.ty + 0.5, progress: 0, state: 'locked', visited: -99, w: 0, eta: 0, win: 0, calls: 0, noisyT: -99 } : null;
-    g.door = { tx: map.door.tx, ty: map.door.ty, w: map.door.w, cx: map.door.tx + map.door.w / 2, cy: 0.5, progress: 0, powered: false, opened: false, t: 99, visited: -99 };
+    const dSouth = map.door.side === 'S';
+    g.door = { side: dSouth ? 'S' : 'N', inY: dSouth ? H - 1.2 : 1.2, tx: map.door.tx, ty: map.door.ty, w: map.door.w, cx: map.door.tx + map.door.w / 2, cy: dSouth ? H - 0.5 : 0.5, progress: 0, powered: false, opened: false, t: 99, visited: -99 };
 
     const k = g.k;
     let s = g.survivors[0];      // "contexto": o sobrevivente que as funções abaixo estão tratando
@@ -807,7 +808,7 @@
       if (g.gensDone >= g.need && !g.door.powered) {
         g.door.powered = true;
         if (g.phone) { g.phone.state = 'ready'; popup('ENERGIA LIGADA! USE O TELEFONE', g.phone.cx, g.phone.cy - 2.2, '#ffd23f'); sfx('gates'); }
-        else { popup('PORTA PRINCIPAL LIBERADA!', g.door.cx, 3, '#ffd23f'); sfx('gates'); }
+        else { popup('PORTA PRINCIPAL LIBERADA!', g.door.cx, dSouth ? H - 3 : 3, '#ffd23f'); sfx('gates'); }
       }
     }
     function enterLocker(sv, l) {
@@ -946,13 +947,13 @@
         if (ph.eta <= 0) {
           ph.state = 'here'; ph.win = CFG.ROUTES.policeWindow;
           g.door.opened = true; g.door.t = 0; sfx('doorOpen'); sfx('siren');
-          popup('A POLÍCIA CHEGOU! CORRA PARA O PORTÃO', g.door.cx, 4, '#7ad0ff');
+          popup('A POLÍCIA CHEGOU! CORRA PARA O PORTÃO', g.door.cx, dSouth ? H - 4 : 4, '#7ad0ff');
         }
       } else if (ph.state === 'here') {
         ph.win -= dt;
         if (ph.win <= 0) {
           ph.state = 'ready'; ph.progress = 0; g.door.opened = false; g.door.t = 0;
-          popup('A POLÍCIA FOI EMBORA... LIGUE DE NOVO', g.door.cx, 4, '#ff9d5c');
+          popup('A POLÍCIA FOI EMBORA... LIGUE DE NOVO', g.door.cx, dSouth ? H - 4 : 4, '#ff9d5c');
         }
       }
     }
@@ -1009,7 +1010,7 @@
         s.noise = CFG.NOISE_GATE;
         o.progress = Math.min(1, o.progress + dt / routeT('door'));
         if (s.tick <= 0) { s.tick = 0.4; sfx('repair', pan(o.cx, o.cy)); }
-        if (o.progress >= 1) { o.opened = true; o.t = 0; sfx('doorOpen'); popup('PORTA ABERTA!', o.cx, 3, '#7dffa0'); }
+        if (o.progress >= 1) { o.opened = true; o.t = 0; sfx('doorOpen'); popup('PORTA ABERTA!', o.cx, dSouth ? H - 3 : 3, '#7dffa0'); }
       } else if (tg.type === 'chest') {
         s.noise = 1.2;
         if (s.pickFor !== o) { s.pickFor = o; s.pickP = 0; }
@@ -1180,7 +1181,7 @@
         if (s.human && s.jumpT > 0 && !s.vaultCD) tryVault(Math.cos(s.face), Math.sin(s.face), 1, true, true);   // parado de frente para a janela/pallet: pula
       }
       // porta principal aberta: quem chega nela escapa
-      if (g.door.opened && s.y < 1.7 && Math.abs(s.x - g.door.cx) < 2.2) escapeSurvivor(s);
+      if (g.door.opened && (dSouth ? s.y > H - 1.7 : s.y < 1.7) && Math.abs(s.x - g.door.cx) < 2.2) escapeSurvivor(s);
     }
 
     // ---------- assassino ----------
@@ -1695,7 +1696,7 @@
         if (v > bv) { bv = v; bt = i; }
       }
       if (g.door.opened) {
-        const ni = 1 * W + Math.floor(g.door.cx);
+        const ni = (dSouth ? H - 2 : 1) * W + Math.floor(g.door.cx);
         if (fS[ni] < 1e8 && fS[ni] / myT + 0.15 < fK[ni] / kT && 40 - 0.35 * fS[ni] + fK[ni] > bv) { bv = 40 - 0.35 * fS[ni] + fK[ni]; bt = ni; }
       }
       if (bt !== null) {
@@ -1826,8 +1827,8 @@
       let tg = null;
       if (g.door.opened) {
         // porta aberta: é só atravessar
-        if (ai.fieldT <= 0) { dijkstra(ai.fT, g.door.cx, 1.2, true, { until: s }); ai.fieldT = 0.4; }
-        steer(ai.fT, out, { x: g.door.cx, y: 1.2 });
+        if (ai.fieldT <= 0) { dijkstra(ai.fT, g.door.cx, g.door.inY, true, { until: s }); ai.fieldT = 0.4; }
+        steer(ai.fT, out, { x: g.door.cx, y: g.door.inY });
         winPass = k0;
         return out;
       }
@@ -1860,7 +1861,7 @@
         // energia ligada: telefone; depois de chamar, espera a polícia perto do portão (longe do meio do mapa)
         if (g.phone.state === 'ready') tg = g.phone;
         else {
-          tg = { cx: g.door.cx + (s.id - 1.5) * 3.2, cy: 13.5 - (s.id % 2) * 3, rally: true };
+          tg = { cx: g.door.cx + (s.id - 1.5) * 3.2, cy: dSouth ? H - 13.5 + (s.id % 2) * 3 : 13.5 - (s.id % 2) * 3, rally: true };
           if (Math.hypot(s.x - tg.cx, s.y - tg.cy) < 1.6) { out.walk = true; winPass = k0; return out; }
         }
       }
@@ -1886,7 +1887,7 @@
       if (it && it.obj === tg) { out.act = true; winPass = k0; return out; }
       const gp = tg.stand || { x: tg.cx, y: tg.cy };                      // veículos: o ponto onde se fica de pé ao lado dele
       if (ai.fieldT <= 0) { dijkstra(ai.fT, gp.x, gp.y, true, { until: s }); ai.fieldT = 0.4; }
-      steer(ai.fT, out, tg === g.door ? { x: g.door.cx, y: 1.2 } : gp);
+      steer(ai.fT, out, tg === g.door ? { x: g.door.cx, y: g.door.inY } : gp);
       if (out.winAct && it && it.obj === out.winAct) out.act = true;
       winPass = k0;
       return out;

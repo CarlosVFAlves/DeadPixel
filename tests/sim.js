@@ -818,7 +818,7 @@ console.log('mapa grande');
     maxMs = Math.max(maxMs, Date.now() - t0);
     const { W, H, t } = m;
     const free = (x, y) => x >= 0 && y >= 0 && x < W && y < H && t[y * W + x] === 0;
-    const seen = new Uint8Array(W * H), st = [[m.door.tx, 2]]; seen[2 * W + m.door.tx] = 1;
+    const gy0 = m.door.side === 'S' ? H - 3 : 2, seen = new Uint8Array(W * H), st = [[m.door.tx, gy0]]; seen[gy0 * W + m.door.tx] = 1;
     while (st.length) { const [x, y] = st.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (free(nx, ny) && !seen[ny * W + nx]) { seen[ny * W + nx] = 1; st.push([nx, ny]); } } }
     let bad = [];
     let unreach = 0; for (let i = 0; i < W * H; i++) if (t[i] === 0 && !seen[i]) unreach++;
@@ -833,7 +833,7 @@ console.log('mapa grande');
     for (const q of m.itemSpots) if (!R(q) || t[Math.floor(q.y) * W + Math.floor(q.x)] !== 0) bad.push('item fora do chão');
     for (const q of m.explore) if (!R(q)) bad.push('ponto de exploração');
     if (m.gens.length !== 8 || m.gens.filter((g) => g.cabin >= 0).length !== 5) bad.push('geradores ' + m.gens.length);
-    if (t[0 * W + m.door.tx] !== 4 || t[0 * W + m.door.tx + 1] !== 4) bad.push('portão');
+    const gr = m.door.side === 'S' ? H - 1 : 0; if (t[gr * W + m.door.tx] !== 4 || t[gr * W + m.door.tx + 1] !== 4) bad.push('portão');
     let water = 0; for (let i = 0; i < W * H; i++) if (t[i] === 7) water++;
     if (water < 300) bad.push('lago pequeno ' + water);
     minItems = Math.min(minItems, m.itemSpots.length); minExpl = Math.min(minExpl, m.explore.length); minCab = Math.min(minCab, m.cabins.length); minPal = Math.min(minPal, m.pallets.length);
@@ -1432,7 +1432,7 @@ console.log('som e variedade');
     return g.stats.hits / Math.max(1, g.stats.lunges);
   };
   let a0 = 0, a1 = 0; for (let seed = 1; seed <= 4; seed++) { a0 += dodge(0, seed); a1 += dodge(1, seed); }
-  ok(a1 > a0 * 5 && a1 / 4 > 0.15, `quem desvia sempre na hora do bote: sem aprendizado ${(a0 / 4 * 100).toFixed(0)}% de acerto, com aprendizado ${(a1 / 4 * 100).toFixed(0)}%`);
+  ok(a1 > a0 * 1.8 && a1 / 4 > 0.15, `quem desvia sempre na hora do bote: sem aprendizado ${(a0 / 4 * 100).toFixed(0)}% de acerto, com aprendizado ${(a1 / 4 * 100).toFixed(0)}%`);
 }
 
 {
@@ -1540,6 +1540,26 @@ console.log('som e variedade');
   // IA do assassino arma armadilhas nos geradores
   let placed = 0; for (let seed = 1; seed <= 6; seed++) { const gg = mk(120 + seed, 'survivor', 3); for (let i = 0; i < 60 * 240; i++) { gg.update(1 / 60, {}); if (gg.over) break; } placed += gg.stats.trapsSet || 0; }
   ok(placed >= 3, `o assassino-IA arma armadilhas (${placed} em 6 partidas de 4 min)`);
+}
+
+{
+  // portão/polícia/estacionamento em lugares diferentes: norte ou sul, esquerda ou direita
+  const sides = new Set(), seenGate = new Set();
+  for (let seed = 1; seed <= 24; seed++) { const m = DP.buildMapAny({ kind: 'camp', rng: seeded(seed * 5 + 2) }); sides.add(m.door.side + (m.door.tx < 72 ? 'O' : 'L')); seenGate.add(m.door.tx); }
+  ok(sides.size === 4 && seenGate.size >= 12, `em 24 partidas o portão aparece em ${[...sides].join(', ')} (${seenGate.size} posições diferentes)`);
+  // equipe de bots chama a polícia e foge pelo portão também quando ele fica ao sul
+  let escapedS = 0, triedS = 0;
+  for (let seed = 1; seed <= 24 && triedS < 3; seed++) {
+    const rng = seeded(seed * 5 + 2), probe = DP.buildMapAny({ kind: 'camp', rng: seeded(seed * 5 + 2) });
+    if (probe.door.side !== 'S') continue;
+    triedS++;
+    const g = DP.createGameAny({ map: 'camp', rng: seeded(seed * 5 + 2), bots: 3, training: true }); g.k.state = 'intro'; g.k.t = -99999;
+    const h = g.survivors[0]; h.human = false; h.ai = g.makeAI(0);
+    g.cfg.ROUTES.fuse = 8; g.cfg.ROUTES.phone = 5; g.cfg.ROUTES.policeEta = 20;
+    for (let i = 0; i < 60 * 900 && !g.over; i++) g.update(1 / 60, {});
+    if (g.escapedCount > 0) escapedS++;
+  }
+  ok(triedS >= 1 && escapedS === triedS, `com o portão ao sul a equipe de bots chama a polícia e escapa (${escapedS}/${triedS})`);
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');

@@ -439,12 +439,45 @@
     }
     explore.forEach((e, i) => { e.id = i; });
 
-    return {
+    const m0 = {
       kind: 'camp', W, H, t, ground, indoor, pallets, gens, phone, vehicles, lockers, chests, door, windows, NEED: 5,
       parking: PK, plaza: PLAZA, itemSpots, radios: 4, pois, explore, lake: LAKE, dock: { x: dockX, y: dockY, endX: dockEnd.x, endY: dockEnd.y },
       cabins: specs.map((s) => ({ x: s.x, y: s.y, w: s.m.w, h: s.m.h, id: s.n })),
       shack: SHACK, arsenal, spawnSurvivors: sp, spawnKiller, spawnKillerP
     };
+    // o acampamento é espelhado ao acaso (esquerda/direita e cima/baixo): o portão, a polícia e o estacionamento não ficam sempre no mesmo canto
+    return flipCamp(m0, rng() < 0.5, rng() < 0.5);
+  }
+
+  // espelha o mapa inteiro (tiles, objetos e coordenadas); o portão passa para a borda sul quando fy
+  function flipCamp(m, fx, fy) {
+    m.door.side = fy ? 'S' : 'N';
+    if (!fx && !fy) return m;
+    const mapArr = (arr) => { const o = new Uint8Array(W * H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) o[(fy ? H - 1 - y : y) * W + (fx ? W - 1 - x : x)] = arr[y * W + x]; return o; };
+    const X = (x) => (fx ? W - x : x), Y = (y) => (fy ? H - y : y);                    // coordenadas decimais
+    const TX = (x, w) => (fx ? W - x - (w || 1) : x), TY = (y, h) => (fy ? H - y - (h || 1) : y);   // canto de um retângulo de tiles
+    const tile = (o) => { o.tx = TX(o.tx); o.ty = TY(o.ty); return o; };
+    const dirn = (o) => { if (fx) o.nx = -o.nx; if (fy) o.ny = -o.ny; return o; };
+    m.t = mapArr(m.t); m.ground = mapArr(m.ground); m.indoor = mapArr(m.indoor);
+    m.pallets.forEach(tile); m.windows.forEach(tile); m.gens.forEach(tile); m.lockers.forEach((o) => dirn(tile(o))); m.chests.forEach((o) => dirn(tile(o)));
+    tile(m.phone); m.door.tx = TX(m.door.tx, m.door.w); m.door.ty = TY(m.door.ty);
+    for (const v of m.vehicles) { v.cx = X(v.cx); v.cy = Y(v.cy); v.tx = TX(v.tx, v.w); v.ty = TY(v.ty, v.h); v.stand = { x: X(v.stand.x), y: Y(v.stand.y) }; }
+    m.parking = { x: TX(m.parking.x, m.parking.w), y: TY(m.parking.y, m.parking.h), w: m.parking.w, h: m.parking.h };
+    m.plaza = { x: fx ? W - 1 - m.plaza.x : m.plaza.x, y: fy ? H - 1 - m.plaza.y : m.plaza.y };
+    m.lake = { x: X(m.lake.x), y: Y(m.lake.y), rx: m.lake.rx, ry: m.lake.ry };
+    m.dock = { x: fx ? W - 1 - m.dock.x : m.dock.x, y: TY(m.dock.y, 2), endX: X(m.dock.endX), endY: Y(m.dock.endY) };
+    for (const c of m.cabins) { c.x = TX(c.x, c.w); c.y = TY(c.y, c.h); }
+    if (m.shack) {
+      const S0 = m.shack; S0.x = TX(S0.x, S0.w); S0.y = TY(S0.y, S0.h);
+      S0.cx = fx ? W - S0.cx : S0.cx; S0.cy = fy ? H - 1 - S0.cy : S0.cy; S0.door = { x: fx ? W - S0.door.x : S0.door.x, y: fy ? H - 1 - S0.door.y : S0.door.y }; if (fy) S0.south = !S0.south;
+    }
+    if (m.arsenal) dirn(tile(m.arsenal));
+    for (const q of m.itemSpots) { q.x = X(q.x); q.y = Y(q.y); }
+    for (const q of m.pois) { q.x = X(q.x); q.y = Y(q.y); }
+    for (const q of m.explore) { q.x = X(q.x); q.y = Y(q.y); }
+    for (const q of m.spawnSurvivors) { q.x = X(q.x); q.y = Y(q.y); }
+    m.spawnKiller = { x: X(m.spawnKiller.x), y: Y(m.spawnKiller.y) }; m.spawnKillerP = m.spawnKiller;
+    return m;
   }
 
   DP.buildCamp = buildCamp;
