@@ -1609,6 +1609,21 @@ console.log('som e variedade');
   for (let i = 0; i < 120; i++) g3.update(1 / 60, null, { s: { 0: { ax: 1, ay: 0 } }, k: null });
   ok(g3.evq.some((e) => e.t === 's' && e.n === 'step' && e.x !== null), 'o anfitrião registra eventos sonoros com posição (passos)');
   ok(N.unpackEv(N.packEv(g3.evq.find((e) => e.t === 's' && e.ex))).ex.surf === g3.evq.find((e) => e.t === 's' && e.ex).ex.surf, 'eventos são empacotados e desempacotados sem perda');
+  // espectador: quem morre/escapa passa a seguir os outros
+  {
+    const g = DP.createGame({ map: 'camp', rng: seeded(41), survivors: 4, humans: [0, 1], role: 'survivor', me: 0, sfx: () => {} });
+    g.specTick();
+    ok(!g.spec && g.pl === g.survivors[0], 'vivo: não é espectador e a câmera segue o próprio personagem');
+    g.survivors[0].dead = true; g.specTick();
+    ok(g.spec && g.pl !== g.survivors[0] && g.pl === g.survivors[1], 'morreu: vira espectador e passa a seguir o primeiro colega vivo');
+    g.specNext(1); const a = g.pl; g.specNext(1); const b = g.pl; g.specNext(1); const c = g.pl;
+    ok(a === g.survivors[2] && b === g.survivors[3] && c === g.k, 'trocar de alvo percorre os colegas vivos e por último o assassino');
+    g.specNext(1); ok(g.pl === g.survivors[1], 'e volta ao começo (ciclo)');
+    g.survivors[1].escaped = true; g.specTick(); ok(g.pl !== g.survivors[1], 'se o alvo some (escapou/morreu), troca sozinho');
+    ok(g.specName() && typeof g.specName() === 'string', 'tem nome para mostrar: ' + g.specName());
+    const g2 = DP.createGame({ map: 'camp', rng: seeded(42), survivors: 4, humans: [0], role: 'survivor', me: 0, sfx: () => {} });
+    g2.survivors[0].escaped = true; g2.specTick(); ok(g2.spec && g2.pl !== g2.survivors[0], 'escapou: também vira espectador');
+  }
   // nomes: limpeza e nomes repetidos
   ok(N.cleanName('  Ána  <b>Luíza_Maria!! ') === 'ANA BLUIZA', 'nome: sem acento, maiúsculo, só caracteres da fonte, até 10 letras: ' + N.cleanName('  Ána  <b>Luíza_Maria!! '));
   {

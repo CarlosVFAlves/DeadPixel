@@ -2286,12 +2286,31 @@
     };
     g.setLocal = (role2, id) => { g.pl = role2 === 'killer' ? k : g.survivors[id]; };
 
-    g.names = opts.names || null;                                   // nomes por vaga (0 = assassino, 1–4 = sobreviventes) no multijogador
+    // ---- espectador: quem morreu ou escapou (no multijogador, a partida continua para os outros) passa a seguir quem ainda joga ----
+  // Basta trocar `g.pl` (quem a câmera, a neblina e o som acompanham); os controles continuam sendo os do próprio sobrevivente.
+  g.spec = false; g.specSince = 0;
+  const specList = () => g.survivors.filter((v) => v !== g.survivors[meIdx] && alive(v)).concat([k]);
+  g.specTick = function () {
+    const me = g.survivors[meIdx];
+    if (role !== 'survivor' || alive(me)) return;
+    if (!g.spec) { g.spec = true; g.specSince = g.time; }
+    if (!g.over) { const l = specList(); if (!l.includes(g.pl)) g.pl = l[0]; }
+  };
+  g.specNext = function (d) {
+    if (!g.spec || g.over) return;
+    const l = specList(), i = l.indexOf(g.pl);
+    g.pl = l[(i + d + l.length) % l.length];
+  };
+  g.specName = function () {
+    if (g.pl === k) return (g.names && g.names[0]) || 'ASSASSINO';
+    return (g.names && g.names[g.pl.id + 1]) || 'SOBREV. ' + (g.pl.id + 1);
+  };
+  g.names = opts.names || null;                                   // nomes por vaga (0 = assassino, 1–4 = sobreviventes) no multijogador
   g.CFG = CFG;
     return g;
   }
 
-  DP.VERSION = '0.0.5';          // versão do jogo (aparece no menu); a cada entrega sobe: 0.0.2, 0.0.3...
+  DP.VERSION = '0.0.6';          // versão do jogo (aparece no menu); a cada entrega sobe: 0.0.2, 0.0.3...
   DP.createGame = createGame;
   DP.CFG = CFG;
 })(typeof window !== 'undefined' ? window : globalThis);

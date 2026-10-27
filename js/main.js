@@ -143,7 +143,11 @@
     } else if (state === 'play') {
       const r = Math.max(22, Math.min(30, Math.round(Math.min(W, H) * 0.16))), r2 = Math.round(r * 0.8);
       const kk = DP.ui.keys;
-      if (role === 'killer') {
+      if (game && game.spec && !game.over) {                                                                       // espectador: só trocar de pessoa
+        const bw = Math.min(96, Math.floor((W - 24) / 2));
+        list.push({ id: 'spec_prev', label: 'ANTERIOR', key: 'A', x: 8, y: H - 30, w: bw, h: 22, color: '#9bd3f0' });
+        list.push({ id: 'spec_next', label: 'PRÓXIMO', key: 'D', x: W - 8 - bw, y: H - 30, w: bw, h: 22, color: '#9bd3f0' });
+      } else if (role === 'killer') {
         const close = !!(game && !game.over && game.dist < 2.4 && game.k.state === 'chase');
         const kit = game && game.kInteract;
         list.push({ id: 'drop', label: 'ATACAR', key: 'ESPAÇO', round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: close, hot: '#ff5c5c' });
@@ -159,8 +163,8 @@
         if (game && game.s.tool) { const r3 = Math.round(r * 0.62); list.push({ id: 'radio', label: 'RÁDIO', key: 'Q', round: true, x: W - 2 * r - 8 - 2 * r2 - 6 - 2 * r3 - 5, y: H - 2 * r3 - 10, w: 2 * r3, h: 2 * r3, active: !!game.s.tool.on, hot: '#9bd3f0' }); }
         if (game && game.s.skill && !game.s.hidden) list.push({ id: 'skill', ghost: true, x: Math.round(W / 2) - 30, y: Math.round(H / 2) - 46 - 30, w: 60, h: 60 });     // toque no círculo do skill check
       }
-      if (game && game.role === 'survivor' && game.chests) for (const b of DP.render.bagRects(game, W, H)) list.push({ id: b.id, ghost: true, x: b.x, y: b.y, w: b.w, h: b.h });
-      const cl = game && DP.render.chatLayout(game, W, H);
+      if (game && game.role === 'survivor' && game.chests && !(game.spec && !game.over)) for (const b of DP.render.bagRects(game, W, H)) list.push({ id: b.id, ghost: true, x: b.x, y: b.y, w: b.w, h: b.h });
+      const cl = game && !(game.spec && !game.over) && DP.render.chatLayout(game, W, H);
       if (cl) for (const b of cl.btns) list.push({ id: b.id, ghost: true, x: b.x, y: b.y, w: b.w, h: b.h });
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
       const mr = game && DP.render.miniRect(game, W, H);
@@ -217,6 +221,8 @@
       case 'vision': if (game && game.training) game.fullVision = !game.fullVision; break;
       case 'start': curMap = lobbyMode === 2 ? 'arena' : 'camp'; start(lobbyMode > 0); break;
       case 'chat0': case 'chat1': case 'chat2': if (mp && mp.guest) replyQueued = +id.slice(4); else if (game) game.chatReply(+id.slice(4)); break;
+      case 'spec_prev': if (game) game.specNext(-1); break;
+      case 'spec_next': if (game) game.specNext(1); break;
       case 'drop': dropQueued = true; break;
       case 'act': actQueued = true; break;
       case 'radio': radioQueued = true; break;
@@ -298,6 +304,7 @@
       if (code === 'Space' || code === 'Enter') { dropQueued = true; pressQueued = true; }
       if (code === 'KeyP' || code === 'Escape') state = 'pause';
       if (code === 'KeyV' && game && game.training) game.fullVision = !game.fullVision;
+      if (game && game.spec && !game.over) { if (code === 'ArrowLeft' || code === 'KeyA') game.specNext(-1); else if (code === 'ArrowRight' || code === 'KeyD' || code === 'Space' || code === 'Enter') game.specNext(1); }
       if (code === 'KeyQ') radioQueued = true;
       if (code === 'KeyF') useQueued = true;
       if ((code === 'Digit1' || code === 'Digit2' || code === 'Digit3') && game && game.chatReply) { if (mp && mp.guest) replyQueued = +code.slice(5) - 1; else game.chatReply(+code.slice(5) - 1); }
@@ -434,7 +441,7 @@
       }
     }
     if (state === 'play' && game) {
-
+      if (game.specTick) game.specTick();            // morreu/escapou no multijogador: vira espectador
       // bipe do rádio: mais rápido quanto mais perto
       if (!game.over && game.role === 'survivor' && game.s.det > 0) {
         radioT -= dt;

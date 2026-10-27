@@ -1162,8 +1162,12 @@
   }
 
   function drawHUD(ctx, game, W, H, tm) {
-    const s = game.s, ka = game.role === 'killer';
-    if (ka) {
+    const s = game.s, ka = game.role === 'killer', watching = !ka && game.spec && !game.over;
+    if (watching) {                                                               // espectador: quem está sendo seguido, no lugar da vida
+      text(ctx, 'ESPECTANDO:', 4, 4, '#9bd3f0');
+      text(ctx, game.specName(), 4 + 6 * 12, 4, game.pl === game.k ? '#ff7a7a' : '#ffffff');
+      if (game.time - game.specSince < 5) DP.font.wrap(s.escaped ? 'VOCÊ ESCAPOU! AGORA ASSISTA OS OUTROS.' : 'VOCÊ FOI ABATIDO. AGORA VOCÊ ASSISTE.', Math.max(14, Math.min(28, Math.floor((W - 16) / 6)))).forEach((l, i) => text(ctx, l, W / 2, Math.round(H * 0.34) + i * 9, s.escaped ? '#7dffa0' : '#ff9d5c', { align: 'c', shadow: 'rgba(0,0,0,.9)' }));
+    } else if (ka) {
       const left = game.survivors.filter((v) => game.alive(v)).length;
       text(ctx, 'RESTAM ' + left + '/' + game.survivors.length, 4, 4, '#cfcfd8');
     } else {
@@ -1171,7 +1175,7 @@
       for (let i = 0; i < game.hpMax; i++) text(ctx, '♥', 32 + i * 7, 4, game.training || i < s.hp ? '#e23a3a' : '#3a3a44', { shadow: 'rgba(0,0,0,.9)' });
     }
     drawTeam(ctx, game, W);
-    if (!ka && s.hidden) {                                                        // dentro do armário: vista estreita e escura
+    if (!ka && !watching && s.hidden) {                                                        // dentro do armário: vista estreita e escura
       ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = 'rgba(0,0,0,.82)'; ctx.fillRect(0, 0, W, Math.round(H * 0.36)); ctx.fillRect(0, Math.round(H * 0.64), W, H);
       text(ctx, 'ESCONDIDO', Math.round(W / 2), Math.round(H * 0.3), '#9bd3f0', { align: 'c' });
@@ -1189,7 +1193,7 @@
       const vs = game.vehicles.map((v) => (v.kind === 'car' ? 'CARRO ' : 'BARCO ') + (v.state === 'gone' || v.state === 'leaving' ? 'SAIU' : v.state === 'started' ? 'LIGADO' : v.state === 'ready' ? 'PRONTO' : v.order.length + '/' + v.need.length));
       text(ctx, vs.join(W < 260 ? ' ' : '  '), 4, ly, '#cfd3e0'); ly += 10;
     }
-    if (!ka && s.fear > 0.12) {                                                 // medo: barra que enche com a proximidade do assassino; no vermelho, correr faz tropeçar
+    if (!ka && !watching && s.fear > 0.12) {                                                 // medo: barra que enche com a proximidade do assassino; no vermelho, correr faz tropeçar
       const f = s.fear, col = f < 0.4 ? '#7dffa0' : f < 0.7 ? '#ffd23f' : '#ff4d4d';
       text(ctx, 'MEDO', 4, ly, col); px(ctx, '#2a2a33', 32, ly + 1, 30, 4); px(ctx, col, 33, ly + 2, Math.round(28 * f), 2); ly += 10;
     }
@@ -1253,8 +1257,8 @@
     } else if (!ka && game.k.hesitate && game.canSeeKiller(game.pl) && game.dist < 12) {      // só quando dá para ver o assassino hesitar
       text(ctx, 'ELE HESITA...', W / 2, msgY(game, W, H), '#ff9d5c', { align: 'c' });
     }
-    if (!ka && game.slotsOf) drawBag(ctx, game, W, H, tm);
-    drawCallChat(ctx, game, W, H, tm);
+    if (!ka && !watching && game.slotsOf) drawBag(ctx, game, W, H, tm);
+    if (!watching) drawCallChat(ctx, game, W, H, tm);
   }
 
   // ---------- chat da ligação para a polícia ----------
