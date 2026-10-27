@@ -605,6 +605,31 @@ Respostas do usuário às perguntas de design: **sem estado "caído"** (o últim
 - **Testado:** 30 sementes têm barracão conectado ao acampamento; 12 baús; cura/cancelamento; mochila cheia; colega; bot que se cura; armadilhas dos dois lados, desarmar, soltar, IA armando (≥3 em 6 partidas).
 - **Medida (laboratório bots × assassino-IA):** o "jogador-bot" morre em ~160–170 s em média (1 fuga em 10), mesmo com o aprendizado desligado; no FÁCIL ~260 s. O que mais mudou o resultado foi consertar o bug da janela (o assassino travava olhando o alvo). **A calibrar com jogadores humanos**, que desviam melhor que os bots.
 
+## 13. Multijogador (v0.0.2) — 1 assassino + até 4 sobreviventes, pelo `room` do artefato
+
+**Decisões do usuário:** amigos logados no claude.ai (sem servidor); formato "1 assassino humano + até 4 sobreviventes", vagas livres viram bots. Não há servidor nosso: usamos a capacidade `room` do artefato (declarada na publicação: `capabilities: {room: {}}`).
+
+### 13.1 Limites da plataforma (importantes)
+- Só **conecta quem está logado e admitido** (membros da organização dona do artefato ou convidados): visitante do **link público sem login não entra** (a tela MULTIJOGADOR avisa "INDISPONÍVEL AQUI" quando `claude.use("room")` não responde).
+- Eventos (`emit`) só valem para quem edita; por isso **tudo viaja na "presença"** (qualquer pessoa admitida pode defini-la): até ~30 envios/s e **4 KiB por pessoa**. Todo o protocolo cabe nisso.
+- Se o aparelho do anfitrião fica em segundo plano (aba oculta), o navegador congela o `requestAnimationFrame` e a partida de todos congela. **Anfitrião: mantenha a aba na frente.**
+- Não consegui testar contra o `room` real do claude.ai aqui (sem acesso ao runtime): testado com uma sala simulada (`MockBus`: atraso 60 ms + variação 30 ms + 5% de perda) e com dois navegadores reais ligados por uma ponte em Node. **Primeiro teste com gente de verdade: relatar o que acontecer.**
+
+### 13.2 Arquitetura
+- **Anfitrião autoritativo:** quem cria a sala roda o jogo inteiro (`createGame` com `humans`, `killerHuman`, `survivors: 4`, `record: true`). Cada jogador manda **só os controles**; o anfitrião devolve uma **fotografia compacta** (~2–3 KB, 15×/s) + **eventos** (sons, textos, partículas, pings, tremores).
+- **Cópia (`replica: true`)** nos convidados: gera o MESMO mapa/itens a partir da semente (teste: tiles e ids iguais), mas só aplica fotografias (`applySnapshot`), anda os próprios passos na frente (`predict`) e calcula localmente o que depende de quem olha (`replicaUpdate`: dicas de interação, pallet próximo, distância ao assassino, relógios de animação, suavização dos outros).
+- **Previsão + reconciliação:** o convidado anda na hora (colisão real do motor); a cada fotografia parte da posição do anfitrião e **refaz os controles ainda não confirmados** (`ak` = último número de sequência processado). Resultado medido na sala simulada: erro médio de posição **~0,2 tile**.
+- **Controles compactos:** `[seq, ax, ay, bandeiras, contadores de pulso…]` (pulsos como contadores: ESPAÇO, AGIR, skill check, rádio, usar, espaço da mochila, resposta do chat); o anfitrião transforma contador mudado em pulso de um quadro.
+- **Vagas:** `k` (assassino) e sobreviventes 1–4; cada um pede a sua na sala de espera (toque na vaga); o anfitrião arbitra, escolhe a dele e inicia. Quem sair no meio **vira bot** (`game.dropHuman`); assassino humano que sai volta a ser a IA; se o anfitrião some, o convidado volta ao menu após 8 s.
+- **Motor generalizado:** `killerHuman` (era `role==='killer'`), `humans[]`, `me`, entradas por vaga em `update(dt, inp, {s:{id:...}, k})`; chat da polícia por sobrevivente; piscada/tremor via `feel()` só para o dono (nas outras telas vai como evento); partida só acaba quando todos os sobreviventes saem (com um único humano contra a IA vale a regra antiga: morrer/escapar encerra).
+- **Arquivos:** `js/net.js` (Host, Guest, MockBus, codificação), ganchos no fim de `createGame` (`snapshot`, `applySnapshot`, `playEvent`, `predict`, `replicaUpdate`, `dropHuman`), telas em `lobby.js` (`drawMp`, `drawMpLobby`) e integração em `main.js` (menu MULTIJOGADOR → CRIAR SALA / lista de salas abertas → sala de espera → partida).
+
+### 13.3 Testes
+`tests/sim.js` (seção multijogador: vagas, mapa igual, tamanho < 3900, erro de posição, vida/mortes iguais, ataque do assassino convidado chega ao anfitrião, quem sai vira bot, IA caçando humanos, eventos) e `tests/browser-mp.js` (duas páginas no Chromium ligadas por uma sala simulada: cria sala, entra, escolhe vaga de assassino, inicia, anda e confere que as duas telas concordam; salva capturas `tests/mp-*.png`).
+
+### 13.4 Limitações conhecidas / próximos passos
+Sem reconexão no meio da partida; sem chat; nomes são "J" + 3 letras do identificador; os recordes e fichas não contam em partida multijogador; o assassino-jogador convidado sente a latência do ataque (o bote é decidido no anfitrião); o anfitrião pausa/minimiza = todos congelam; falta afinar balanceamento com humanos de verdade (mais gente = mais difícil para o assassino?).
+
 ## 11d. Versão 0.0.1 e o bug do HUD que sumia ao pular a janela
 
 **Versionamento (pedido do usuário):** a versão aparece no canto do menu (`DP.VERSION` em `js/game.js`, hoje **0.0.1**) e sobe a cada entrega (0.0.2, 0.0.3...), para sabermos para onde estamos indo. Cada versão publicada deve ter a linha correspondente aqui.

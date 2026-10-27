@@ -56,8 +56,14 @@
     return inp;
   }
 
+  // o room pode recusar (limite de 4 KiB, desconexão): erro de envio nunca derruba o jogo
+  function safe(room) {
+    return { me: () => room.me(), peers: () => room.peers(), presence: (p) => { try { const r = room.presence(p); if (r && r.catch) r.catch(() => {}); return r; } catch (e) { return null; } } };
+  }
+
   // ---------- anfitrião ----------
-  function Host(room, name, opts) {
+  function Host(room0, name, opts) {
+    const room = safe(room0);
     opts = opts || {};
     const self = { code: opts.code || mkCode(), name: name || 'ANFITRIÃO', st: 'lobby', slots: [null, null, null, null, null], seed: 0, diff: opts.diff || 'normal', hostSlot: 1, over: false };
     const me = () => room.me();
@@ -144,11 +150,14 @@
       room.presence(pl);
     };
     self.end = () => { self.st = 'over'; push(); };
+    self.info = () => ({ code: self.code, isHost: true, slots: self.slots.map((x) => (x ? names[x] || nameOf(x) : null)), mine: self.slots.indexOf(me()) });
+    self.close = () => room.presence({ c: null, r: null, hs: null, sn: null, ev: null, ak: null, n: null, v: null });
     return self;
   }
 
   // ---------- convidado ----------
-  function Guest(room, code, name) {
+  function Guest(room0, code, name) {
+    const room = safe(room0);
     const self = { code, name: name || nameOf(room.me()), want: undefined, st: 'lobby', slotKey: null, info: null, lastEv: 0, snapT: -1, ack: 0, seq: 0, pending: [], inSt: { seq: 0, c: { drop: 0, act: 0, press: 0, radio: 0, use: 0, slot: 0, reply: 0 }, vSlot: 0, vReply: 0 }, game: null, lastIn: null, sentAt: 0, clock: 0, hostGone: 0 };
     const hostPeer = () => room.peers().find((p) => !p.isMe && p.presence && p.presence.c === code && p.presence.r === 'h' && p.presence.v === VER) || null;
     function mine() { return { v: VER, c: code, r: 'g', n: self.name, want: self.want }; }
@@ -202,7 +211,8 @@
       }
       g.replicaUpdate(dt);
     };
-    self.leave = () => room.presence({ c: null, r: null, in: null, want: null });
+    self.leave = () => room.presence({ c: null, r: null, in: null, want: null, n: null, v: null });
+    self.info = () => { const hi = self.hostInfo(); if (!hi) return null; return { code, isHost: false, hostName: hi.n, slots: hi.names.map((x) => x || null), mine: hi.slots.indexOf(room.me()), st: hi.st }; };
     return self;
   }
 

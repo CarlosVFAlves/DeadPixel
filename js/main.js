@@ -24,7 +24,34 @@
     log = JSON.parse(localStorage.getItem('dp_log') || '[]');
     const dd = localStorage.getItem('dp_diff'); if (['easy', 'normal', 'hard'].includes(dd)) difficulty = dd;
   } catch (e) {}
-  const MENU_STATES = ['menu', 'lobby', 'chars', 'shop', 'help'];
+  const MENU_STATES = ['menu', 'lobby', 'chars', 'shop', 'help', 'mp', 'mplobby'];
+  // ---------- multijogador (sala do artefato) ----------
+  DP.MP_ON = true;
+  let mp = null, roomApi = null, roomState = null, mpErr = null, mpErrT = 0;       // roomState: null = conectando, true = pronto, false = indisponível aqui
+  async function ensureRoom() {
+    if (roomState !== null) return;
+    try {
+      const r = window.claude && window.claude.use ? await window.claude.use('room') : null;
+      if (r) { roomApi = { me: () => { const m = r.peers().find((p) => p.isMe); return m ? m.peer : 'eu'; }, peers: () => r.peers(), presence: (p) => r.presence(p) }; roomState = true; }
+      else roomState = false;
+    } catch (e) { roomState = false; }
+  }
+  const sfxFn = (n, p, v, x) => { const f = DP.audio.sfx[n]; if (f) { DP.audio.vol = v === undefined ? 1 : v; f(p, x); DP.audio.vol = 1; } };
+  function mpMsg(t) { mpErr = t; mpErrT = 4; }
+  function leaveMp() {
+    if (mp) { try { if (mp.host) mp.host.close(); else if (mp.guest) mp.guest.leave(); } catch (e) {} }
+    mp = null;
+  }
+  function mpBegin(g) {
+    game = g; role = g.role; training = false; curMap = 'camp'; newBest = false; showMap = false; DP.render.reset();
+    state = 'play'; joy.id = null; joy.active = false; joy.dx = joy.dy = 0; beatT = 0; window.__dp.game = g;
+  }
+  function mpInfo() {
+    const o = { ok: roomState, games: [], lobby: null, err: mpErr };
+    if (roomState && roomApi) { try { o.games = DP.net.listGames(roomApi); } catch (e) {} }
+    if (mp) { try { o.lobby = mp.host ? mp.host.info() : mp.guest.info(); } catch (e) {} }
+    return o;
+  }
   let helpPage = 0, helpFrom = 'menu';
   // dicas de teclado nos botões: só para quem usa teclado (ou tela sem toque)
   let touchDevice = false, usedKeys = false;
@@ -44,7 +71,7 @@
   const keys = {};
   const joy = { id: null, active: false, bx: 0, by: 0, dx: 0, dy: 0 };
   const held = new Map();        // pointerId -> botão pressionado
-  let dropQueued = false, actQueued = false, pressQueued = false, radioQueued = false, useQueued = false, slotQueued = null;
+  let dropQueued = false, actQueued = false, pressQueued = false, radioQueued = false, useQueued = false, slotQueued = null, replyQueued = null;
 
   function resize() {
     const host = canvas.parentElement.getBoundingClientRect();
@@ -69,7 +96,7 @@
     const list = [];
     const cx = Math.round(W / 2);
     if (MENU_STATES.includes(state)) {
-      for (const b of DP.lobby.layout(state, W, H).buttons) list.push(Object.assign({}, b, { label: DP.lobby.labelFor(b, lobbyUI()) }));
+      for (const b of DP.lobby.layout(state, W, H, lobbyUI()).buttons) list.push(Object.assign({}, b, { label: DP.lobby.labelFor(b, lobbyUI()) }));
     } else if (state === 'play') {
       const r = Math.max(22, Math.min(30, Math.round(Math.min(W, H) * 0.16))), r2 = Math.round(r * 0.8);
       const kk = DP.ui.keys;
@@ -101,7 +128,7 @@
     } else if (state === 'pause') {
       const bw = Math.min(150, W - 24), by = Math.round(H * 0.4);
       list.push({ id: 'resume', label: 'CONTINUAR', x: cx - bw / 2, y: by, w: bw, h: 17, color: '#ffd23f' });
-      list.push({ id: 'restart', label: 'REINICIAR', x: cx - bw / 2, y: by + 22, w: bw, h: 17 });
+      if (!mp) list.push({ id: 'restart', label: 'REINICIAR', x: cx - bw / 2, y: by + 22, w: bw, h: 17 });
       list.push({ id: 'help', label: 'COMO JOGAR', x: cx - bw / 2, y: by + 44, w: bw, h: 17, color: '#ffffff' });
       list.push({ id: 'menu', label: 'MENU', x: cx - bw / 2, y: by + 66, w: bw, h: 17, color: '#8a8a99' });
     } else if (state === 'over') {
@@ -123,6 +150,10 @@
     DP.audio.init();
     switch (id) {
       case 'go_lobby': state = 'lobby'; break;
+      case 'go_mp': state = 'mp'; ensureRoom(); break;
+      case 'mp_create': if (roomState && DP.net) { mp = { host: DP.net.Host(roomApi, 'J' + String(roomApi.me()).slice(-3).toUpperCase()) }; mp.host.push(); state = 'mplobby'; } break;
+      case 'mp_start': if (mp && mp.host) { const g = mp.host.start(DP.createGame, { sfx: sfxFn }); mpBegin(g); } break;
+      case 'mp_leave': leaveMp(); state = 'mp'; break;
       case 'go_chars': state = 'chars'; break;
       case 'go_shop': state = 'shop'; break;
       case 'go_help': helpFrom = 'menu'; state = 'help'; break;
@@ -136,17 +167,19 @@
       case 'map': showMap = !showMap; break;
       case 'vision': if (game && game.training) game.fullVision = !game.fullVision; break;
       case 'start': curMap = lobbyMode === 2 ? 'arena' : 'camp'; start(lobbyMode > 0); break;
-      case 'chat0': case 'chat1': case 'chat2': if (game) game.chatReply(+id.slice(4)); break;
+      case 'chat0': case 'chat1': case 'chat2': if (mp && mp.guest) replyQueued = +id.slice(4); else if (game) game.chatReply(+id.slice(4)); break;
       case 'drop': dropQueued = true; break;
       case 'act': actQueued = true; break;
       case 'radio': radioQueued = true; break;
       case 'use': useQueued = true; break;
       case 'slot0': case 'slot1': case 'slot2': slotQueued = +id.slice(4); break;
       case 'pause': if (state === 'play') state = 'pause'; break;
+      case 'mp_slot0': case 'mp_slot1': case 'mp_slot2': case 'mp_slot3': case 'mp_slot4': if (mp) { const key = DP.net.SLOTS[+id.slice(7)]; if (mp.host) mp.host.setHostSlot(key); else mp.guest.setWant(key); } break;
       case 'resume': if (state === 'pause') state = 'play'; break;
-      case 'restart': start(training); break;
-      case 'menu': state = 'menu'; game = null; break;
+      case 'restart': if (mp) { leaveMp(); state = 'menu'; game = null; } else start(training); break;
+      case 'menu': leaveMp(); state = 'menu'; game = null; break;
       default:
+        if (id.indexOf('mp_join') === 0 && roomState && DP.net) { const gm = DP.net.listGames(roomApi)[+id.slice(7)]; if (gm) { mp = { guest: DP.net.Guest(roomApi, gm.code) }; mp.guest.join(); state = 'mplobby'; } break; }
         if (id.indexOf('card') === 0) toast = { text: DP.lobby.SHOP[+id.slice(4)].name + ': COMPRAS EM BREVE', t: 2.2 };
     }
   }
@@ -218,7 +251,7 @@
       if (code === 'KeyV' && game && game.training) game.fullVision = !game.fullVision;
       if (code === 'KeyQ') radioQueued = true;
       if (code === 'KeyF') useQueued = true;
-      if ((code === 'Digit1' || code === 'Digit2' || code === 'Digit3') && game && game.chatReply) game.chatReply(+code.slice(5) - 1);
+      if ((code === 'Digit1' || code === 'Digit2' || code === 'Digit3') && game && game.chatReply) { if (mp && mp.guest) replyQueued = +code.slice(5) - 1; else game.chatReply(+code.slice(5) - 1); }
     } else if (state === 'pause') {
       if (code === 'KeyP' || code === 'Escape' || code === 'Enter') state = 'play';
     } else if (state === 'menu') {
@@ -239,16 +272,16 @@
     } else if (state === 'chars' || state === 'shop') {
       if (code === 'Escape' || code === 'Enter') state = 'menu';
     } else if (state === 'over') {
-      if (code === 'KeyR' || code === 'Enter') start(training);
-      if (code === 'Escape') { state = 'menu'; game = null; }
+      if (code === 'KeyR' || code === 'Enter') { if (mp) { leaveMp(); state = 'menu'; game = null; } else start(training); }
+      if (code === 'Escape') { leaveMp(); state = 'menu'; game = null; }
     }
-    if (code === 'KeyR' && state === 'play') start(training);
+    if (code === 'KeyR' && state === 'play' && !mp) start(training);
     if (code === 'KeyM' || code === 'Tab') { if (state === 'play') showMap = !showMap; }
     if (code === 'KeyN') DP.audio.toggleMute();
   });
   window.addEventListener('keyup', (e) => { const c = codeOf(e); if (c) keys[c] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') state = 'pause'; });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play' && !mp) state = 'pause'; });
 
   function readInput() {
     let ax = 0, ay = 0;
@@ -273,8 +306,8 @@
     let walk = role === 'killer' ? false : !(keys.ShiftLeft || keys.ShiftRight);
     if (joy.active && !kbMove) { const l = Math.hypot(joy.dx, joy.dy); walk = l > 0.18 && l < 0.55; }
     const stealth = role === 'killer' && !!(keys.ShiftLeft || keys.ShiftRight || [...held.values()].includes('stealth'));
-    const out = { ax, ay, drop: dropQueued, act, actPress: actQueued, press: pressQueued, walk, radio: radioQueued, stealth, use: useQueued, slot: slotQueued };
-    dropQueued = actQueued = pressQueued = radioQueued = useQueued = false; slotQueued = null;
+    const out = { ax, ay, drop: dropQueued, act, actPress: actQueued, press: pressQueued, walk, radio: radioQueued, stealth, use: useQueued, slot: slotQueued, reply: replyQueued === null ? undefined : replyQueued };
+    dropQueued = actQueued = pressQueued = radioQueued = useQueued = false; slotQueued = null; replyQueued = null;
     return out;
   }
 
@@ -316,7 +349,7 @@
     return out;
   }
 
-  function lobbyUI() { return { helpPage, touch: !DP.ui.keys, role, difficulty, training: lobbyMode > 0, mode: lobbyMode, coins, hist, best: bestText(), toast: toast ? toast.text : null }; }
+  function lobbyUI() { return { mp: mpInfo(), helpPage, touch: !DP.ui.keys, role, difficulty, training: lobbyMode > 0, mode: lobbyMode, coins, hist, best: bestText(), toast: toast ? toast.text : null }; }
 
   // ---------- laço ----------
   let last = performance.now(), beatT = 0, radioT = 0;
@@ -326,10 +359,32 @@
     last = now;
     const tm = now / 1000;
 
+    // multijogador: sala de espera e quadro de rede
+    if (mpErrT > 0) { mpErrT -= dt; if (mpErrT <= 0) mpErr = null; }
+    if (mp && state === 'mplobby') {
+      try {
+        if (mp.host) mp.host.tick(dt);
+        else {
+          mp.guest.tick(dt);
+          const g = mp.guest.maybeStart(DP.createGame, { sfx: sfxFn });
+          if (g) mpBegin(g);
+          else if (!mp.guest.info()) { mp.lost = (mp.lost || 0) + dt; if (mp.lost > 6) { leaveMp(); state = 'mp'; mpMsg('A SALA FECHOU'); } } else mp.lost = 0;
+        }
+      } catch (e) { leaveMp(); state = 'mp'; mpMsg('ERRO NA SALA'); }
+    }
+    if ((state === 'play' || (mp && state === 'pause')) && game) {
+      const inp = state === 'play' ? readInput() : {};
+      if (mp) {
+        try {
+          if (mp.host) { game.update(Math.min(dt, 0.05), null, mp.host.gather(inp)); mp.host.send(dt); mp.host.checkLeft(); }
+          else { mp.guest.frame(Math.min(dt, 0.05), inp); if (mp.guest.hostGone > 8) { leaveMp(); state = 'menu'; game = null; mpMsg('O ANFITRIÃO SAIU'); toast = { text: 'O ANFITRIÃO SAIU', t: 3 }; } }
+        } catch (e) { console.error(e); }
+      } else {
+        const steps = Math.ceil(dt / (1 / 60));
+        for (let i = 0; i < steps; i++) { game.update(dt / steps, i === 0 ? inp : { ax: inp.ax, ay: inp.ay, act: inp.act }); }
+      }
+    }
     if (state === 'play' && game) {
-      const inp = readInput();
-      const steps = Math.ceil(dt / (1 / 60));
-      for (let i = 0; i < steps; i++) { game.update(dt / steps, i === 0 ? inp : { ax: inp.ax, ay: inp.ay, act: inp.act }); }
 
       // bipe do rádio: mais rápido quanto mais perto
       if (!game.over && game.role === 'survivor' && game.s.det > 0) {
@@ -344,18 +399,20 @@
           if (beatT <= 0) { DP.audio.sfx.heart(0.15 + near * 0.55); beatT = 1.2 - near * 0.75; }
         }
       }
-      if (game.over && state === 'play' && game.overT > 1.6) { state = 'over'; finishMatch(); }
+      if (game.over && state === 'play' && game.overT > 1.6) { state = 'over'; if (!mp) finishMatch(); else { newBest = false; lastReward = 0; } }
     }
 
     // ---- desenho ----
     if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
     if (MENU_STATES.includes(state)) {
-      const L = DP.lobby.layout(state, W, H), ui = lobbyUI();
+      const L = DP.lobby.layout(state, W, H, lobbyUI()), ui = lobbyUI();
       if (state === 'menu') DP.lobby.drawMenu(ctx, W, H, tm, ui);
       else if (state === 'lobby') DP.lobby.drawLobby(ctx, W, H, tm, ui, L);
       else if (state === 'chars') DP.lobby.drawChars(ctx, W, H, tm, ui, L);
       else if (state === 'help') DP.lobby.drawHelp(ctx, W, H, tm, ui, L);
-      else DP.lobby.drawShop(ctx, W, H, tm, ui, L);
+      else if (state === 'mp') DP.lobby.drawMp(ctx, W, H, tm, ui, L);
+      else if (state === 'mplobby') DP.lobby.drawMpLobby(ctx, W, H, tm, ui, L);
+      else if (state === 'shop') DP.lobby.drawShop(ctx, W, H, tm, ui, L);
     } else if (game) {
       DP.render.drawWorld(ctx, game, W, H, tm);
       DP.render.drawHUD(ctx, game, W, H, tm);

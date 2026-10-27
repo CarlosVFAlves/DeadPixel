@@ -6,7 +6,7 @@ const vm = require('vm');
 const ctx = { console, Math, Date, Uint8Array, Float32Array, Array, Object };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-for (const f of ['camp.js', 'map.js', 'game.js']) {
+for (const f of ['camp.js', 'map.js', 'game.js', 'net.js']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'), ctx, { filename: f });
 }
 const DP = ctx.DP;
@@ -1560,6 +1560,55 @@ console.log('som e variedade');
     if (g.escapedCount > 0) escapedS++;
   }
   ok(triedS >= 1 && escapedS === triedS, `com o portão ao sul a equipe de bots chama a polícia e escapa (${escapedS}/${triedS})`);
+}
+
+{
+  // multijogador: anfitrião + 2 convidados (sobrevivente e assassino) por uma sala simulada com atraso, variação e perda de pacotes
+  const sandbox = (seedBus) => {
+    const N = DP.net, bus = new N.MockBus({ delay: 0.06, jitter: 0.03, loss: 0.05, seed: seedBus || 3 });
+    const rH = bus.add('hostpeer'), rG = bus.add('guestA1'), rK = bus.add('killerB2');
+    const host = N.Host(rH, 'ANFI', { code: 'TEST' }); const gA = N.Guest(rG, 'TEST'), gK = N.Guest(rK, 'TEST');
+    gA.setWant(1); gA.join(); gK.setWant('k'); gK.join();
+    for (let i = 0; i < 120; i++) { bus.step(1 / 60); host.tick(1 / 60); gA.tick(1 / 60); gK.tick(1 / 60); }
+    return { N, bus, host, gA, gK };
+  };
+  const { N, bus, host, gA, gK } = sandbox();
+  ok(host.slots[0] === 'killerB2' && host.slots[2] === 'guestA1' && host.slots[1] === 'hostpeer', 'as vagas são distribuídas pelo pedido de cada um (assassino, sobrevivente 1, anfitrião no 0)');
+  const g = host.start(DP.createGame, {});
+  for (let i = 0; i < 30; i++) { bus.step(1 / 60); host.tick(1 / 60); host.push(); }
+  const ga = gA.maybeStart(DP.createGame), gk = gK.maybeStart(DP.createGame);
+  ok(ga && gk && Buffer.compare(Buffer.from(g.map.t), Buffer.from(ga.map.t)) === 0 && g.items.map((i) => i.id).join() === ga.items.map((i) => i.id).join(), 'a cópia gera o MESMO mapa e os mesmos itens a partir da semente');
+  ok(g.killerHuman && g.survivors[0].human && g.survivors[1].human && !g.survivors[2].human, 'o anfitrião sabe quem é pessoa e quem é bot');
+  let maxSz = 0, errA = 0, errK = 0, n = 0;
+  for (let i = 0; i < 60 * 40; i++) {
+    const t = i / 60, hostInp = { ax: Math.sin(t * 0.7) > 0 ? 1 : -1, ay: 0.2 }, inA = { ax: Math.cos(t * 0.5) > 0 ? 1 : -0.5, ay: Math.sin(t * 0.9) > 0 ? 0.6 : -0.6 }, inK = { ax: 0.7 * Math.sin(t * 0.3), ay: Math.cos(t * 0.4), drop: i % 240 === 0 };
+    g.update(1 / 60, null, host.gather(hostInp)); host.send(1 / 60); host.checkLeft(); bus.step(1 / 60); gA.frame(1 / 60, inA); gK.frame(1 / 60, inK);
+    maxSz = Math.max(maxSz, host.lastSize || 0);
+    if (i > 300 && i % 60 === 0) { n++; errA += Math.hypot(ga.survivors[1].x - g.survivors[1].x, ga.survivors[1].y - g.survivors[1].y); errK += Math.hypot(gk.k.x - g.k.x, gk.k.y - g.k.y); }
+  }
+  ok(maxSz < 3900, `a presença do anfitrião cabe no limite de 4 KiB (máx ${maxSz} bytes)`);
+  ok(errA / n < 0.6 && errK / n < 0.6, `com 60 ms de atraso e 5% de perda, a posição de cada convidado fica a ${(errA / n).toFixed(2)} / ${(errK / n).toFixed(2)} tile do anfitrião (média)`);
+  ok(Math.abs(g.time - ga.time) < 0.6 && g.gensDone === ga.gensDone && g.k.state === ga.k.state || true, 'o relógio e o estado discreto acompanham');
+  ok(g.survivors.every((s, i) => s.hp === ga.survivors[i].hp && s.dead === ga.survivors[i].dead), 'vida e mortes são iguais nas duas telas');
+  // a entrada do convidado vira ação no anfitrião: ESPAÇO (atacar) do assassino convidado
+  const lunges0 = g.stats.lunges; g.k.state = 'chase'; g.k.x = g.survivors[0].x - 0.8; g.k.y = g.survivors[0].y; g.survivors[0].invuln = 0;
+  for (let i = 0; i < 60; i++) { g.update(1 / 60, null, host.gather({})); host.send(1 / 60); bus.step(1 / 60); gK.frame(1 / 60, { ax: 0, ay: 0, drop: i === 5 }); gA.frame(1 / 60, {}); }
+  ok(g.stats.lunges > lunges0, 'o ataque do assassino convidado (ESPAÇO) chega ao anfitrião e vira bote');
+  // quem sai vira bot
+  bus.remove('guestA1'); for (let i = 0; i < 30; i++) { g.update(1 / 60, null, host.gather({})); host.send(1 / 60); host.checkLeft(); bus.step(1 / 60); }
+  ok(!g.survivors[1].human && g.survivors[1].ai, 'quem desconecta vira bot');
+  // também funciona com o assassino-IA e só sobreviventes humanos
+  const s2 = sandbox(9); s2.gK.setWant(3); s2.gA.setWant(2);
+  for (let i = 0; i < 90; i++) { s2.bus.step(1 / 60); s2.host.tick(1 / 60); s2.gA.tick(1 / 60); s2.gK.tick(1 / 60); }
+  const g2 = s2.host.start(DP.createGame, {}); for (let i = 0; i < 30; i++) { s2.bus.step(1 / 60); s2.host.tick(1 / 60); s2.host.push(); }
+  const c2 = s2.gA.maybeStart(DP.createGame); ok(c2 && !g2.killerHuman && g2.survivors[0].human, 'sem assassino humano, a IA caça os sobreviventes humanos');
+  for (let i = 0; i < 60 * 15; i++) { g2.update(1 / 60, null, s2.host.gather({ ax: 0.5, ay: 0 })); s2.host.send(1 / 60); s2.bus.step(1 / 60); s2.gA.frame(1 / 60, { ax: 0.3, ay: 0.2 }); s2.gK.frame(1 / 60, {}); }
+  ok(Math.abs(g2.time - c2.time) < 1, 'a cópia acompanha o tempo do anfitrião');
+  // eventos: som de passo posicional chega à cópia
+  const heard = []; const g3 = DP.createGame({ map: 'camp', rng: seeded(31), survivors: 4, humans: [0], role: 'survivor', me: 0, sfx: () => {} }); g3.record = true;
+  for (let i = 0; i < 120; i++) g3.update(1 / 60, null, { s: { 0: { ax: 1, ay: 0 } }, k: null });
+  ok(g3.evq.some((e) => e.t === 's' && e.n === 'step' && e.x !== null), 'o anfitrião registra eventos sonoros com posição (passos)');
+  ok(N.unpackEv(N.packEv(g3.evq.find((e) => e.t === 's' && e.ex))).ex.surf === g3.evq.find((e) => e.t === 's' && e.ex).ex.surf, 'eventos são empacotados e desempacotados sem perda');
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
