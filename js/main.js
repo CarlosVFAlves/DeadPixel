@@ -44,7 +44,7 @@
   const keys = {};
   const joy = { id: null, active: false, bx: 0, by: 0, dx: 0, dy: 0 };
   const held = new Map();        // pointerId -> botão pressionado
-  let dropQueued = false, actQueued = false, pressQueued = false, radioQueued = false;
+  let dropQueued = false, actQueued = false, pressQueued = false, radioQueued = false, useQueued = false, slotQueued = null;
 
   function resize() {
     const host = canvas.parentElement.getBoundingClientRect();
@@ -81,13 +81,14 @@
         list.push({ id: 'stealth', label: 'ESPR.', key: 'SHIFT', round: true, x: W - 2 * r - 8 - 4 * r2 - 12, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.k.stealth), hot: '#9bd3f0' });
       } else {
         const sit = game && game.interact, hid = !!(game && game.s.hidden);
-        const capTxt = hid ? 'SAIR DO ARMÁRIO' : sit ? ({ gen: 'CONSERTAR', item: 'PEGAR', door: 'ABRIR PORTA', window: 'ABRIR JANELA', phone: 'LIGAR PARA A POLÍCIA', install: 'INSTALAR PEÇA', start: sit.obj.kind === 'boat' ? 'EMPURRAR BARCO' : 'LIGAR O MOTOR', board: 'ENTRAR', hide: 'ESCONDER-SE' }[sit.type] || '') : (game && game.s.item ? 'SOLTAR PEÇA' : '');
+        const capTxt = hid ? 'SAIR DO ARMÁRIO' : sit ? ({ gen: 'CONSERTAR', item: 'PEGAR', door: 'ABRIR PORTA', window: 'ABRIR JANELA', phone: 'LIGAR PARA A POLÍCIA', install: 'INSTALAR PEÇA', start: sit.obj.kind === 'boat' ? 'EMPURRAR BARCO' : 'LIGAR O MOTOR', board: 'ENTRAR', hide: 'ESCONDER-SE', chest: 'ABRIR BAÚ' }[sit.type] || '') : (game && game.s.item ? 'SOLTAR PEÇA' : '');
         list.push({ id: 'act', label: 'AGIR', key: 'E', cap: capTxt, round: true, x: W - 2 * r - 8, y: H - 2 * r - 10, w: 2 * r, h: 2 * r, active: !!sit || hid || !!(game && game.s.item) });
         const vh = !!(game && game.vaultHint && !(game.near));
         list.push({ id: 'drop', label: vh ? 'PULAR' : 'PALLET', key: 'ESPAÇO', cap: game && game.near ? 'DERRUBAR PALLET' : vh ? 'PULAR' : '', round: true, x: W - 2 * r - 8 - 2 * r2 - 6, y: H - 2 * r2 - 10, w: 2 * r2, h: 2 * r2, active: !!(game && game.near) || vh });
         if (game && game.s.tool) { const r3 = Math.round(r * 0.62); list.push({ id: 'radio', label: 'RÁDIO', key: 'Q', round: true, x: W - 2 * r - 8 - 2 * r2 - 6 - 2 * r3 - 5, y: H - 2 * r3 - 10, w: 2 * r3, h: 2 * r3, active: !!game.s.tool.on, hot: '#9bd3f0' }); }
         if (game && game.s.skill && !game.s.hidden) list.push({ id: 'skill', ghost: true, x: Math.round(W / 2) - 30, y: Math.round(H / 2) - 46 - 30, w: 60, h: 60 });     // toque no círculo do skill check
       }
+      if (game && game.role === 'survivor' && game.chests) for (const b of DP.render.bagRects(game, W, H)) list.push({ id: b.id, ghost: true, x: b.x, y: b.y, w: b.w, h: b.h });
       const cl = game && DP.render.chatLayout(game, W, H);
       if (cl) for (const b of cl.btns) list.push({ id: b.id, ghost: true, x: b.x, y: b.y, w: b.w, h: b.h });
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
@@ -138,6 +139,7 @@
       case 'drop': dropQueued = true; break;
       case 'act': actQueued = true; break;
       case 'radio': radioQueued = true; break;
+      case 'slot0': case 'slot1': case 'slot2': slotQueued = +id.slice(4); break;
       case 'pause': if (state === 'play') state = 'pause'; break;
       case 'resume': if (state === 'pause') state = 'play'; break;
       case 'restart': start(training); break;
@@ -213,6 +215,7 @@
       if (code === 'KeyP' || code === 'Escape') state = 'pause';
       if (code === 'KeyV' && game && game.training) game.fullVision = !game.fullVision;
       if (code === 'KeyQ') radioQueued = true;
+      if (code === 'KeyF') useQueued = true;
       if ((code === 'Digit1' || code === 'Digit2' || code === 'Digit3') && game && game.chatReply) game.chatReply(+code.slice(5) - 1);
     } else if (state === 'pause') {
       if (code === 'KeyP' || code === 'Escape' || code === 'Enter') state = 'play';
@@ -268,8 +271,8 @@
     let walk = role === 'killer' ? false : !(keys.ShiftLeft || keys.ShiftRight);
     if (joy.active && !kbMove) { const l = Math.hypot(joy.dx, joy.dy); walk = l > 0.18 && l < 0.55; }
     const stealth = role === 'killer' && !!(keys.ShiftLeft || keys.ShiftRight || [...held.values()].includes('stealth'));
-    const out = { ax, ay, drop: dropQueued, act, actPress: actQueued, press: pressQueued, walk, radio: radioQueued, stealth };
-    dropQueued = actQueued = pressQueued = radioQueued = false;
+    const out = { ax, ay, drop: dropQueued, act, actPress: actQueued, press: pressQueued, walk, radio: radioQueued, stealth, use: useQueued, slot: slotQueued };
+    dropQueued = actQueued = pressQueued = radioQueued = useQueued = false; slotQueued = null;
     return out;
   }
 

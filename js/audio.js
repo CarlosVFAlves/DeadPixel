@@ -86,6 +86,10 @@
     },
     // errou: o ar cortado esvaindo e o corpo freando
     whiff(pan) { noise(0.24, 0.32, 2600, 'bandpass', 1.3, pan, 0.02, 420); tone(105, 0.14, 'sine', 0.3, 60, pan, 0.05); noise(0.1, 0.18, 700, 'lowpass', 0.8, pan, 0.08); },
+    // baú: tampa rangendo e o conteúdo chacoalhando
+    chest(pan) { noise(0.3, 0.3, 700, 'bandpass', 2, pan, 0, 1800); tone(150, 0.14, 'square', 0.1, 220, pan, 0.05); tone(880, 0.07, 'triangle', 0.1, 1200, pan, 0.2); },
+    // cura concluída: acorde subindo
+    heal(pan) { for (let i = 0; i < 3; i++) tone(440 * Math.pow(1.26, i), 0.22, 'triangle', 0.18, 0, pan, i * 0.1); },
     // respiração abafada de quem está escondido (inspira e solta): baixa, só se ouve de muito perto
     breath(pan) { noise(0.5, 0.16, 700, 'bandpass', 0.9, pan, 0, 420); noise(0.6, 0.12, 500, 'bandpass', 0.8, pan, 0.55, 300); },
     // passos: x = { surf, heavy, alt } (alt alterna pé esquerdo/direito: pequena variação de tom)

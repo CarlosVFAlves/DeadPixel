@@ -76,6 +76,8 @@
     // tempos base (s) das tarefas de rota; multiplicados pela dificuldade (ver createGame)
     ROUTES: { fuse: 45, door: 3, phone: 30, policeEta: 150, policeWindow: 120, carPart: 35, carStart: 10, boatPart: 40, boatStart: 15, leaveWait: 10 },
     // MEDO (anti-loop): quanto mais perto o assassino (e te vendo), mais medo; com medo, CORRER faz tropeçar com mais frequência (chance/s = FEAR_TRIP × medo²)
+    BAG: 3, CHEST_T: 1.2, HEAL_T: 6, HEAL_RANGE: 1.6,   // mochila (espaços: rádio, peça, kit médico...), tempo para abrir um baú, para se curar (1 vida) e alcance para curar um colega
+    CHEST_LOOT: [['medkit', 0.4], ['trap', 0.2]],       // o que há num baú (o resto vem vazio)
     LEARN: 1,            // o assassino-IA aprende: cada bote errado aumenta a antecipação da mira e o acompanhamento do bote (0 desliga)
     GLASS_DEATH: 0.01,   // chance de morrer ao se cortar no vidro com a última vida
     FEAR_R: 9, FEAR_MIN: 1.2, FEAR_TRIP: 0.13, FEAR_CALM: 4, FEAR_RELIEF: 2.5, SURV_TRIP_T: 1.3, SURV_TRIP_SLOW: 0.5,
@@ -111,7 +113,7 @@
   };
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  const T_WIN = 5, T_TREE = 6, T_WATER = 7, T_VEH = 8, T_LOCKER = 9;
+  const T_WIN = 5, T_TREE = 6, T_WATER = 7, T_VEH = 8, T_LOCKER = 9, T_CHEST = 10;
   // peças dos veículos: o carro leva bateria, chave e combustível; o barco, hélice, chave e combustível
   const PARTS = {
     battery: { veh: 'car', name: 'BATERIA' }, ckey: { veh: 'car', name: 'CHAVE' }, cfuel: { veh: 'car', name: 'COMBUSTÍVEL' },
@@ -151,7 +153,7 @@
     };
 
     function makeAI(i) {
-      return { route: map.vehicles ? ['police', 'car', 'boat', 'police'][i % 4] : 'police', mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, fT: new Float32Array(W * H), zoneT: 0, planAge: 0, dx: 0, dy: 0, K: null, est: null, hearT: 0, fetch: null, wary: 0, hideLike: rnd(), hideCD: 0, hideGoal: null, hideGoalT: 0, hideUntil: 0, hideSeen: null };
+      return { route: map.vehicles ? ['police', 'car', 'boat', 'police'][i % 4] : 'police', mode: 'repair', target: null, aware: 0, lk: null, thinkT: rnd() * 0.3, plan: null, skill: null, skillAt: 0, wait: 0, noPal: {}, fieldT: 0, fT: new Float32Array(W * H), zoneT: 0, planAge: 0, dx: 0, dy: 0, K: null, est: null, hearT: 0, fetch: null, wary: 0, hideLike: rnd(), hideCD: 0, hideGoal: null, hideGoalT: 0, hideUntil: 0, hideSeen: null, lootLike: rnd() };
     }
     g.makeAI = makeAI;      // (testes de equilíbrio: transformar o 'jogador' em bot)
     const nSurv = 1 + bots;
@@ -163,7 +165,7 @@
         hp: map.kind === 'camp' ? CFG.HP_CAMP : CFG.HP, fear: 0, calm: 0, tripT: 0, burst: 0, invuln: 0, vault: null, vaultCD: 0, moving: false, walk: 0,
         noise: 0, acting: null, skill: null, skillCD: 4 + i * 1.7, tick: 0,
         dead: false, escaped: false, near: null, interact: null, human, item: null, tool: null, pickP: 0, pickFor: null, det: 0,
-        ai: human ? null : makeAI(i), usedWin: 0
+        ai: human ? null : makeAI(i), usedWin: 0, bag: [], heal: null
       });
     }
 
@@ -231,6 +233,12 @@
     const vehByKind = (kind) => g.vehicles.find((v) => v.kind === kind);
     // armários: dá para se esconder (invisível e inaudível); o assassino pode abrir e, se achar alguém, acerta
     g.lockers = (map.lockers || []).map((l) => ({ tx: l.tx, ty: l.ty, nx: l.nx, ny: l.ny, cx: l.tx + 0.5, cy: l.ty + 0.5, stand: { x: l.tx + 0.5 + l.nx * 0.95, y: l.ty + 0.5 + l.ny * 0.95 }, occ: null, checked: -99, t: 99, open: 0 }));
+    // baús: abrir (segurar AGIR) revela o conteúdo; quem abre o guarda na mochila (ou deixa no chão se estiver cheia)
+    g.chests = (map.chests || []).map((c) => {
+      let r = rnd(), loot = null;
+      for (const [kind, p0] of CFG.CHEST_LOOT) { if (r < p0) { loot = kind; break; } r -= p0; }
+      return { tx: c.tx, ty: c.ty, nx: c.nx, ny: c.ny, cx: c.tx + 0.5, cy: c.ty + 0.5, stand: { x: c.tx + 0.5 + c.nx * 0.95, y: c.ty + 0.5 + c.ny * 0.95 }, open: false, t: 99, loot, known: false };
+    });
     g.partName = (it) => PARTS[it.part].name + ' (' + (it.veh === 'car' ? 'CARRO' : 'BARCO') + ')';
     // telefone (só no mapa grande): com energia ligada, segurar AGIR liga para a polícia; ela chega depois de um tempo e abre o portão por uma janela
     g.phone = map.phone ? { tx: map.phone.tx, ty: map.phone.ty, cx: map.phone.tx + 0.5, cy: map.phone.ty + 0.5, progress: 0, state: 'locked', visited: -99, w: 0, eta: 0, win: 0, calls: 0, noisyT: -99 } : null;
@@ -597,12 +605,17 @@
     }
     function killSurvivor(sv) {
       sv.dead = true; sv.vault = null; g.deadCount++;
+      sv.deadAt = g.time; sv.deadFace = sv.face; sv.moving = false; sv.acting = null; sv.skill = null;       // o corpo fica onde caiu
+      if (sv.item) dropItem(sv, sv.item);                                                                      // o que carregava (peça, rádio) cai no chão
+      if (sv.tool) dropItem(sv, sv.tool);
+      while (sv.bag.length) dropItem(sv, sv.bag[0]);
+      sv.heal = null;
       popup('ABATIDO!', sv.x, sv.y - 1.4, '#ff4d4d');
       checkEnd();
     }
     function hurt() {
       g.stats.hits++;
-      s.invuln = 0.7; s.burst = CFG.BURST_T;
+      s.invuln = 0.7; s.burst = CFG.BURST_T; s.heal = null;
       if (s.human || role === 'killer') { g.shake = 6; g.flash = 0.3; }       // golpe em bot não pisca a tela de quem joga de sobrevivente
       sfx('hit', pan(s.x, s.y));
       popup(role === 'killer' ? 'ACERTOU!' : '-1', s.x, s.y - 1.4, role === 'killer' ? '#ffd23f' : '#ff4d4d');
@@ -654,24 +667,55 @@
         else if (v.state === 'started' && v.seated < v.seats) { bd = d; best = { type: 'board', obj: v }; }
       }
       for (const it of g.items) {
-        if (it.holder || (it.kind === 'radio' && s.tool) || (it.kind === 'part' && s.item)) continue;
+        if (it.holder || !canTake(s, it)) continue;
         const d = Math.hypot(s.x - it.x, s.y - it.y);
         if (d < CFG.ITEM_RANGE && d < bd) { bd = d; best = { type: 'item', obj: it }; }
       }
+      for (const c of g.chests) {
+        if (c.open) continue;
+        const d = Math.hypot(s.x - c.cx, s.y - c.cy);
+        if (d < CFG.LOCKER_RANGE && d < bd) { bd = d; best = { type: 'chest', obj: c }; }
+      }
       return best;
     }
+    // mochila: o rádio, a peça e os itens de uso (kit médico, armadilha) dividem os CFG.BAG espaços
+    const slotsOf = (sv) => [sv.tool, sv.item].concat(sv.bag).filter(Boolean);
+    const bagFree = (sv) => slotsOf(sv).length < CFG.BAG;
+    g.slotsOf = slotsOf; g.bagFree = bagFree;
+    function canTake(sv, it) { return it.kind === 'part' ? !sv.item && bagFree(sv) : bagFree(sv) && (it.kind !== 'radio' || !sv.tool); }
     function dropItem(sv, it) {
       if (!it) return;
       it.holder = null; it.x = it.cx = sv.x; it.y = it.cy = sv.y;
       if (sv.tool === it) { sv.tool = null; it.on = false; }
       if (sv.item === it) sv.item = null;
+      const bi = sv.bag.indexOf(it); if (bi >= 0) sv.bag.splice(bi, 1);
     }
     function pickUp(it) {
-      if (it.kind === 'radio') { if (s.tool) return; s.tool = it; }
+      if (!canTake(s, it)) { if (s.human) popup('MOCHILA CHEIA', s.x, s.y - 1.5, '#ff9d5c'); return; }
+      if (it.kind === 'radio') s.tool = it;
+      else if (it.kind === 'medkit' || it.kind === 'trap') s.bag.push(it);
       else { if (s.item) dropItem(s, s.item); s.item = it; }
       it.holder = s;
       sfx('pick', pan(s.x, s.y));
-      if (s.human) popup(it.kind === 'radio' ? 'RÁDIO! (Q LIGA/DESLIGA)' : it.kind === 'part' ? PARTS[it.part].name + ' (' + (it.veh === 'car' ? 'CARRO' : 'BARCO') + ')' : 'PEGOU', s.x, s.y - 1.5, '#9bd3f0');
+      if (s.human) popup(it.kind === 'radio' ? 'RÁDIO! (Q LIGA/DESLIGA)' : it.kind === 'medkit' ? 'KIT MÉDICO (F USA)' : it.kind === 'trap' ? 'ARMADILHA (F COLOCA)' : it.kind === 'part' ? PARTS[it.part].name + ' (' + (it.veh === 'car' ? 'CARRO' : 'BARCO') + ')' : 'PEGOU', s.x, s.y - 1.5, '#9bd3f0');
+    }
+    // usar um espaço da mochila (índice na ordem rádio, peça, itens de uso) ou, sem índice, o primeiro kit médico
+    function startHeal(it) {
+      let tgt = null;
+      if (s.hp < g.hpMax) tgt = s;
+      else { let bd = CFG.HEAL_RANGE; for (const o of g.survivors) if (o !== s && alive(o) && !o.hidden && o.hp < g.hpMax) { const d = Math.hypot(o.x - s.x, o.y - s.y); if (d < bd) { bd = d; tgt = o; } } }
+      if (!tgt) { if (s.human) popup('NINGUÉM PRECISA DE CURA', s.x, s.y - 1.5, '#8a8a99'); return false; }
+      s.heal = { t: 0, target: tgt, it };
+      if (s.human) popup(tgt === s ? 'CURANDO... (FIQUE PARADO)' : 'CURANDO COLEGA...', s.x, s.y - 1.5, '#7dffa0');
+      return true;
+    }
+    function useSlot(i) {
+      const list = slotsOf(s), it = i === undefined ? s.bag.find((b) => b.kind === 'medkit') : list[i];
+      if (!it || s.vault || s.hidden || s.heal) return;
+      if (it.kind === 'medkit') startHeal(it);
+      else if (it.kind === 'radio') { if (s.tool && s.tool.batt > 0) { s.tool.on = !s.tool.on; sfx('click'); } }
+      else if (it.kind === 'trap') { if (g.placeTrap) g.placeTrap(s, it); }
+      else if (it.kind === 'part') { dropItem(s, it); sfx('click'); }
     }
     function startSkill() { s.skill = { t: 0, tz: 1.5 + rnd() * 3.6 }; if (s.human) sfx('skill'); }
     function endSkill(result) {
@@ -726,6 +770,14 @@
       sv.x = l.stand.x; sv.y = l.stand.y; sv.face = Math.atan2(l.ny, l.nx);
       sv.invuln = Math.max(sv.invuln, forced ? 0.4 : 0.2);
       sfx('click', pan(l.cx, l.cy));
+    }
+    function openChest(c, sv) {
+      c.open = true; c.t = 0; g.stats.chests = (g.stats.chests || 0) + 1;
+      sfx('chest', pan(c.cx, c.cy));
+      if (!c.loot) { if (sv.human) popup('VAZIO', c.cx, c.cy - 1.3, '#8a8a99'); return; }
+      const it = spawnItem(c.loot, c.cx, c.cy);
+      if (bagFree(sv)) { it.holder = sv; sv.bag.push(it); } else { it.x = it.cx = c.stand.x; it.y = it.cy = c.stand.y; }     // mochila cheia: cai na frente do baú
+      if (sv.human) popup(c.loot === 'medkit' ? 'KIT MÉDICO!' : 'ARMADILHA!', c.cx, c.cy - 1.3, '#7dffa0');
     }
     // o assassino abre o armário: quem estiver dentro é arrancado de lá e levado um golpe
     function openLocker(l) {
@@ -903,6 +955,12 @@
         o.progress = Math.min(1, o.progress + dt / routeT('door'));
         if (s.tick <= 0) { s.tick = 0.4; sfx('repair', pan(o.cx, o.cy)); }
         if (o.progress >= 1) { o.opened = true; o.t = 0; sfx('doorOpen'); popup('PORTA ABERTA!', o.cx, 3, '#7dffa0'); }
+      } else if (tg.type === 'chest') {
+        s.noise = 1.2;
+        if (s.pickFor !== o) { s.pickFor = o; s.pickP = 0; }
+        s.pickP += dt / CFG.CHEST_T;
+        if (s.tick <= 0) { s.tick = 0.4; sfx('creak', pan(o.cx, o.cy)); }
+        if (s.pickP >= 1) { s.pickP = 0; s.pickFor = null; s.acting = null; openChest(o, s); }
       } else if (tg.type === 'item') {
         s.noise = 1;
         if (s.pickFor !== o) { s.pickFor = o; s.pickP = 0; }
@@ -1007,8 +1065,24 @@
       s.jumpT = Math.max(0, (s.jumpT || 0) - dt);
       s.tripT = Math.max(0, s.tripT - dt);
       if (inp.jump) s.jumpT = 0.3;                                       // ESPAÇO: pular (vale por 0,3 s, para apertar um pouco antes de chegar)
-      if (s.vault) { advanceVault(dt); return; }
+      if (s.vault) { s.heal = null; advanceVault(dt); return; }
       let ax = inp.ax || 0, ay = inp.ay || 0;
+      // cura em andamento: parado, ~6 s; mexer, agir, ser acertado ou o alvo sumir cancela
+      if (s.heal) {
+        const h = s.heal;
+        const stop = Math.hypot(ax, ay) > 0.35 || (inp.act && s.interact) || s.tripT > 0 || !alive(h.target) || h.target.hp >= g.hpMax || !s.bag.includes(h.it) || (h.target !== s && Math.hypot(h.target.x - s.x, h.target.y - s.y) > CFG.HEAL_RANGE + 0.5);
+        if (stop) { if (s.human && h.t > 0.3 && Math.hypot(ax, ay) > 0.35) popup('CURA CANCELADA', s.x, s.y - 1.5, '#ff9d5c'); s.heal = null; }
+        else {
+          h.t += dt; s.noise = 1; s.moving = false; s.walk = 0;
+          if (h.t >= CFG.HEAL_T) {
+            h.target.hp = Math.min(g.hpMax, h.target.hp + 1);
+            s.bag.splice(s.bag.indexOf(h.it), 1); g.items.splice(g.items.indexOf(h.it), 1);
+            sfx('heal', pan(s.x, s.y)); popup('+1 VIDA', h.target.x, h.target.y - 1.6, '#7dffa0'); g.stats.heals = (g.stats.heals || 0) + 1;
+            s.heal = null;
+          }
+          return;
+        }
+      }
       const len = Math.hypot(ax, ay);
       if (len > 1) { ax /= len; ay /= len; }
       s.moving = len > 0.12;
@@ -1616,6 +1690,8 @@
         steer(ai.fT, out, l.stand);
         return out;
       }
+      // ferido, com kit médico e o assassino longe: para e se cura
+      if (!fleeing && !s.vault && s.hp < g.hpMax && s.bag.some((b) => b.kind === 'medkit') && (!K || kd > 14)) { if (!s.heal) out.use = true; return out; }
       ai.mode = fleeing ? 'flee' : (g.door.powered ? 'exit' : 'repair');
       if (!fleeing) ai.plan = null; else ai.planAge += dt;
 
@@ -1666,6 +1742,16 @@
         return out;
       }
       // um rádio ou uma peça de veículo à vista? vai pegar (rádio: só quem não tem; peça: só quem não carrega uma e se o veículo ainda precisa dela)
+      const fetchOk = (f) => !f.holder && (f.loot !== undefined ? !f.open && bagFree(s) : f.kind === 'medkit' ? bagFree(s) : f.kind === 'radio' ? !s.tool && bagFree(s) : (!s.item && bagFree(s) && partWanted(f)));
+      if (!ai.fetch && !fleeing && bagFree(s)) {                       // kit médico à vista ou baú conhecido: ferido procura longe; saudável, só perto e se for do tipo "saqueador"
+        const needMed = s.hp < g.hpMax && !s.bag.some((b) => b.kind === 'medkit');
+        for (const it of g.items) if (!ai.fetch && !it.holder && it.kind === 'medkit' && (needMed || ai.lootLike < 0.6) && canSee(s.x, s.y, s.face, false, it.x, it.y, botSkill())) { ai.fetch = it; ai.fieldT = 0; }
+        if (!ai.fetch && (needMed || ai.lootLike < 0.5)) {
+          let bc = null, bdc = needMed ? 55 : 14;
+          for (const c of g.chests) { if (c.open || !c.known) continue; const d = Math.hypot(c.cx - s.x, c.cy - s.y); if (d < bdc) { bdc = d; bc = c; } }
+          if (bc) { ai.fetch = bc; ai.fieldT = 0; }
+        }
+      }
       if (!ai.fetch) {
         for (const it of g.items) {
           if (it.holder) continue;
@@ -1673,7 +1759,7 @@
           if (canSee(s.x, s.y, s.face, false, it.x, it.y, botSkill())) { ai.fetch = it; ai.fieldT = 0; break; }
         }
       }
-      if (ai.fetch && (ai.fetch.holder || (ai.fetch.kind === 'radio' ? s.tool : (s.item || !partWanted(ai.fetch))))) ai.fetch = null;
+      if (ai.fetch && !fetchOk(ai.fetch)) ai.fetch = null;
       if (ai.wary > 0 && !fleeing) { out.walk = true; winPass = k0; return out; }          // quieto: não trabalha nem anda
       const vt = vehicleGoal();
       const rv = ai.route && ai.route !== 'police' ? vehByKind(ai.route) : null;
@@ -1725,6 +1811,11 @@
         if (o.known) continue;
         const dd = Math.hypot(sv.x - o.cx, sv.y - o.cy) || 1;
         if (canSee(sv.x, sv.y, sv.face, false, o.cx + (sv.x - o.cx) / dd * 0.75, o.cy + (sv.y - o.cy) / dd * 0.75, 1)) { o.known = true; if (sv.human || role === 'survivor') popupKnown(o); }
+      }
+      for (const c of g.chests) {
+        if (c.known) continue;
+        const dd = Math.hypot(sv.x - c.cx, sv.y - c.cy) || 1;
+        if (dd < 14 && canSee(sv.x, sv.y, sv.face, false, c.cx + (sv.x - c.cx) / dd * 0.75, c.cy + (sv.y - c.cy) / dd * 0.75, 1)) c.known = true;
       }
       for (const e of g.explore) if (!e.seen && Math.hypot(sv.x - e.x, sv.y - e.y) < (e.kind === 'cabin' ? 4.5 : 6)) e.seen = true;
     }
@@ -1801,6 +1892,7 @@
         if (sv.human && sin.drop && !s.skill && !findDroppable()) sin.jump = true;
         if (s.skill && (sin.press || sin.drop || sin.actPress)) pressSkill();
         else if (!sv.hidden && (sin.drop || (sin.actPress && !sv.interact))) { if (!(sin.drop || findDroppable()) && s.item) dropItem(s, s.item); else tryDrop(); }
+        if (sin.use && !s.skill) useSlot(); else if (sin.slot !== undefined && sin.slot !== null && !s.skill) useSlot(sin.slot);
         updateSurvivor(dt, sin);
 
         // rádio: liga/desliga, gasta pilha e mede a proximidade do assassino (3 faixas, sem direção)

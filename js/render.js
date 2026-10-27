@@ -23,7 +23,7 @@
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS, r = hash(x, y);
-        const fl = t[i] === 0 || t[i] === 3 || (t[i] === 6 && !game.map.bare) || t[i] === 7 || t[i] === 8 || t[i] === 9;
+        const fl = t[i] === 0 || t[i] === 3 || (t[i] === 6 && !game.map.bare) || t[i] === 7 || t[i] === 8 || t[i] === 9 || t[i] === 10;
         const gk = ground ? ground[i] : 0;
         if (indoor[i] && fl) {
           // piso de tábuas
@@ -298,6 +298,27 @@
       const mb = Math.round(Math.sin(tm * 5));
       px(ctx, '#ffffff', x - 2, hy - 6 + mb, 5, 1); px(ctx, '#ffffff', x - 1, hy - 5 + mb, 3, 1); px(ctx, '#ffffff', x, hy - 4 + mb, 1, 1);
     }
+  }
+
+  // corpo no chão: poça de sangue que cresce, o personagem deitado de lado (cai em 0,3 s) e as cores da jaqueta
+  function drawCorpse(ctx, v, game, tm) {
+    const age = game.time - (v.deadAt || 0), x0 = Math.round(v.x * TS), y0 = Math.round(v.y * TS) + 4;
+    const dir = Math.cos(v.deadFace || 0) >= 0 ? 1 : -1, id = v.id % 4;
+    if (age < 0.3) {                                                      // tombo: o boneco em pé gira sobre os pés
+      ctx.save(); ctx.translate(x0, y0 + 1); ctx.rotate(dir * (age / 0.3) * Math.PI / 2); ctx.translate(-x0, -(y0 + 1));
+      drawSurvivor(ctx, Object.assign({}, v, { dead: false, moving: false, invuln: 0, vault: null, tripT: 0, human: false, x: v.x, y: v.y }), game, tm);
+      ctx.restore(); return;
+    }
+    const pool = Math.min(1, (age - 0.3) / 3), pw = Math.round(6 + 8 * pool), ph = Math.round(3 + 3 * pool);
+    px(ctx, 'rgba(0,0,0,.35)', x0 - 8, y0, 16, 3);
+    px(ctx, 'rgba(96,12,14,.9)', x0 - Math.round(pw / 2), y0 - ph + 2, pw, ph); px(ctx, 'rgba(140,22,24,.85)', x0 - Math.round(pw / 2) + 2, y0 - ph + 3, Math.max(2, pw - 4), Math.max(1, ph - 3));
+    const hx = x0 + dir * 6;                                              // cabeça de um lado, pés do outro
+    px(ctx, '#1b2438', x0 - dir * 8 - (dir > 0 ? 0 : 2), y0 - 3, 3, 3);                                      // pernas
+    px(ctx, '#26334d', x0 - dir * 5 - (dir > 0 ? 0 : 2), y0 - 4, 3, 3);
+    px(ctx, JD[id], x0 - 4, y0 - 5, 9, 5); px(ctx, JK[id], x0 - 4, y0 - 6, 9, 4); px(ctx, JL[id], x0 - 3, y0 - 6, 7, 1);       // tronco
+    px(ctx, '#e0b48a', hx - 2, y0 - 6, 4, 4); px(ctx, HAIR[id], hx - (dir > 0 ? 1 : 2), y0 - 7, 3, 2);                    // cabeça
+    px(ctx, '#e0b48a', x0 + dir * 1, y0 - 2, 2, 1);                                                          // mão caída
+    px(ctx, '#b02a2a', x0 - 1, y0 - 4, 2, 2);
   }
 
   const CFGT = 0.4;   // = CFG.TRIP_T
@@ -619,9 +640,52 @@
       px(ctx, pulse > 0.5 ? '#7dffa0' : '#2a6a40', x - 2, y - 3, 1, 1);          // LED
     } else if (it.kind === 'part') {
       drawPartIcon(ctx, x, y, it, 1);
+    } else if (it.kind === 'medkit' || it.kind === 'trap') {
+      drawUseIcon(ctx, x, y, it.kind);
     } else {
       px(ctx, '#7a5530', x - 3, y - 4, 6, 6); px(ctx, '#c9a46a', x - 3, y - 4, 6, 1); px(ctx, '#e9c07a', x - 1, y - 2, 2, 2);
     }
+  }
+  // itens de uso: kit médico (caixa branca com cruz vermelha) e armadilha de urso (mandíbulas de metal)
+  function drawUseIcon(ctx, x, y, kind) {
+    if (kind === 'medkit') {
+      px(ctx, '#15171b', x - 5, y - 6, 10, 8); px(ctx, '#e9e6f0', x - 4, y - 5, 8, 6); px(ctx, '#b9b6c4', x - 4, y - 1, 8, 1);
+      px(ctx, '#d02a2a', x - 1, y - 5, 2, 6); px(ctx, '#d02a2a', x - 3, y - 3, 6, 2); px(ctx, '#7a1a1a', x - 3, y - 7, 6, 1);
+    } else {
+      px(ctx, '#15171b', x - 6, y - 4, 12, 6); px(ctx, '#8a8f9a', x - 5, y - 3, 10, 4); px(ctx, '#c9ced6', x - 5, y - 3, 10, 1);
+      for (let i = 0; i < 5; i++) px(ctx, '#15171b', x - 5 + i * 2, y - 2, 1, 2);
+      px(ctx, '#5a4a32', x - 1, y - 5, 2, 2);
+    }
+  }
+  // baú de madeira com cinta de metal: fechado ou aberto (aberto mostra o forro escuro)
+  function drawChest(ctx, c, game, tm) {
+    const X = c.tx * TS, Y = c.ty * TS, open = c.open, pulse = !open && c.known ? 0.5 + 0.5 * Math.sin(tm * 3 + c.tx) : 0;
+    px(ctx, 'rgba(0,0,0,.45)', X + 1, Y + 11, 14, 4);
+    px(ctx, '#1d1610', X + 1, Y + 3, 14, 10); px(ctx, '#7a5530', X + 2, Y + 4, 12, 8); px(ctx, '#9a6c3a', X + 2, Y + 4, 12, 1);
+    if (open) { px(ctx, '#0d0a07', X + 2, Y + 1, 12, 4); px(ctx, '#3a2a18', X + 2, Y + 5, 12, 2); px(ctx, '#5a3f22', X + 2, Y + 0, 12, 1); }
+    else { px(ctx, '#5a3f22', X + 2, Y + 7, 12, 1); px(ctx, '#9aa0ac', X + 7, Y + 6, 2, 3); px(ctx, '#c9ced6', X + 7, Y + 6, 2, 1); px(ctx, '#46526a', X + 4, Y + 4, 1, 8); px(ctx, '#46526a', X + 11, Y + 4, 1, 8); }
+    if (pulse > 0.5) { ctx.strokeStyle = 'rgba(255,210,63,.45)'; ctx.lineWidth = 1; ctx.strokeRect(X + 0.5, Y + 2.5, 15, 11); }
+  }
+  // mochila na tela (lado esquerdo, no meio): 3 espaços; tocar usa o item (ou F no teclado: kit médico)
+  function bagRects(game, W, H) {
+    const out = [], bw = 19, gap = 3, y0 = Math.round(H * 0.5 - (3 * bw + 2 * gap) / 2);
+    for (let i = 0; i < game.cfg.BAG; i++) out.push({ id: 'slot' + i, x: 3, y: y0 + i * (bw + gap), w: bw, h: bw });
+    return out;
+  }
+  function drawBag(ctx, game, W, H, tm) {
+    const sv = game.s, list = game.slotsOf(sv);
+    bagRects(game, W, H).forEach((r, i) => {
+      const it = list[i];
+      ctx.fillStyle = 'rgba(12,12,18,.78)'; ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = it ? '#9bd3f0' : '#3a3a46'; ctx.lineWidth = 1; ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      if (!it) return;
+      const cx = r.x + Math.round(r.w / 2), cy = r.y + r.h - 5;
+      if (it.kind === 'radio') { px(ctx, '#2a2e36', cx - 4, cy - 8, 8, 7); px(ctx, '#4a505c', cx - 4, cy - 8, 8, 1); px(ctx, '#0d0d13', cx - 3, cy - 7, 4, 3); px(ctx, it.on ? '#7dffa0' : '#2a6a40', cx - 2, cy - 6, 1, 1); px(ctx, '#9aa0ac', cx + 2, cy - 12, 1, 4); }
+      else if (it.kind === 'part') drawPartIcon(ctx, cx, cy, it, 1);
+      else drawUseIcon(ctx, cx, cy, it.kind);
+      if (game.s.heal && game.s.heal.it === it) { px(ctx, '#2a2a33', r.x + 1, r.y + r.h - 3, r.w - 2, 2); px(ctx, '#7dffa0', r.x + 1, r.y + r.h - 3, Math.round((r.w - 2) * game.s.heal.t / game.cfg.HEAL_T), 2); }
+    });
+    if (DP.ui && DP.ui.keys) text(ctx, 'F: CURAR', 3, bagRects(game, W, H)[2].y + 22, '#6f6f7c');
   }
   // peças de veículo (o mesmo desenho no chão e na mão de quem carrega)
   function drawPartIcon(ctx, x, y, it, big) {
@@ -884,10 +948,13 @@
     for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.nearList.some((n) => n.pal === p) ? tm : 0) });
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
     for (const l of game.lockers) list.push({ y: l.cy + 0.4, f: () => drawLocker(ctx, l, game, tm) });
+    for (const c of game.chests) list.push({ y: c.cy + 0.3, f: () => drawChest(ctx, c, game, tm) });
     if (game.phone) list.push({ y: game.phone.cy, f: () => drawPhone(ctx, game.phone, game, tm) });
     if (game.phone && game.phone.state === 'here') list.push({ y: ((game.map.parking || { y: 5 }).y + 5), f: () => drawPolice(ctx, game.phone, game, tm) });
     for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
     for (const v of game.survivors) if (!v.dead && !v.escaped && !v.hidden && (v === pl || vis(v.x, v.y))) { list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) }); if (v.item) list.push({ y: v.y + 0.02, f: () => drawCarry(ctx, v) }); }
+    for (const v of game.survivors) if (v.heal && !v.dead && (v === pl || vis(v.x, v.y))) list.push({ y: v.y + 0.5, f: () => { const bx = Math.round(v.x * TS) - 7, by = Math.round(v.y * TS) - 26; px(ctx, '#000', bx - 1, by - 1, 16, 5); px(ctx, '#2a4a30', bx, by, 14, 3); px(ctx, '#7dffa0', bx, by, Math.round(14 * v.heal.t / game.cfg.HEAL_T), 3); px(ctx, '#d02a2a', Math.round(v.x * TS) - 1, by - 5, 2, 4); px(ctx, '#d02a2a', Math.round(v.x * TS) - 2, by - 4, 4, 2); } });
+    for (const v of game.survivors) if (v.dead && !v.escaped && (full || vis(v.x, v.y))) list.push({ y: v.y - 0.02, f: () => drawCorpse(ctx, v, game, tm) });
     for (const v of game.vehicles) if (v.state !== 'gone') list.push({ y: v.state === 'leaving' ? vehPos(v, game).y + 1 : v.cy + 0.9, f: () => drawVehicle(ctx, v, game, tm) });
     if (game.k === pl || full || game.canSeeKiller(pl)) list.push({ y: game.k.y, f: () => { ctx.globalAlpha = game.k.stealth ? 0.55 : 1; drawKiller(ctx, game.k, game, tm); ctx.globalAlpha = 1; } });
     list.sort((a, b) => a.y - b.y);
@@ -911,7 +978,7 @@
       const it = game.pInteract;
       if (it && !(game.role === 'survivor' && game.s.acting)) {
         const label = { gen: 'SEGURE E', item: 'SEGURE E: PEGAR', door: 'SEGURE E: ABRIR PORTA', window: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', smash: 'E: QUEBRAR JANELA', kick: 'E: CHUTAR',
-          phone: 'SEGURE E: LIGAR PARA A POLÍCIA', hide: 'SEGURE E: ESCONDER-SE', locker: 'E: ABRIR ARMÁRIO', install: 'SEGURE E: INSTALAR', start: it.obj.kind === 'boat' ? 'SEGURE E: EMPURRAR' : 'SEGURE E: LIGAR O MOTOR', board: 'SEGURE E: ENTRAR', sabotage: 'E: SABOTAR' }[it.type];
+          phone: 'SEGURE E: LIGAR PARA A POLÍCIA', hide: 'SEGURE E: ESCONDER-SE', chest: 'SEGURE E: ABRIR BAÚ', locker: 'E: ABRIR ARMÁRIO', install: 'SEGURE E: INSTALAR', start: it.obj.kind === 'boat' ? 'SEGURE E: EMPURRAR' : 'SEGURE E: LIGAR O MOTOR', board: 'SEGURE E: ENTRAR', sabotage: 'E: SABOTAR' }[it.type];
         const bad = it.type === 'break' || it.type === 'kick' || it.type === 'smash' || it.type === 'sabotage' || it.type === 'locker';
         const lift = it.obj.range ? 34 : it.type === 'gen' ? 14 : it.type === 'phone' ? 22 : 18;
         text(ctx, label, it.obj.cx * TS, it.obj.cy * TS - lift + bob, bad ? '#ff9d5c' : '#7dffa0', { align: 'c' });
@@ -1042,6 +1109,7 @@
     } else if (!ka && game.k.hesitate && game.canSeeKiller(game.pl) && game.dist < 12) {      // só quando dá para ver o assassino hesitar
       text(ctx, 'ELE HESITA...', W / 2, msgY(game, W, H), '#ff9d5c', { align: 'c' });
     }
+    if (!ka && game.slotsOf) drawBag(ctx, game, W, H, tm);
     drawCallChat(ctx, game, W, H, tm);
   }
 
@@ -1092,7 +1160,7 @@
     const col = { tree: hex('#1b3524'), grass: hex('#34523b'), dirt: hex('#7a6648'), sand: hex('#9a9068'), gravel: hex('#73757c'), plank: hex('#8a6a46'), water: hex('#2a6290'), wall: hex('#b1abc4'), crate: hex('#9a6c3a'), win: hex('#7cc4e8'), gate: hex('#ffd23f'), floor: hex('#54443a') };
     for (let i = 0; i < W * H; i++) {
       const v = t[i], g = ground ? ground[i] : 0;
-      const c0 = v === 6 ? col.tree : v === 7 ? col.water : v === 1 ? col.wall : v === 2 ? col.crate : v === 5 ? col.win : v === 4 ? col.gate
+      const c0 = v === 6 ? col.tree : v === 7 ? col.water : v === 1 ? col.wall : v === 2 ? col.crate : v === 5 ? col.win : v === 10 ? col.crate : v === 4 ? col.gate
         : indoor[i] ? col.floor : g === 1 ? col.dirt : g === 2 ? col.sand : g === 3 ? col.plank : g === 4 ? col.gravel : col.grass;
       d[i * 4] = c0[0]; d[i * 4 + 1] = c0[1]; d[i * 4 + 2] = c0[2]; d[i * 4 + 3] = 255;
     }
@@ -1293,5 +1361,5 @@
 
   // peças internas expostas só para a ferramenta que exporta as folhas-molde de textura (tools/export-sheets.js)
   const internals = { buildStatic, drawLocker, drawGen, drawPhone, drawVehicle, drawPolice, drawPalletUp, drawPalletFlat, drawBroken, drawWindow, drawItem, roofCanvas, hash, TS };
-  DP.render = { chatLayout, internals, uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawMini, miniRect, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
+  DP.render = { chatLayout, bagRects, internals, uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawMini, miniRect, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
 })(typeof window !== 'undefined' ? window : globalThis);

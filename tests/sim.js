@@ -1435,5 +1435,63 @@ console.log('som e variedade');
   ok(a1 > a0 * 5 && a1 / 4 > 0.15, `quem desvia sempre na hora do bote: sem aprendizado ${(a0 / 4 * 100).toFixed(0)}% de acerto, com aprendizado ${(a1 / 4 * 100).toFixed(0)}%`);
 }
 
+{
+  // corpo: quem morre fica no chão onde caiu e solta o que carregava
+  const g = DP.createGameAny({ map: 'camp', rng: seeded(95), bots: 1 }); g.k.state = 'intro'; g.k.t = -999;
+  const v = g.survivors[1], it = g.items.find((q) => q.kind === 'part'); it.holder = v; v.item = it;
+  v.hp = 1; v.x = 30.5; v.y = 30.5; v.invuln = 0; v.hidden = null;
+  g.k.x = 29.8; g.k.y = 30.5; g.k.state = 'lunge'; g.k.t = 0; g.k.ldx = 1; g.k.ldy = 0; g.k.hitDone = false;
+  for (let i = 0; i < 30 && !v.dead; i++) g.update(1 / 60, {});
+  ok(v.dead && typeof v.deadAt === 'number' && Math.abs(v.x - 30.5) < 3, 'último golpe mata e o corpo fica onde caiu');
+  ok(!v.item && !it.holder && Math.hypot(it.x - v.x, it.y - v.y) < 0.01, 'a peça que ele carregava cai no chão ao morrer');
+  const x0 = v.x, y0 = v.y; for (let i = 0; i < 120; i++) g.update(1 / 60, {});
+  ok(v.x === x0 && v.y === y0 && v.dead, 'o corpo não se mexe');
+}
+
+{
+  // baús, mochila de 3 espaços e kit médico
+  const mk = (seed) => { const g = DP.createGameAny({ map: 'camp', rng: seeded(seed), bots: 0 }); g.k.state = 'intro'; g.k.t = -999; g.s.skillCD = 999; return g; };
+  let g = mk(101);
+  ok(g.chests.length >= 8 && g.chests.length <= 14 && g.chests.every((c) => g.map.t[c.ty * g.map.W + c.tx] === 10), `o mapa tem ${g.chests.length} baús (tile próprio)`);
+  const withMed = g.chests.filter((c) => c.loot === 'medkit').length;
+  ok(withMed >= 2 && withMed <= 9, `${withMed} baús com kit médico (poucos, não um por baú)`);
+  // abrir um baú com kit: segurar AGIR
+  const c = g.chests.find((q) => q.loot === 'medkit') || g.chests[0]; c.loot = 'medkit';
+  g.s.x = c.stand.x; g.s.y = c.stand.y; g.s.face = Math.atan2(c.cy - g.s.y, c.cx - g.s.x);
+  for (let i = 0; i < 100 && !c.open; i++) g.update(1 / 60, { act: true });
+  ok(c.open && g.s.bag.length === 1 && g.s.bag[0].kind === 'medkit', 'segurar AGIR abre o baú e o kit médico vai para a mochila');
+  // cura: parado ~6 s, +1 vida; mexer cancela
+  g.s.hp = 1; g.s.bag[0].holder = g.s;
+  g.update(1 / 60, { use: true });
+  ok(g.s.heal, 'F inicia a cura');
+  for (let i = 0; i < 120; i++) g.update(1 / 60, {});
+  g.update(1 / 60, { ax: 1, ay: 0 });
+  ok(!g.s.heal && g.s.hp === 1 && g.s.bag.length === 1, 'andar cancela a cura e o kit não é gasto');
+  g.update(1 / 60, { use: true });
+  for (let i = 0; i < 60 * 6.3; i++) g.update(1 / 60, {});
+  ok(g.s.hp === 2 && g.s.bag.length === 0 && !g.s.heal, 'parado por ~6 s: cura 1 vida e gasta o kit');
+  // cheia: 3 espaços
+  g = mk(102); const s = g.s;
+  const radio = g.spawnItem('radio', s.x, s.y), m1 = g.spawnItem('medkit', s.x, s.y), m2 = g.spawnItem('medkit', s.x, s.y), m3 = g.spawnItem('medkit', s.x, s.y);
+  for (const it of [radio, m1, m2]) { it.holder = s; if (it.kind === 'radio') s.tool = it; else s.bag.push(it); }
+  ok(g.slotsOf(s).length === 3 && !g.bagFree(s), 'rádio + 2 kits ocupam 3 espaços e a mochila fica cheia');
+  g.update(1 / 60, {});
+  ok(!s.interact || s.interact.obj !== m3, 'com a mochila cheia não se oferece pegar outro item');
+  // curar um colega
+  g = DP.createGameAny({ map: 'camp', rng: seeded(103), bots: 1 }); g.k.state = 'intro'; g.k.t = -999; g.s.skillCD = 999;
+  const a = g.survivors[0], b = g.survivors[1]; b.x = a.x + 1; b.y = a.y; b.hp = 1; a.hp = g.hpMax;
+  const kit = g.spawnItem('medkit', a.x, a.y); kit.holder = a; a.bag.push(kit);
+  g.update(1 / 60, { use: true });
+  ok(a.heal && a.heal.target === b, 'sem estar ferido, o kit é usado no colega ferido perto');
+}
+{
+  // bot ferido com kit na mochila e o assassino longe se cura sozinho
+  const g = DP.createGameAny({ map: 'camp', rng: seeded(104), bots: 0 }); g.k.state = 'intro'; g.k.t = -999;
+  const h = g.survivors[0]; h.human = false; h.ai = g.makeAI(0); h.hp = 1;
+  const kit = g.spawnItem('medkit', h.x, h.y); kit.holder = h; h.bag.push(kit);
+  for (let i = 0; i < 60 * 8 && h.hp < 2; i++) g.update(1 / 60, {});
+  ok(h.hp === 2 && h.bag.length === 0, 'bot ferido com kit se cura quando o assassino está longe');
+}
+
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
 process.exit(fails ? 1 : 0);
