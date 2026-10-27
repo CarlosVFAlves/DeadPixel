@@ -28,7 +28,7 @@
     const [r, g, b] = hex(color), [h, s, l] = rgb2hsl(r, g, b);
     const shift = (dh, ds, dl) => hsl2rgb(h + dh, s * ds, l + dl);
     const d = h > 0.3 && h < 0.78 ? 1 : -1;      // sombra esfria: cores quentes vão para o vermelho/roxo, frias para o violeta
-    return [shift(0.03 * d, 0.78, -0.27), shift(0.015 * d, 0.92, -0.12), [r, g, b], shift(-0.012 * d, 0.9, +0.1)];
+    return [shift(0.03 * d, 0.85, -0.2), shift(0.015 * d, 0.95, -0.09), [r, g, b], shift(-0.012 * d, 0.9, +0.09)];
   }
 
   // ---------- genes e opções (o que o construtor oferece) ----------
@@ -111,7 +111,7 @@
   const ANIMS = {
     survivor: {
       parado: { frames: 4, fps: 3, loop: true, f(t) { const p = P0(), b = SIN(cyc(t)); p.rootY = b * 0.25; p.aL.sw = b * 0.05; p.aR.sw = -b * 0.05; p.head.p = b * 0.04; return p; } },
-      andar: { frames: 6, fps: 9, loop: true, f(t) { return gait(t, 0.62, 0.7, 0.35, 0.18); } },
+      andar: { frames: 6, fps: 9, loop: true, f(t) { const p = gait(t, 0.62, 0.45, 0.35, 0.18); p.aL.ab = p.aR.ab = 0.22; return p; } },
       correr: { frames: 6, fps: 12, loop: true, f(t) { const p = gait(t, 1.0, 1.15, 0.55, 0.32); p.lean = 0.22; p.aL.el = 1.1; p.aR.el = 1.1; return p; } },
       pular_andando: { frames: 5, fps: 8, loop: false, f(t) { const a = SIN(t * PI), p = P0(); p.rootY = a * 3.2 + 0; p.lean = 0.2 * a; p.lL.sw = -0.9 * a; p.lL.kn = 1.1 * a; p.lR.sw = 0.5 * a; p.lR.kn = 0.9 * a; p.aL.sw = -0.8 * a; p.aR.sw = -0.8 * a; p.aL.ab = 0.2; p.aR.ab = 0.2; return p; } },
       pular_correndo: { frames: 5, fps: 10, loop: false, f(t) { const a = SIN(t * PI), p = P0(); p.rootY = a * 4.4; p.lean = 0.3 + 0.1 * a; p.lL.sw = -1.2 * a; p.lL.kn = 1.3 * a; p.lR.sw = 0.9 * a; p.lR.kn = 1.0 * a; p.aL.sw = 0.9 * a; p.aR.sw = -1.0 * a; p.aL.el = 0.8; p.aR.el = 0.8; return p; } },
@@ -168,7 +168,7 @@
   const tr = (A) => [[A[0][0], A[1][0], A[2][0]], [A[0][1], A[1][1], A[2][1]], [A[0][2], A[1][2], A[2][2]]];
 
   // ---------- câmera: vista de cima inclinada ----------
-  const TILT = 0.52;   // ~30 graus
+  const TILT = 0.2;   // ~11 graus: quase de frente, o rosto fica legível (o jogo é 3/4, mas sprites de 16 px pedem rosto grande)
   const CT = COS(TILT), ST = SIN(TILT);
   // mundo -> vista: vx = x ; vu = y*CT - z*ST (cima) ; vw = y*ST + z*CT (profundidade, maior = mais perto)
   const VIEW = [[1, 0, 0], [0, CT, -ST], [0, ST, CT]];
@@ -245,7 +245,7 @@
         if (wv <= zb[i]) continue;
         zb[i] = wv; matb[i] = p.mat; partb[i] = p.part; nxb[i] = nx; nyb[i] = ny; nzb[i] = nz;
         const lam = nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2];
-        shade[i] = lam < -0.15 ? 0 : lam < 0.22 ? 1 : lam < 0.68 ? 2 : 3;
+        shade[i] = lam < -0.3 ? 0 : lam < 0.1 ? 1 : lam < 0.72 ? 2 : 3;
       }
     }
     return { W, H, zb, shade, mat: matb, part: partb, nx: nxb, ny: nyb, nz: nzb, ox, oy, ppu };
@@ -282,8 +282,8 @@
         const j = yy * W + xx; if (B.mat[j] >= 0 && B.zb[j] > bz) { bz = B.zb[j]; best = j; }
       }
       if (best >= 0) {
-        const pal = palette[B.mat[best]], c = pal.outline || pal.ramp[0];
-        out[i * 4] = Math.round(c[0] * 0.45); out[i * 4 + 1] = Math.round(c[1] * 0.45); out[i * 4 + 2] = Math.round(c[2] * 0.5); out[i * 4 + 3] = 255;
+        const pal = palette[B.mat[best]], c = pal.outline || pal.ramp[opts.outlineRamp === undefined ? 0 : opts.outlineRamp], k = opts.outlineK || 1;
+        out[i * 4] = Math.round(c[0] * k); out[i * 4 + 1] = Math.round(c[1] * k); out[i * 4 + 2] = Math.round(c[2] * k * 1.05); out[i * 4 + 3] = 255;
       }
     }
     return out;
@@ -326,7 +326,7 @@
   // dimensões por gene
   function dims(g) {
     const k = g.role === 'killer';
-    const bw = k ? [1.12, 1.28, 1.45][g.build] : [0.88, 1.0, 1.15][g.build];
+    const bw = k ? [1.12, 1.28, 1.45][g.build] : [0.95, 1.08, 1.22][g.build];
     const ht = k ? [1.12, 1.2, 1.32][g.build] : [0.92, 1.0, 1.1][g.height];
     return { bw, ht, legL: 7.0 * ht, torsoH: 6.4 * (k ? ht : (0.96 + 0.04 * ht)), headR: k ? 3.0 : 3.1 * (g.build === 2 ? 1.0 : 1.0), shW: 3.3 * bw, hipW: 1.65 * bw };
   }
@@ -552,7 +552,7 @@
     const palette = buildPalette(g);
     const B = rasterize(built.prims, W, H, ax, ay, ppu, palette);
     // sombra no chão fica a cargo de quem desenha; aqui só o personagem
-    const rgba = resolve(B, palette, { contourDepth: res >= 32 ? 0.9 : 1.25 });
+    const rgba = resolve(B, palette, { contourDepth: res >= 32 ? 1.2 : 99, outlineK: res >= 32 ? 0.7 : 0.85 });
     faceDecals(B, built, g, pose, ppu, rgba, palette);
     return { w: W, h: H, rgba, ax, ay, frames: nF };
   }

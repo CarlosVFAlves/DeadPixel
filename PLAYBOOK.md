@@ -596,6 +596,9 @@ Não adotei: 8 direções (usamos 4 reais; o código aceita qualquer ângulo, `r
 ### 12.4 Impasses
 65) Os primeiros bonecos tinham "colarinho amarelo" e sombras laranja: a rampa deslocava o matiz de tons de pele para o amarelo; agora sombras quentes vão para o vermelho/roxo e dessaturam. 66) Braços sumiam dentro do tronco (mesmo material e mesma profundidade): ombros deslocados para fora e manga em tom mais escuro. 67) Agachar (consertar, tropeçar) afundava os pés: se o tornozelo mais baixo passa do chão, a pose sobe (`low`). 68) A célula de 24×32 cortava machados e braços: 40×40 com pés 7 unidades acima da base (teste automático garante que nenhum quadro toca a borda). 69) A fonte não tinha o caractere `<`.
 
+### 12.4b Nitidez (feedback: "não está nítido, tudo bugado")
+Comparado lado a lado com o desenho antigo, o sprite da Forja a 16 px estava sujo: câmera a 30° mostrava mais o topo da cabeça que o rosto, contornos quase pretos (externo + interno) engoliam olhos e braços, sombras muito escuras. Correções: **câmera quase frontal (~11°)** para o rosto ocupar a cabeça; **sem contorno interno a 16 px** (só a 32); contorno externo mais leve; rampa de tons mais suave e faixas de luz menos escuras; porte um pouco maior; braços do "andar" menos balançados (na vista de frente viravam borrões no peito). Lição: a 16 px, menos efeito = mais legibilidade; a profundidade fina só vale a 32 px.
+
 ### 12.5 Próximos passos
 - Importador **persistente** (IndexedDB) e por animação mesclável; ferramenta quadros→atlas para saída de vídeo (recorte de croma, âncora dos pés, redução com vizinho mais próximo, empacotamento).
 - Decidir **32 px no jogo** (mapa estático 2×, blocos) para usar a Forja em alta; mais genes (rosto, cicatrizes, cores de pele customizáveis, roupas por set da loja).
