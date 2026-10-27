@@ -8,7 +8,6 @@
   const W = 144, H = 96;
   const T_FLOOR = 0, T_WALL = 1, T_CRATE = 2, T_GEN = 3, T_GATE = 4, T_WIN = 5, T_TREE = 6, T_WATER = 7, T_VEH = 8, T_LOCKER = 9;
   const G_GRASS = 0, G_DIRT = 1, G_SAND = 2, G_PLANK = 3, G_GRAVEL = 4;
-  const PLAZA = { x: 71, y: 47 };
 
   // modelos de cabana (coordenadas relativas ao canto superior esquerdo); vêm das casas da arena
   const CABINS = [
@@ -18,7 +17,7 @@
     { w: 10, h: 8, pillar: [4, 3, 2, 2], doors: [[0, 3, 'v'], [6, 7, 'h']], wins: [[9, 2, 'v'], [3, 0, 'h']], gen: [7, 5] }
   ];
   // onde as cabanas tentam ficar (canto superior esquerdo); cada partida sorteia 10 dessas e dá um pequeno desvio
-  const ANCHORS = [[28, 24], [46, 34], [24, 50], [44, 60], [54, 72], [84, 38], [100, 24], [90, 62], [72, 74], [112, 16], [12, 36], [30, 76]];
+  const ANCHORS = [[28, 24], [46, 34], [24, 50], [44, 60], [54, 72], [84, 38], [100, 24], [90, 62], [72, 74], [112, 16], [12, 36], [30, 76], [10, 60], [16, 18], [60, 26], [40, 12], [118, 36], [104, 50], [116, 74], [88, 80], [56, 50], [80, 16], [8, 80], [124, 56]];
 
   function buildCamp(opts) {
     opts = opts || {};
@@ -26,6 +25,11 @@
     const ri = (a, b) => a + Math.floor(rng() * (b - a + 1));
     const pick = (arr) => arr[Math.floor(rng() * arr.length)];
     const ns = ri(1, 1e9);
+    // marcos que mudam de lugar a cada partida (nada de decorar o mapa): portão, praça, estacionamento, telefone, lago e cais
+    const GX = ri(38, 102);                                   // portão: tiles GX e GX+1 na borda norte
+    const PLAZA = { x: Math.max(26, Math.min(118, GX + ri(-14, 14))), y: ri(40, 52) };
+    const canW = PLAZA.x > 61, canE = PLAZA.x < 84;
+    const lakeW = canW && canE ? rng() < 0.5 : canW;          // lago a oeste ou a leste, sempre do lado oposto ao da praça
 
     const t = new Uint8Array(W * H), ground = new Uint8Array(W * H), indoor = new Uint8Array(W * H), occ = new Uint8Array(W * H);
     const pallets = [], windows = [], gens = [], pois = [], keys = [];
@@ -82,18 +86,27 @@
     function mark(x, y, w, h) { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (inb(xx, yy)) occ[idx(xx, yy)] = 1; }
 
     // ---------- estrada, estacionamento e praça ----------
-    clearRect(69, 1, 4, 46, G_DIRT);
-    mark(66, 0, 10, 46);
-    clearRect(56, 5, 30, 12, G_GRAVEL);
-    mark(56, 5, 30, 12);
+    clearRect(GX - 1, 1, 4, PLAZA.y - 5, G_DIRT);
+    trail(GX, PLAZA.y - 6, PLAZA.x, PLAZA.y, 4);                // a estrada desce do portão e vira até a praça
+    mark(GX - 4, 0, 10, PLAZA.y - 4);
+    mark(Math.min(GX, PLAZA.x) - 4, PLAZA.y - 9, Math.abs(PLAZA.x - GX) + 10, 6);
+    const PK = { w: 30, h: ri(10, 12) }; PK.x = GX + 1 - ri(10, 20); PK.y = 5 + ri(0, 3);
+    clearRect(PK.x, PK.y, PK.w, PK.h, G_GRAVEL);
+    mark(PK.x, PK.y, PK.w, PK.h);
     clearEllipse(PLAZA.x, PLAZA.y, 11, 8, G_DIRT);
     mark(PLAZA.x - 11, PLAZA.y - 8, 22, 16);
-    const door = { tx: 70, ty: 0, w: 2 };
+    const door = { tx: GX, ty: 0, w: 2 };
     for (let x = 0; x < 2; x++) t[idx(door.tx + x, 0)] = T_GATE;
-    t[idx(69, 0)] = T_WALL; t[idx(72, 0)] = T_WALL;
-    for (let x = 69; x <= 72; x++) { t[idx(x, 1)] = T_FLOOR; ground[idx(x, 1)] = G_DIRT; }          // a estrada chega até o portão
-    pois.push({ kind: 'gate', x: 71, y: 2.5, r: 6 });
-    pois.push({ kind: 'parking', x: 71, y: 10.5, r: 12 });
+    t[idx(GX - 1, 0)] = T_WALL; t[idx(GX + 2, 0)] = T_WALL;
+    for (let x = GX - 1; x <= GX + 2; x++) { t[idx(x, 1)] = T_FLOOR; ground[idx(x, 1)] = G_DIRT; }          // a estrada chega até o portão
+    pois.push({ kind: 'gate', x: GX + 1, y: 2.5, r: 6 });
+    pois.push({ kind: 'parking', x: PK.x + PK.w / 2, y: PK.y + PK.h / 2, r: 12 });
+    // telefone: ao lado da estrada, entre o estacionamento e a praça, em lado e altura sorteados
+    const phone = { tx: GX + 1 + (rng() < 0.5 ? ri(-8, -5) : ri(4, 8)), ty: ri(PK.y + PK.h + 4, Math.max(PK.y + PK.h + 5, PLAZA.y - 11)) };
+    clearRect(phone.tx - 2, phone.ty - 2, 5, 5, G_DIRT);
+    mark(phone.tx - 3, phone.ty - 3, 7, 7);
+    // lago (decidido antes das cabanas para elas o evitarem)
+    const LAKE = { x: (lakeW ? 23 : 121) + ri(-3, 3), y: ri(46, 70), rx: ri(17, 20), ry: ri(11, 14) };
     pois.push({ kind: 'plaza', x: PLAZA.x + 0.5, y: PLAZA.y + 0.5, r: 9 });
 
     // ---------- escolha das cabanas ----------
@@ -103,12 +116,13 @@
       if (specs.length >= 10) break;
       for (let tries = 0; tries < 6; tries++) {
         const m = pick(CABINS), fx = rng() < 0.5, fy = rng() < 0.5;
-        const x = a[0] + ri(-2, 2), y = a[1] + ri(-2, 2);
+        const x = a[0] + ri(-4, 4), y = a[1] + ri(-4, 4);
         if (x < 6 || y < 6 || x + m.w > W - 6 || y + m.h > H - 6) continue;
         const ok = specs.every((s) => x > s.x + s.m.w + 4 || x + m.w + 4 < s.x || y > s.y + s.m.h + 4 || y + m.h + 4 < s.y);
-        const nearRoad = x < 76 && x + m.w > 64 && y < 48;           // não em cima da estrada/praça
-        const nearPlaza = Math.hypot(x + m.w / 2 - PLAZA.x, y + m.h / 2 - PLAZA.y) < 16;
-        if (!ok || nearRoad || nearPlaza) continue;
+        let blocked = false;                                          // em cima da estrada, estacionamento, praça, telefone ou lago
+        for (let yy = y - 3; yy < y + m.h + 3 && !blocked; yy++) for (let xx = x - 3; xx < x + m.w + 3; xx++) if (!inb(xx, yy) || occ[idx(xx, yy)]) { blocked = true; break; }
+        for (const [qx, qy] of [[x, y], [x + m.w, y], [x, y + m.h], [x + m.w, y + m.h], [x + m.w / 2, y + m.h / 2]]) if (((qx - LAKE.x) / (LAKE.rx + 6)) ** 2 + ((qy - LAKE.y) / (LAKE.ry + 6)) ** 2 < 1) blocked = true;
+        if (!ok || blocked) continue;
         specs.push({ x, y, m, fx, fy });
         break;
       }
@@ -116,7 +130,6 @@
     const tr = (s, rx, ry) => ({ x: s.x + (s.fx ? s.m.w - 1 - rx : rx), y: s.y + (s.fy ? s.m.h - 1 - ry : ry) });
 
     // ---------- lago, areia e cais ----------
-    const LAKE = { x: 120 + ri(-3, 3), y: 64 + ri(-3, 3), rx: 20, ry: 14 };
     const nearCabin = (x, y, m) => specs.some((s) => x > s.x - m && x < s.x + s.m.w + m && y > s.y - m && y < s.y + s.m.h + m);
     for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
       const q = ((x + 0.5 - LAKE.x) / LAKE.rx) ** 2 + ((y + 0.5 - LAKE.y) / LAKE.ry) ** 2;
@@ -129,19 +142,22 @@
       for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (inb(x + dx, y + dy) && t[idx(x + dx, y + dy)] === T_WATER) { near = true; break; }
       if (near) { if (t[idx(x, y)] === T_TREE) t[idx(x, y)] = T_FLOOR; ground[idx(x, y)] = G_SAND; occ[idx(x, y)] = 1; }
     }
-    // cais: sai da margem oeste para dentro da água, 2 tiles de largura
+    // cais: sai da margem do lado da praça para dentro da água, 2 tiles de largura (dir = +1: lago a leste; -1: a oeste)
+    const dir = lakeW ? -1 : 1;
     let dockX = -1;
     const dockY = LAKE.y;
-    for (let x = LAKE.x - LAKE.rx - 6; x < LAKE.x; x++) if (t[idx(x, dockY)] === T_WATER) { dockX = x; break; }
-    const dockEnd = { x: dockX + 9.5, y: dockY + 1 };
-    for (let x = dockX - 3; x < dockX + 10; x++) for (let y = dockY; y < dockY + 2; y++) {
+    if (dir > 0) { for (let x = LAKE.x - LAKE.rx - 6; x < LAKE.x; x++) if (t[idx(x, dockY)] === T_WATER) { dockX = x; break; } }
+    else { for (let x = LAKE.x + LAKE.rx + 6; x > LAKE.x; x--) if (t[idx(x, dockY)] === T_WATER) { dockX = x; break; } }
+    const dockEnd = { x: dockX + dir * 9 + 0.5, y: dockY + 1 };
+    for (let k = -3; k <= 9; k++) for (let y = dockY; y < dockY + 2; y++) {
+      const x = dockX + dir * k;
       t[idx(x, y)] = T_FLOOR; ground[idx(x, y)] = G_PLANK; occ[idx(x, y)] = 1;
     }
-    pois.push({ kind: 'dock', x: dockX + 3, y: dockY + 1, r: 8 });
+    pois.push({ kind: 'dock', x: dockX + dir * 3 + 0.5, y: dockY + 1, r: 8 });
     pois.push({ kind: 'lake', x: LAKE.x, y: LAKE.y, r: 16 });
 
     // trilhas: da praça para o cais, para o estacionamento lateral e para cada cabana
-    trail(PLAZA.x, PLAZA.y + 3, dockX - 3, dockY, 3);
+    trail(PLAZA.x, PLAZA.y + 3, dockX - dir * 3, dockY, 3);
     for (const s of specs) {
       const d = s.m.doors[0], p = tr(s, d[0], d[1]);
       const o = d[0] === 0 ? [p.x - 1, p.y] : d[0] === s.m.w - 1 ? [p.x + 1, p.y] : d[1] === 0 ? [p.x, p.y - 1] : [p.x, p.y + 1];
@@ -216,7 +232,7 @@
     for (let tries = 0; tries < 3000 && gens.length < 8; tries++) {
       const x = ri(10, W - 12), y = ri(10, H - 12);
       if (!freeForProp(x - 1, y - 1, 3, 3)) continue;
-      if (Math.hypot(x - 71, y - 2) < 24) continue;                 // longe do portão
+      if (Math.hypot(x - GX - 1, y - 2) < 24) continue;            // longe do portão
       if (gens.some((g) => Math.hypot(g.tx - x, g.ty - y) < 22)) continue;
       clearRect(x - 2, y - 2, 5, 5, G_DIRT);
       mark(x - 2, y - 2, 5, 5);
@@ -252,30 +268,38 @@
     }
 
     // ---------- telefone (guarita ao lado da estrada) ----------
-    const phone = { tx: 75, ty: 30 };
-    clearRect(phone.tx - 2, phone.ty - 2, 5, 5, G_DIRT);
-    mark(phone.tx - 2, phone.ty - 2, 5, 5);
     t[idx(phone.tx, phone.ty)] = T_GEN;
     pois.push({ kind: 'phone', x: phone.tx + 0.5, y: phone.ty + 0.5, r: 5 });
 
     // ---------- veículos: carro no estacionamento (de frente para o portão) e barco na ponta do cais ----------
-    const CAR = { x: 74, y: 8, w: 2, h: 3 };
+    const CAR = { w: 2, h: 3 };
+    for (let tries = 0; tries < 40; tries++) {                // vaga sorteada no estacionamento, fora da estrada
+      CAR.x = PK.x + ri(2, PK.w - 4); CAR.y = PK.y + ri(2, PK.h - 5);
+      if (CAR.x + 3 < GX - 2 || CAR.x > GX + 3) break;
+    }
     for (let yy = 0; yy < CAR.h; yy++) for (let xx = 0; xx < CAR.w; xx++) { t[idx(CAR.x + xx, CAR.y + yy)] = T_VEH; ground[idx(CAR.x + xx, CAR.y + yy)] = G_GRAVEL; }
     const vehicles = [
       { kind: 'car', cx: CAR.x + CAR.w / 2, cy: CAR.y + CAR.h / 2, w: CAR.w, h: CAR.h, tx: CAR.x, ty: CAR.y, range: 2.8, stand: { x: CAR.x + CAR.w / 2, y: CAR.y + CAR.h + 0.7 } },
-      { kind: 'boat', cx: dockX + 11.5, cy: dockY + 1, w: 3, h: 2, tx: dockX + 10, ty: dockY, range: 3.2, stand: { x: dockX + 9.5, y: dockY + 1 } }
+      { kind: 'boat', cx: (dir > 0 ? dockX + 10 : dockX - 12) + 1.5, cy: dockY + 1, w: 3, h: 2, tx: dir > 0 ? dockX + 10 : dockX - 12, ty: dockY, range: 3.2, stand: { x: dockEnd.x, y: dockEnd.y } }
     ];
     pois.push({ kind: 'car', x: vehicles[0].cx, y: vehicles[0].cy, r: 4 });
     pois.push({ kind: 'boat', x: vehicles[1].cx, y: vehicles[1].cy, r: 4 });
 
     // ---------- pontos de partida ----------
     const sp = [[-6, -3], [6, -3], [-5, 4], [5, 4]].map((o) => ({ x: PLAZA.x + o[0] + 0.5, y: PLAZA.y + o[1] + 0.5 }));
-    const kc = pick([[20, 84], [26, 88]]);
+    let kc = null;                                            // assassino-IA: nasce longe, num canto sorteado fora da água
+    for (const c of [[20, 84], [26, 88], [122, 86], [16, 14], [124, 20]].sort(() => rng() - 0.5)) {
+      let wet = false; for (let yy = c[1] - 3; yy <= c[1] + 3; yy++) for (let xx = c[0] - 3; xx <= c[0] + 3; xx++) if (t[idx(xx, yy)] === T_WATER) wet = true;
+      if (!wet && Math.hypot(c[0] - PLAZA.x, c[1] - PLAZA.y) > 38) { kc = c; break; }
+    }
+    if (!kc) kc = [20, 84];
     clearRect(kc[0] - 2, kc[1] - 2, 5, 5, G_DIRT);
     const spawnKiller = { x: kc[0] + 0.5, y: kc[1] + 0.5 };
     pois.push({ kind: 'killer', x: spawnKiller.x, y: spawnKiller.y, r: 5 });
-    clearRect(PLAZA.x - 2, PLAZA.y + 14, 5, 5, G_DIRT);                                  // assassino-jogador: nasce perto do acampamento (a ~15 tiles da fogueira)
-    const spawnKillerP = { x: PLAZA.x + 0.5, y: PLAZA.y + 16.5 };
+    let kpx = PLAZA.x;                                        // assassino-jogador: nasce perto do acampamento (a ~16 tiles da fogueira), fora da água
+    for (const off of [0, 12, -12, 20, -20]) { let wet = false; for (let yy = PLAZA.y + 13; yy <= PLAZA.y + 19; yy++) for (let xx = PLAZA.x + off - 3; xx <= PLAZA.x + off + 3; xx++) if (t[idx(xx, yy)] === T_WATER) wet = true; if (!wet) { kpx = PLAZA.x + off; break; } }
+    clearRect(kpx - 2, PLAZA.y + 14, 5, 5, G_DIRT);
+    const spawnKillerP = { x: kpx + 0.5, y: PLAZA.y + 16.5 };
 
     // ---------- conectividade ----------
     const seen = new Uint8Array(W * H), q = new Int32Array(W * H);
@@ -292,7 +316,7 @@
         }
       }
     }
-    const root0 = idx(70, 2);
+    const root0 = idx(GX, 2);
     function carveTo(sx, sy) {
       // BFS por piso/árvore até alcançar o conjunto já ligado; limpa as árvores do caminho
       const prev = new Int32Array(W * H).fill(-1), vis = new Uint8Array(W * H);
@@ -351,7 +375,7 @@
 
     return {
       kind: 'camp', W, H, t, ground, indoor, pallets, gens, phone, vehicles, lockers, door, windows, NEED: 5,
-      itemSpots, radios: 4, pois, explore, lake: LAKE, dock: { x: dockX, y: dockY, endX: dockEnd.x, endY: dockEnd.y },
+      parking: PK, plaza: PLAZA, itemSpots, radios: 4, pois, explore, lake: LAKE, dock: { x: dockX, y: dockY, endX: dockEnd.x, endY: dockEnd.y },
       cabins: specs.map((s) => ({ x: s.x, y: s.y, w: s.m.w, h: s.m.h, id: s.n })),
       spawnSurvivors: sp, spawnKiller, spawnKillerP
     };

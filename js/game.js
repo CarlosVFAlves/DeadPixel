@@ -7,7 +7,7 @@
 
   const CFG = {
     RUN: 4.0,            // velocidade do sobrevivente (tiles/s)
-    WALK: 0.5,           // multiplicador ao andar (Shift / joystick leve)
+    WALK: 0.6,           // multiplicador ao andar (Shift / joystick leve)
     BURST: 1.3,          // multiplicador após ser acertado
     BURST_T: 1.8,
     K_SPEED: 4.55,       // velocidade do assassino
@@ -75,13 +75,15 @@
 
     // tempos base (s) das tarefas de rota; multiplicados pela dificuldade (ver createGame)
     ROUTES: { fuse: 45, door: 3, phone: 30, policeEta: 150, policeWindow: 120, carPart: 35, carStart: 10, boatPart: 40, boatStart: 15, leaveWait: 10 },
+    LOOP_GIVEUP: 35, LOOP_IGNORE: 20,   // assassino-IA: após 35 s correndo atrás do mesmo sobrevivente sem acertar, ignora-o por 20 s
+    HEAR_NEAR: 5, HEAR_FAR: 30,   // som: volume cheio até 5 tiles, some aos 30
     HIDE_T: 0.6, LOCKER_OPEN_T: 1.1, LOCKER_RANGE: 1.5,   // armários: entrar (segurar), o assassino abre em ~1 s
     SABOTAGE_T: 2.5,         // assassino: tempo para sabotar um veículo (tira a última peça)
 
     // visão — a MESMA para pessoas e bots (paridade de informação): raio ambiente + cone de lanterna, com linha de vista
-    VIS_S: { r: 6, cone: 11, half: 0.55 },      // sobrevivente
-    VIS_K: { r: 7.5, cone: 12, half: 0.65 },    // assassino-IA enxerga um pouco mais
-    VIS_KP: { r: 10, cone: 18, half: 0.72 },    // assassino-jogador: o mapa é enorme, então ele enxerga bem mais
+    VIS_S: { r: 3, cone: 11, half: 0.55 },      // sobrevivente
+    VIS_K: { r: 3.5, cone: 12, half: 0.65 },    // assassino-IA enxerga um pouco mais
+    VIS_KP: { r: 3.5, cone: 18, half: 0.72 },    // assassino-jogador: o mapa é enorme, então ele enxerga bem mais
     HEAR_ERR: 2.2,       // erro (tiles) na posição de algo que só se OUVE
     KN_MOVE: 6, KN_ACT: 9,   // alcance em que se ouve o assassino: andando / golpe e quebra
 
@@ -115,7 +117,8 @@
   function createGame(opts) {
     opts = opts || {};
     const rnd = opts.rng || Math.random;
-    const sfx = opts.sfx || function () {};
+    const sfxOut = opts.sfx || function () {};
+    const sfx = (name, p) => { const v = pendingVol; pendingVol = 1; if (v > 0.03) sfxOut(name, p, v); };
     const training = !!opts.training;
     const role = opts.role === 'killer' ? 'killer' : 'survivor';
     // dificuldade é sempre "para quem joga": o que ela muda depende do papel
@@ -435,7 +438,13 @@
         g.fx.push({ x, y, vx: Math.cos(a) * sp + (dirx || 0) * 2, vy: Math.sin(a) * sp + (diry || 0) * 2, t: 0, life: 0.45 + rnd() * 0.5, c: GLASS[(rnd() * GLASS.length) | 0] });
       }
     }
-    const pan = (x) => clamp((x - g.pl.x) / 10, -0.8, 0.8);
+    // som posicional: estéreo pela direção e volume pela distância até quem joga (só se ouve o que está perto)
+    let pendingVol = 1;
+    const pan = (x, y) => {
+      const d = Math.hypot(x - g.pl.x, (y === undefined ? g.pl.y : y) - g.pl.y);
+      pendingVol = d < CFG.HEAR_NEAR ? 1 : Math.pow(Math.max(0, 1 - (d - CFG.HEAR_NEAR) / (CFG.HEAR_FAR - CFG.HEAR_NEAR)), 2);
+      return clamp((x - g.pl.x) / 10, -0.8, 0.8);
+    };
 
     // ---------- pallet ----------
     function inZone(p, e) {
@@ -467,12 +476,12 @@
       if (!p) return false;
       p.state = 'falling'; p.t = 0; p.dir = dropDir(p);
       g.stats.drops++;
-      sfx('creak', pan(p.cx));
+      sfx('creak', pan(p.cx, p.cy));
       return true;
     }
     function land(p) {
       p.state = 'down'; p.t = 0; p.respawn = CFG.RESPAWN;
-      sfx('slam', pan(p.cx));
+      sfx('slam', pan(p.cx, p.cy));
       g.shake = Math.max(g.shake, 2.5);
       dust(p.cx + p.dir.x * 0.6, p.cy + p.dir.y * 0.6, 10);
 
@@ -482,12 +491,12 @@
         k.state = 'stun'; k.t = 0; k.pal = null; k.vault = null; k.aware = 'hunt'; k.lost = 0;
         g.stats.stuns++;
         g.hitstop = 0.1; g.shake = 7; g.flash = 0.25;
-        sfx('stun', pan(k.x));
+        sfx('stun', pan(k.x, k.y));
         popup('ATORDOADO!', k.x, k.y - 1.3, '#ffd23f');
         dust(k.x, k.y, 14, '#d9d2b6');
       } else if (kd < 3.4 && k.state !== 'intro') {
         g.stats.misses++;
-        sfx('miss', pan(k.x));
+        sfx('miss', pan(k.x, k.y));
         popup('ERROU!', p.cx, p.cy - 1.2, '#ff7a59');
       }
       // quem estava em cima do tile (ou encostando nele) é empurrado para fora, para o lado em que estava
@@ -507,18 +516,18 @@
     function breakWindow(w, byKiller) {
       w.state = 'broken'; w.t = 0; w.respawn = CFG.RESPAWN + 4;
       glass(w.cx, w.cy, 22, w.nx, w.ny);
-      sfx('glass', pan(w.cx));
+      sfx('glass', pan(w.cx, w.cy));
       g.shake = Math.max(g.shake, 3);
       if (byKiller) { g.stats.smashes++; }
     }
     function openWindow(w) {
       w.state = 'open'; w.t = 0; w.prog = 0;
-      sfx('winOpen', pan(w.cx));
+      sfx('winOpen', pan(w.cx, w.cy));
     }
     // corte de vidro: perde 1 de vida (nunca mata), grita e denuncia onde está
     function cutSurvivor() {
       g.stats.cuts++;
-      sfx('cut', pan(s.x));
+      sfx('cut', pan(s.x, s.y));
       g.flash = Math.max(g.flash, 0.12);
       if (!training && s.hp > 1) s.hp--;
       popup('SE CORTOU!', s.x, s.y - 1.5, '#ff4d4d');
@@ -559,9 +568,9 @@
       g.stats.hits++;
       s.invuln = 0.7; s.burst = CFG.BURST_T;
       g.shake = 6; g.flash = 0.3;
-      sfx('hit', pan(s.x));
+      sfx('hit', pan(s.x, s.y));
       popup(role === 'killer' ? 'ACERTOU!' : '-1', s.x, s.y - 1.4, role === 'killer' ? '#ffd23f' : '#ff4d4d');
-      k.aware = 'hunt'; k.lost = 0;
+      k.aware = 'hunt'; k.lost = 0; k.chaseT = 0;
       if (training) return;
       s.hp--;
       if (s.hp <= 0) killSurvivor(s);
@@ -625,7 +634,7 @@
       if (it.kind === 'radio') { if (s.tool) return; s.tool = it; }
       else { if (s.item) dropItem(s, s.item); s.item = it; }
       it.holder = s;
-      sfx('pick', pan(s.x));
+      sfx('pick', pan(s.x, s.y));
       if (s.human) popup(it.kind === 'radio' ? 'RÁDIO! (Q LIGA/DESLIGA)' : it.kind === 'part' ? PARTS[it.part].name + ' (' + (it.veh === 'car' ? 'CARRO' : 'BARCO') + ')' : 'PEGOU', s.x, s.y - 1.5, '#9bd3f0');
     }
     function startSkill() { s.skill = { t: 0, tz: 1.5 + rnd() * 3.6 }; if (s.human) sfx('skill'); }
@@ -635,7 +644,7 @@
         g.stats.skillFail++;
         if (o) o.progress = Math.max(0, o.progress - CFG.SKILL_FAIL);
         g.shake = Math.max(g.shake, 5); g.flash = Math.max(g.flash, 0.12);
-        sfx('bang', pan(s.x));
+        sfx('bang', pan(s.x, s.y));
         popup(role === 'killer' ? 'ALGO EXPLODIU!' : 'FALHOU!', s.x, s.y - 1.5, '#ff4d4d');
         alert(s.x, s.y);
       } else {
@@ -657,7 +666,7 @@
     function finishGen(o) {
       o.done = true; o.progress = 1;
       g.gensDone++; g.stats.gens++;
-      sfx('genDone', pan(o.cx));
+      sfx('genDone', pan(o.cx, o.cy));
       popup('GERADOR PRONTO!', o.cx, o.cy - 1.4, '#7dffa0');
       alert(o.cx, o.cy);               // a explosão de luz denuncia o gerador
       if (g.gensDone >= g.need && !g.door.powered) {
@@ -671,7 +680,7 @@
       g.stats.hides++;
       l.occ = sv; sv.hidden = l; sv.hideT = 0; sv.acting = null; sv.skill = null; sv.noise = 0;
       sv.x = l.cx; sv.y = l.cy; sv.face = Math.atan2(l.ny, l.nx);
-      l.t = 0; sfx('click', pan(l.cx));
+      l.t = 0; sfx('click', pan(l.cx, l.cy));
       if (sv.human) popup('ESCONDIDO (E: SAIR)', l.cx, l.cy - 1.4, '#9bd3f0');
     }
     function exitLocker(sv, forced) {
@@ -680,11 +689,11 @@
       l.occ = null; sv.hidden = null; l.t = 0;
       sv.x = l.stand.x; sv.y = l.stand.y; sv.face = Math.atan2(l.ny, l.nx);
       sv.invuln = Math.max(sv.invuln, forced ? 0.4 : 0.2);
-      sfx('click', pan(l.cx));
+      sfx('click', pan(l.cx, l.cy));
     }
     // o assassino abre o armário: quem estiver dentro é arrancado de lá e levado um golpe
     function openLocker(l) {
-      l.checked = g.time; l.t = 0; sfx('creak', pan(l.cx));
+      l.checked = g.time; l.t = 0; sfx('creak', pan(l.cx, l.cy));
       const v = l.occ;
       if (v) {
         g.stats.finds++;
@@ -714,7 +723,7 @@
       let x = v.cx, y = v.cy + v.h / 2 + 1.2;
       for (let a = 0; a < 16; a++) { const px0 = v.cx + Math.cos(a * 0.7) * (v.w / 2 + 1.4), py0 = v.cy + Math.sin(a * 0.7) * (v.h / 2 + 1.4); if (!hitsCircle(px0, py0, 0.3) && t[Math.floor(py0) * W + Math.floor(px0)] !== T_WATER) { x = px0; y = py0; break; } }
       spawnItem('part', x, y, { part: pt, veh: v.kind });
-      sfx('bang', pan(v.cx)); g.shake = Math.max(g.shake, 3);
+      sfx('bang', pan(v.cx, v.cy)); g.shake = Math.max(g.shake, 3);
       popup('SABOTADO!', v.cx, v.cy - 2.4, '#ff4d4d');
     }
     function vehicleTick(dt) {
@@ -727,7 +736,7 @@
               for (let yy = 0; yy < v.h; yy++) for (let xx = 0; xx < v.w; xx++) if (t[(v.ty + yy) * W + v.tx + xx] === T_VEH) t[(v.ty + yy) * W + v.tx + xx] = 0;
               g.door.pass = true; g.door.t = 0; sfx('doorOpen');
             }
-            sfx('engine', pan(v.cx));
+            sfx('engine', pan(v.cx, v.cy));
           }
         } else if (v.state === 'leaving') {
           v.anim += dt;
@@ -739,7 +748,7 @@
       ph.state = 'coming'; ph.eta = CFG.ROUTES.policeEta; ph.calls++;
       for (const v of g.survivors) if (v.acting && v.acting.obj === ph) v.acting = null;
       popup('A POLÍCIA FOI CHAMADA!', ph.cx, ph.cy - 2.2, '#7ad0ff');
-      sfx('siren', pan(ph.cx)); g.shake = Math.max(g.shake, 2);
+      sfx('siren', pan(ph.cx, ph.cy)); g.shake = Math.max(g.shake, 2);
       alert(ph.cx, ph.cy);
     }
     function policeTick(dt) {
@@ -767,13 +776,13 @@
         s.noise = CFG.NOISE_REPAIR; o.noisyT = g.time;
         o.progress = Math.min(1, o.progress + dt / routeT('fuse') * (o.w === 0 ? 1 : CFG.TEAM_BONUS));
         o.w++;
-        if (s.tick <= 0) { s.tick = 0.55; if (s.human || Math.hypot(o.cx - g.pl.x, o.cy - g.pl.y) < 12) sfx('repair', pan(o.cx)); }
+        if (s.tick <= 0) { s.tick = 0.55; if (s.human || Math.hypot(o.cx - g.pl.x, o.cy - g.pl.y) < 12) sfx('repair', pan(o.cx, o.cy)); }
         if (o.progress >= 1) finishGen(o);
       } else if (tg.type === 'phone') {
         s.noise = CFG.NOISE_PHONE; o.noisyT = g.time;
         o.progress = Math.min(1, o.progress + dt / routeT('phone') * (o.w === 0 ? 1 : CFG.TEAM_BONUS));
         o.w++;
-        if (s.tick <= 0) { s.tick = 0.5; sfx('click', pan(o.cx)); }
+        if (s.tick <= 0) { s.tick = 0.5; sfx('click', pan(o.cx, o.cy)); }
         if (o.progress >= 1) callPolice(o);
       } else if (tg.type === 'hide') {
         s.noise = 1;
@@ -785,11 +794,11 @@
         s.noise = CFG.NOISE_REPAIR; o.noisyT = g.time;
         o.wp[pt] = (o.wp[pt] || 0) + dt / routeT(o.kind + 'Part') * (o.w0 === 0 ? 1 : CFG.TEAM_BONUS);
         o.w0++;
-        if (s.tick <= 0) { s.tick = 0.55; sfx('repair', pan(o.cx)); }
+        if (s.tick <= 0) { s.tick = 0.55; sfx('repair', pan(o.cx, o.cy)); }
         if (o.wp[pt] >= 1) {
           o.parts[pt] = true; o.order.push(pt); o.wp[pt] = 0;
           g.items.splice(g.items.indexOf(s.item), 1); s.item = null; s.acting = null;
-          sfx('genDone', pan(o.cx)); popup(PARTS[pt].name + ' INSTALADA!', o.cx, o.cy - 2.2, '#7dffa0');
+          sfx('genDone', pan(o.cx, o.cy)); popup(PARTS[pt].name + ' INSTALADA!', o.cx, o.cy - 2.2, '#7dffa0');
           alert(o.cx, o.cy);
           if (o.need.every((n) => o.parts[n])) { o.state = 'ready'; popup(o.kind === 'car' ? 'CARRO PRONTO! LIGUE O MOTOR' : 'BARCO PRONTO! EMPURRE-O PARA A ÁGUA', o.cx, o.cy - 3.4, '#ffd23f'); }
         }
@@ -797,10 +806,10 @@
         s.noise = CFG.NOISE_ENGINE; o.noisyT = g.time;
         o.startP = Math.min(1, o.startP + dt / routeT(o.kind + 'Start') * (o.w0 === 0 ? 1 : CFG.TEAM_BONUS));
         o.w0++;
-        if (s.tick <= 0) { s.tick = 0.45; sfx(o.kind === 'car' ? 'engine' : 'repair', pan(o.cx)); }
+        if (s.tick <= 0) { s.tick = 0.45; sfx(o.kind === 'car' ? 'engine' : 'repair', pan(o.cx, o.cy)); }
         if (o.startP >= 1) {
           o.state = 'started'; o.leaveT = -1; s.acting = null;
-          sfx('engine', pan(o.cx)); alert(o.cx, o.cy); g.shake = Math.max(g.shake, 2);
+          sfx('engine', pan(o.cx, o.cy)); alert(o.cx, o.cy); g.shake = Math.max(g.shake, 2);
           popup(o.kind === 'car' ? 'MOTOR LIGADO! ENTRE NO CARRO' : 'BARCO NA ÁGUA! ENTRE NO BARCO', o.cx, o.cy - 3.4, '#7dffa0');
         }
       } else if (tg.type === 'board') {
@@ -811,7 +820,7 @@
       } else if (tg.type === 'door') {
         s.noise = CFG.NOISE_GATE;
         o.progress = Math.min(1, o.progress + dt / routeT('door'));
-        if (s.tick <= 0) { s.tick = 0.4; sfx('repair', pan(o.cx)); }
+        if (s.tick <= 0) { s.tick = 0.4; sfx('repair', pan(o.cx, o.cy)); }
         if (o.progress >= 1) { o.opened = true; o.t = 0; sfx('doorOpen'); popup('PORTA ABERTA!', o.cx, 3, '#7dffa0'); }
       } else if (tg.type === 'item') {
         s.noise = 1;
@@ -827,14 +836,15 @@
 
     // ---------- pular: pallet caído e janelas ----------
     function startVault(v) {
-      s.vault = v;
+      s.vault = v; s.jumpT = 0;
       g.stats.vaults++;
-      sfx(v.kind === 'crash' ? 'glass' : 'vault', pan(s.x));
+      sfx(v.kind === 'crash' ? 'glass' : 'vault', pan(s.x, s.y));
     }
-    function tryVault(ax, ay, len, walkMode) {
+    // allowOpen: pular pallet caído / janela aberta. Bots pulam sozinhos ao chegar; a pessoa precisa apertar ESPAÇO (jump). Janela fechada: só se estiver CORRENDO contra ela (quebra).
+    function tryVault(ax, ay, len, walkMode, allowOpen) {
       // pallet caído
       for (const p of g.pallets) {
-        if (p.state !== 'down') continue;
+        if (p.state !== 'down' || !allowOpen) continue;
         const rx = s.x - p.cx, ry = s.y - p.cy;
         const along = rx * p.nx + ry * p.ny;
         const lat = -rx * p.ny + ry * p.nx;
@@ -860,11 +870,26 @@
         if (hitsCircle(x1, y1, CFG.R_S)) continue;
         let kind;
         if (w.state === 'closed') { if (walkMode) continue; kind = 'crash'; }   // andando: precisa abrir (AGIR)
+        else if (!allowOpen) continue;
         else kind = walkMode ? 'walk' : 'run';
         const dur = kind === 'crash' ? CFG.VAULT_CRASH : kind === 'walk' ? CFG.VAULT_WALK : CFG.VAULT_RUN;
         startVault({ t: 0, dur, x0: s.x, y0: s.y, x1, y1, kind, win: w, did: false, dx: -away * w.nx, dy: -away * w.ny });
         return;
       }
+    }
+    // algo para pular aqui perto? (janela aberta/quebrada ou pallet caído, perto o bastante e de frente)
+    function findVaultable(v) {
+      for (const p of g.pallets) {
+        if (p.state !== 'down') continue;
+        const rx = v.x - p.cx, ry = v.y - p.cy, along = rx * p.nx + ry * p.ny, lat = -rx * p.ny + ry * p.nx;
+        if (Math.abs(along) < 1.2 && Math.abs(along) > 0.2 && Math.abs(lat) < 0.7) return p;
+      }
+      for (const w of g.windows) {
+        if (w.state === 'closed') continue;
+        const rx = v.x - w.cx, ry = v.y - w.cy, along = rx * w.nx + ry * w.ny, lat = -rx * w.ny + ry * w.nx;
+        if (Math.abs(along) < 1.25 && Math.abs(along) > 0.2 && Math.abs(lat) < 0.7) return w;
+      }
+      return null;
     }
     function advanceVault(dt) {
       const v = s.vault;
@@ -891,6 +916,8 @@
       s.invuln = Math.max(0, s.invuln - dt);
       s.burst = Math.max(0, s.burst - dt);
       s.vaultCD = Math.max(0, s.vaultCD - dt);
+      s.jumpT = Math.max(0, (s.jumpT || 0) - dt);
+      if (inp.jump) s.jumpT = 0.3;                                       // ESPAÇO: pular (vale por 0,3 s, para apertar um pouco antes de chegar)
       if (s.vault) { advanceVault(dt); return; }
       let ax = inp.ax || 0, ay = inp.ay || 0;
       const len = Math.hypot(ax, ay);
@@ -909,8 +936,11 @@
         moveBy(s, ax * sp * dt, ay * sp * dt, CFG.R_S);
         s.face = Math.atan2(ay, ax);
         s.walk += dt * (walkMode ? 7 : 11);
-        if (!s.vaultCD) tryVault(ax, ay, len, walkMode);
-      } else { s.walk = 0; }
+        if (!s.vaultCD) tryVault(ax, ay, len, walkMode, !s.human || s.jumpT > 0);
+      } else {
+        s.walk = 0;
+        if (s.human && s.jumpT > 0 && !s.vaultCD) tryVault(Math.cos(s.face), Math.sin(s.face), 1, true, true);   // parado de frente para a janela/pallet: pula
+      }
       // porta principal aberta: quem chega nela escapa
       if (g.door.opened && s.y < 1.7 && Math.abs(s.x - g.door.cx) < 2.2) escapeSurvivor(s);
     }
@@ -918,7 +948,7 @@
     // ---------- assassino ----------
     function kickGen(o) {
       o.progress = Math.max(0, o.progress - CFG.KICK); g.stats.kicks++;
-      sfx('bang', pan(k.x)); g.shake = Math.max(g.shake, 2);
+      sfx('bang', pan(k.x, k.y)); g.shake = Math.max(g.shake, 2);
       popup('REGREDIU', o.cx, o.cy - 1.2, '#ff7a59');
       k.state = 'recover'; k.t = 0; k.dur = 1.0;
     }
@@ -934,7 +964,7 @@
       k.state = 'kvault'; k.t = 0;
       k.vault = { dur: CFG.VAULT_K, x0: k.x, y0: k.y, x1, y1, win: w, dx: -away * w.nx, dy: -away * w.ny };
       k.face = Math.atan2(y1 - k.y, x1 - k.x);
-      sfx('vault', pan(k.x));
+      sfx('vault', pan(k.x, k.y));
       return true;
     }
     function tryKillerVault(ax, ay, len) {
@@ -1011,7 +1041,7 @@
         if (s && d < CFG.AIM_RANGE && hasLOS(k, s) && Math.abs(angDiff(Math.atan2(dy, dx), k.face)) < CFG.AIM_CONE) { lx = dx / (d || 1); ly = dy / (d || 1); }
         k.ldx = lx; k.ldy = ly; k.face = Math.atan2(ly, lx);
         k.state = 'windup'; k.t = 0;
-        sfx('windup', pan(k.x));
+        sfx('windup', pan(k.x, k.y));
         return;
       }
       if (inp.actPress && g.kInteract) {
@@ -1040,7 +1070,7 @@
         k.tripCD -= dt;
         if (k.tripCD <= 0) {
           k.trip = CFG.TRIP_T; k.tripCD = 0.75 + rnd() * 0.7; k.tripDir = k.face;
-          sfx('trip', pan(k.x)); dust(k.x, k.y + 0.3, 6, '#8b7355'); g.shake = Math.max(g.shake, 2);
+          sfx('trip', pan(k.x, k.y)); dust(k.x, k.y + 0.3, 6, '#8b7355'); g.shake = Math.max(g.shake, 2);
         } else {
           const drift = (Math.sin(k.t * 4.3 + k.ph) * 0.85 + Math.sin(k.t * 11.1 + k.ph * 2) * 0.35) * (0.45 + 0.55 * f);
           const base = hl > 0.12 ? Math.atan2(hy, hx) : k.face;
@@ -1070,7 +1100,7 @@
         k.t += dt;
         if (k.t >= CFG.STUN) {
           k.state = 'stumble'; k.t = 0; k.trip = 0; k.tripCD = 0.45; k.ph = rnd() * 6.28;
-          sfx('trip', pan(k.x));
+          sfx('trip', pan(k.x, k.y));
         }
         return;
       }
@@ -1087,7 +1117,7 @@
       const P = role === 'killer';                        // assassino de pessoa: números mais generosos
       if (k.state === 'windup') {
         k.t += dt;
-        if (k.t >= (P ? CFG.WINDUP_P : CFG.WINDUP)) { k.state = 'lunge'; k.t = 0; k.hitDone = false; g.stats.lunges++; sfx('lunge', pan(k.x)); }
+        if (k.t >= (P ? CFG.WINDUP_P : CFG.WINDUP)) { k.state = 'lunge'; k.t = 0; k.hitDone = false; g.stats.lunges++; sfx('lunge', pan(k.x, k.y)); }
         return;
       }
       if (k.state === 'lunge') {
@@ -1123,7 +1153,7 @@
         const o = k.pal, isWin = k.brkKind === 'window', isSab = k.brkKind === 'sabotage', isLck = k.brkKind === 'locker';
         if (isSab && !sabotageable(o)) { k.pal = null; k.state = 'chase'; k.t = 0; return; }       // alguém embarcou / já foi sabotado
         if (Math.floor(k.t / 0.5) > k.brk) {
-          k.brk++; sfx(isWin ? 'glassHit' : isLck ? 'creak' : 'breakHit', pan(k.x)); g.shake = Math.max(g.shake, 1.5);
+          k.brk++; sfx(isWin ? 'glassHit' : isLck ? 'creak' : 'breakHit', pan(k.x, k.y)); g.shake = Math.max(g.shake, 1.5);
           if (isWin) glass(o.cx, o.cy, 3, 0, 0);
         }
         if (k.t >= (isWin ? CFG.WIN_BREAK_T : isSab ? CFG.SABOTAGE_T : isLck ? CFG.LOCKER_OPEN_T : CFG.BREAK_T)) {
@@ -1133,7 +1163,7 @@
           else {
             o.state = 'broken'; o.respawn = CFG.RESPAWN;
             g.stats.breaks++;
-            sfx('breakDone', pan(o.cx));
+            sfx('breakDone', pan(o.cx, o.cy));
             dust(o.cx, o.cy, 16, '#a07a45');
           }
           k.pal = null; k.state = 'chase'; k.t = 0;
@@ -1156,10 +1186,14 @@
       for (const v of g.survivors) {
         if (!alive(v) || v.hidden) continue;
         const vd = Math.hypot(v.x - k.x, v.y - k.y);
+        if (v.id === k.ignoreId && g.time < k.ignoreUntil && vd > 3) continue;       // cansou de rodar atrás desse: procura outro por um tempo
         if (canSee(k.x, k.y, k.face, true, v.x, v.y, kvis)) { if (vd < sd) { sd = vd; seen = v; } }
         else if (vd < v.noise && vd < hd) { hd = vd; heard = v; }
       }
       k.seenNow = !!seen;
+      // anti-loop: perseguir o mesmo alvo por muito tempo sem acertar (pallets e janelas em círculo) faz o assassino-IA desistir dele por um tempo
+      if (seen && k.aware === 'hunt') k.chaseT = (k.chaseT || 0) + dt; else k.chaseT = Math.max(0, (k.chaseT || 0) - dt * 0.5);
+      if (k.chaseT > CFG.LOOP_GIVEUP) { k.ignoreId = seen ? seen.id : -1; k.ignoreUntil = g.time + CFG.LOOP_IGNORE; k.chaseT = 0; k.aware = 'patrol'; k.goal = null; k.target = null; seen = null; k.seenNow = false; popup('...', k.x, k.y - 1.6, '#8a8a99'); }
       if (seen) {
         k.target = seen;
         k.aware = 'hunt'; k.lost = 0;
@@ -1186,7 +1220,7 @@
         const n = cd || 1;
         k.ldx = cdx / n; k.ldy = cdy / n; k.face = Math.atan2(cdy, cdx);
         k.state = 'windup'; k.t = 0;
-        sfx('windup', pan(k.x));
+        sfx('windup', pan(k.x, k.y));
         return;
       }
 
@@ -1662,6 +1696,7 @@
         sv.interact = findInteract();
         senseWorld(sv, dt);
         const sin = sv.human ? inp : aiSurvivor(dt);
+        if (sv.human && sin.drop && !s.skill && !findDroppable()) sin.jump = true;
         if (s.skill && (sin.press || sin.drop || sin.actPress)) pressSkill();
         else if (!sv.hidden && (sin.drop || (sin.actPress && !sv.interact))) { if (!(sin.drop || findDroppable()) && s.item) dropItem(s, s.item); else tryDrop(); }
         updateSurvivor(dt, sin);
@@ -1688,7 +1723,8 @@
         if (g.over) return;
       }
 
-      g.interact = g.survivors[0].interact;
+      g.vaultHint = (g.survivors[0].human && alive(g.survivors[0]) && !g.survivors[0].hidden && !g.survivors[0].vault) ? findVaultable(g.survivors[0]) : null;
+    g.interact = g.survivors[0].interact;
       g.kInteract = role === 'killer' ? findKillerInteract() : null;
       g.pInteract = role === 'killer' ? g.kInteract : g.interact;
 
@@ -1748,6 +1784,7 @@
     g.standing = () => g.pallets.filter((p) => p.state === 'up').length;
     g.inZone = inZone;
     g.solid = solid; g.hitsCircle = hitsCircle;
+    g.sfxAt = (name, x, y) => sfx(name, pan(x, y));     // som posicional (testes e efeitos avulsos)
     g.dropDirFor = (sv, p) => { use(sv); return dropDir(p); };
     g.CFG = CFG;
     return g;

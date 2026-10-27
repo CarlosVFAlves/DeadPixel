@@ -62,6 +62,8 @@ Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celula
 
 Dentro do jogo: menu → **COMO JOGAR** (ou tecla `H`; também no menu de pausa). Os botões na tela mostram a tecla correspondente quando você usa teclado, e o botão AGIR escreve a ação do momento. **Skill check:** `Espaço` (ou `E`) no PC, toque na tela no celular.
 
+**Correr, andar e pular (teclado):** `Shift` corre; solto, só anda (mais lento e silencioso). **`Espaço` pula** janela aberta ou pallet caído quando você está perto (chegar perto não pula mais sozinho) e derruba o pallet quando o assassino está do outro lado. Janela **fechada**: andando, segure `E` para abrir; **correndo contra ela, você a quebra** e atravessa (se corta). No celular: arrastar pouco anda, arrastar muito corre, e o botão vira PULAR quando há o que pular.
+
 | Celular | Teclado | Ação |
 |---|---|---|
 | Arrastar na tela (joystick flutuante; **arraste pouco = andar**) | WASD / setas · **Shift = andar** (devagar e quieto) | mover |

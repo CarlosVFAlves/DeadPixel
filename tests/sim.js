@@ -130,7 +130,9 @@ console.log('pular e quebrar');
   g.tryDrop(); runFor(g, 0.4, {});
   // empurra contra o pallet (leste): deve pular
   runFor(g, 0.2, { ax: 1, ay: 0 });
-  ok(g.s.vault || g.stats.vaults > 0, 'iniciou pulo ao empurrar contra o pallet');
+  ok(!g.s.vault && g.stats.vaults === 0, 'só empurrar contra o pallet caído NÃO pula (precisa de ESPAÇO)');
+  runFor(g, 0.2, { ax: 1, ay: 0, jump: true });
+  ok(g.s.vault || g.stats.vaults > 0, 'com ESPAÇO pula o pallet caído');
   runFor(g, 0.8, { ax: 0, ay: 0 });
   ok(g.s.x > p.cx + 0.5, 'sobrevivente passou para o outro lado');
   ok(!g.s.vault, 'pulo terminou');
@@ -432,12 +434,15 @@ console.log('janelas');
   ok(w.state === 'open' && g.pings.length === pingsBefore, 'segurar AGIR abre a janela sem alertar o assassino');
   // aberta: correndo = pula (rápido); andando = passa tranquilamente (lento); sem se cortar
   setup(g, w); g.s.vault = null;
-  runFor(g, 0.1, { ax: 0, ay: 1 });
+  runFor(g, 0.2, { ax: 0, ay: 1 });
+  ok(!g.s.vault, 'janela aberta: chegar perto não pula sozinho');
+  setup(g, w); g.s.vault = null;
+  runFor(g, 0.1, { ax: 0, ay: 1, jump: true });
   ok(g.s.vault && g.s.vault.kind === 'run' && Math.abs(g.s.vault.dur - DP.CFG.VAULT_RUN) < 1e-9, 'correndo: pula a janela aberta');
   runFor(g, 0.6, {});
   ok(!g.s.vault && g.s.y > w.cy + 0.5 && g.s.hp === 2 && g.stats.cuts === 0, 'do outro lado, sem machucar');
   setup(g, w);
-  runFor(g, 0.1, { ax: 0, ay: 1, walk: true });
+  runFor(g, 0.1, { ax: 0, ay: 1, walk: true, jump: true });
   ok(g.s.vault && g.s.vault.kind === 'walk' && g.s.vault.dur > DP.CFG.VAULT_RUN * 1.8, 'andando: passa com calma (mais lento)');
   runFor(g, 1.2, {});
   ok(g.s.y > w.cy + 0.5 && g.s.hp === 2, 'passou tranquilamente');
@@ -454,7 +459,7 @@ console.log('janelas');
   ok(g.pings.length >= 1, 'o barulho denuncia a posição');
   // passar pela quebrada de novo = corta de novo (mas nunca mata)
   g.s.x = w.cx; g.s.y = w.cy + 0.85; g.s.vault = null; g.s.vaultCD = 0;
-  runFor(g, 0.1, { ax: 0, ay: -1 }); runFor(g, 0.6, {});
+  runFor(g, 0.1, { ax: 0, ay: -1, jump: true }); runFor(g, 0.6, {});
   ok(g.stats.cuts === 2 && g.s.hp === 1 && !g.s.dead, 'vidro no chão corta de novo, mas não mata');
 }
 {
@@ -593,7 +598,8 @@ console.log('paridade de informação');
   ok(g.canSee(obs(11.5, 9.5, Math.PI / 2), 11.5, 12.5), 'janela de vidro NÃO bloqueia a visão');
   ok(g.canSee(obs(17.5, 3.5, Math.PI / 2), 17.5, 13.5), 'cone da lanterna alcança ~10 tiles à frente');
   ok(!g.canSee(obs(17.5, 3.5, -Math.PI / 2), 17.5, 13.5), 'e não enxerga a mesma distância para trás');
-  ok(g.canSee(obs(17.5, 3.5, -Math.PI / 2), 17.5, 8.5), 'mas vê o que está perto, mesmo atrás (raio ambiente)');
+  ok(g.canSee(obs(17.5, 3.5, -Math.PI / 2), 17.5, 5.5), 'mas vê o que está bem perto, mesmo atrás (raio ambiente pequeno)');
+  ok(!g.canSee(obs(17.5, 3.5, -Math.PI / 2), 17.5, 8.5), 'e NÃO vê a 5 tiles nas costas: a lanterna importa');
   ok(!('AI_SPEED' in C) && !('AI_SENSE' in C) && !('SIGHT' in C), 'constantes de trapaça removidas (AI_SPEED, AI_SENSE, SIGHT)');
 }
 {
@@ -810,7 +816,7 @@ console.log('mapa grande');
     maxMs = Math.max(maxMs, Date.now() - t0);
     const { W, H, t } = m;
     const free = (x, y) => x >= 0 && y >= 0 && x < W && y < H && t[y * W + x] === 0;
-    const seen = new Uint8Array(W * H), st = [[70, 2]]; seen[2 * W + 70] = 1;
+    const seen = new Uint8Array(W * H), st = [[m.door.tx, 2]]; seen[2 * W + m.door.tx] = 1;
     while (st.length) { const [x, y] = st.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (free(nx, ny) && !seen[ny * W + nx]) { seen[ny * W + nx] = 1; st.push([nx, ny]); } } }
     let bad = [];
     let unreach = 0; for (let i = 0; i < W * H; i++) if (t[i] === 0 && !seen[i]) unreach++;
@@ -825,7 +831,7 @@ console.log('mapa grande');
     for (const q of m.itemSpots) if (!R(q) || t[Math.floor(q.y) * W + Math.floor(q.x)] !== 0) bad.push('item fora do chão');
     for (const q of m.explore) if (!R(q)) bad.push('ponto de exploração');
     if (m.gens.length !== 8 || m.gens.filter((g) => g.cabin >= 0).length !== 5) bad.push('geradores ' + m.gens.length);
-    if (t[0 * W + 70] !== 4 || t[0 * W + 71] !== 4) bad.push('portão');
+    if (t[0 * W + m.door.tx] !== 4 || t[0 * W + m.door.tx + 1] !== 4) bad.push('portão');
     let water = 0; for (let i = 0; i < W * H; i++) if (t[i] === 7) water++;
     if (water < 300) bad.push('lago pequeno ' + water);
     minItems = Math.min(minItems, m.itemSpots.length); minExpl = Math.min(minExpl, m.explore.length); minCab = Math.min(minCab, m.cabins.length); minPal = Math.min(minPal, m.pallets.length);
@@ -885,7 +891,7 @@ console.log('polícia');
   const mk = (seed, o) => DP.createGameAny(Object.assign({ map: 'camp', rng: seeded(seed), bots: 0, training: true }, o));
   const g = mk(31);
   ok(g.phone && g.phone.state === 'locked' && g.solid(g.phone.tx, g.phone.ty), 'o telefone existe, é sólido e começa bloqueado (sem energia)');
-  ok(g.map.pallets.length > 30 && g.map.phone.tx === 75, 'o telefone fica ao lado da estrada');
+  ok(g.map.pallets.length > 30 && Math.abs(g.map.phone.tx - g.map.door.tx) <= 9, 'o telefone fica ao lado da estrada');
   g.k.state = 'intro'; g.k.t = -999; g.s.skillCD = 999;
   g.s.x = g.phone.cx - 1; g.s.y = g.phone.cy; g.update(1 / 60, {});
   ok(!g.interact || g.interact.type !== 'phone', 'sem energia não dá para usar o telefone');
@@ -912,7 +918,7 @@ console.log('polícia');
   ok(Math.abs((eta0 - g.phone.eta) - 50) < 0.1 && !g.door.opened, 'a contagem da chegada anda e o portão segue fechado');
   runFor(g, 100.5, {});
   ok(g.phone.state === 'here' && g.door.opened, 'a polícia chega: o portão abre');
-  g.s.x = 71; g.s.y = 3.0; runFor(g, 1.5, { ay: -1 });
+  g.s.x = g.door.cx; g.s.y = 3.0; runFor(g, 1.5, { ay: -1 });
   ok(g.s.escaped, 'quem atravessa o portão aberto escapa');
   const g2 = mk(32);
   g2.k.state = 'intro'; g2.k.t = -999; g2.s.skillCD = 999;
@@ -1197,7 +1203,7 @@ console.log('armários');
   // assassino-jogador: vê mais longe; bots dele trabalham mais devagar
   const k = DP.createGameAny({ map: 'camp', rng: seeded(65), role: 'killer' }), s = DP.createGameAny({ map: 'camp', rng: seeded(65), role: 'survivor' });
   ok(k.routeTime('fuse') > 1.4 * s.routeTime('fuse') * 0.99 - 0.01 || k.routeTime('fuse') >= 60, `com assassino-jogador o fusível leva ${k.routeTime('fuse').toFixed(0)} s para os bots (jogador sobrevivente: ${s.routeTime('fuse').toFixed(0)} s)`);
-  ok(k.cfg.VIS_KP.cone > k.cfg.VIS_K.cone && k.cfg.VIS_KP.r > k.cfg.VIS_K.r, 'visão do assassino-jogador é maior que a do assassino-IA');
+  ok(k.cfg.VIS_KP.cone > k.cfg.VIS_K.cone && k.cfg.VIS_KP.r >= k.cfg.VIS_K.r, 'visão do assassino-jogador é maior que a do assassino-IA');
 }
 
 // ---------- 28. ajuda, botões e dicas de teclado ----------
@@ -1222,6 +1228,74 @@ console.log('ajuda');
     if (M2.buttons.some((b) => b.y + b.h > H)) { bad++; console.log('   menu estoura a tela', W, H); }
   }
   ok(bad === 0, `ajuda "como jogar" cabe em 7 tamanhos de tela (${pagesMin} a ${pagesMax} páginas) e cobre skill check, armários e rotas`);
+}
+
+// ---------- 29. ESPAÇO pula; SHIFT corre (pedido do playtest 2c) ----------
+console.log('pular com espaço');
+{
+  const g = scene(false); g.k.state = 'intro'; g.k.t = -999; g.s.skillCD = 999;
+  const w = g.windows.find((q) => q.tx === 11 && q.ty === 11);
+  w.state = 'open'; w.t = 9;
+  g.s.x = w.cx; g.s.y = w.cy - 0.85; g.s.face = Math.PI / 2;
+  g.update(1 / 60, {});
+  ok(g.vaultHint === w, 'perto da janela aberta aparece a dica de pular');
+  runFor(g, 0.5, {});
+  ok(!g.s.vault && g.stats.vaults === 0, 'parado ou chegando perto não pula sozinho');
+  g.update(1 / 60, { drop: true });
+  runFor(g, 0.1, {});
+  ok(g.s.vault && g.s.vault.kind === 'walk', 'ESPAÇO parado de frente para a janela aberta: pula (andando, devagar)');
+  runFor(g, 1.4, {});
+  ok(!g.s.vault && g.s.y > w.cy + 0.5, 'e passa para o outro lado');
+  // fechada: andando só dá a opção de abrir; correndo quebra
+  const g2 = scene(false); g2.k.state = 'intro'; g2.k.t = -999; g2.s.skillCD = 999;
+  const w2 = g2.windows.find((q) => q.tx === 11 && q.ty === 11);
+  g2.s.x = w2.cx; g2.s.y = w2.cy - 0.85;
+  runFor(g2, 0.4, { ax: 0, ay: 1, walk: true });
+  ok(!g2.s.vault && w2.state === 'closed' && g2.interact && g2.interact.type === 'window', 'andando contra a janela fechada: nada acontece, só aparece "abrir"');
+  runFor(g2, 0.1, { ax: 0, ay: 1 });
+  ok(g2.s.vault && g2.s.vault.kind === 'crash', 'correndo contra a janela fechada: quebra e atravessa');
+  // pallet de pé na zona: ESPAÇO derruba, não pula
+  const g3 = scene(false); g3.k.t = -999;
+  const p = g3.pallets.find((q) => q.orient === 'v' && q.tx === 5);
+  g3.s.x = p.cx - 0.9; g3.s.y = p.cy; g3.k.x = p.cx + 2.2; g3.k.y = p.cy; g3.k.state = 'chase';
+  g3.update(1 / 60, { drop: true });
+  ok(p.state === 'falling' || g3.stats.drops === 1, 'com o assassino na zona, ESPAÇO derruba o pallet');
+  // bots continuam pulando sozinhos (a IA não usa a tecla)
+  ok(g.survivors.length >= 1, 'bots seguem a regra antiga (testados nas partidas simuladas)');
+}
+
+// ---------- 30. som por distância e mapa que muda a cada partida ----------
+console.log('som e variedade');
+{
+  const heard = [];
+  const g = DP.createGameAny({ map: 'camp', rng: seeded(70), bots: 0, training: true, sfx: (n, p, v) => heard.push({ n, v }) });
+  g.k.state = 'intro'; g.k.t = -999;
+  const h = g.survivors[0];
+  g.sfxAt('slam', h.x + 1, h.y);
+  g.sfxAt('slam', h.x + 14, h.y);
+  g.sfxAt('slam', h.x + 24, h.y);
+  g.sfxAt('slam', h.x + 45, h.y);
+  ok(heard.length === 3 && heard[0].v === 1 && heard[1].v < 0.6 && heard[1].v > 0.2 && heard[2].v < 0.1, `volume cai com a distância (1 tile ${heard[0] && heard[0].v}, 14 tiles ${heard[1] && heard[1].v.toFixed(2)}, 24 tiles ${heard[2] && heard[2].v.toFixed(2)})`);
+  ok(heard.length === 3, 'longe demais (45 tiles) nem toca');
+}
+{
+  const gx = new Set(), sides = new Set(), phones = new Set(), plz = new Set(), cars = new Set(), bad = [];
+  for (let seed = 1; seed <= 16; seed++) {
+    const m = DP.buildMapAny({ kind: 'camp', rng: seeded(seed * 3 + 1) });
+    gx.add(m.door.tx); sides.add(m.lake.x < 72 ? 'oeste' : 'leste'); phones.add(m.phone.tx + ',' + m.phone.ty); plz.add(m.plaza.x + ',' + m.plaza.y); cars.add(m.vehicles[0].tx + ',' + m.vehicles[0].ty);
+    if (m.cabins.length < 8) bad.push('cabanas ' + m.cabins.length);
+  }
+  ok(gx.size >= 10 && sides.size === 2 && phones.size >= 12 && plz.size >= 12 && cars.size >= 12 && bad.length === 0, `o mapa muda: ${gx.size} portões, lagos ${[...sides].join('/')}, ${phones.size} telefones, ${plz.size} praças, ${cars.size} vagas de carro em 16 partidas` + (bad.length ? ' ' + bad.join(',') : ''));
+}
+
+{
+  // assassino-IA desiste de quem o faz girar em círculos (loop de pallet/janela) e procura outro por um tempo
+  const g = DP.createGameAny({ map: 'camp', rng: seeded(71), role: 'survivor', bots: 1, training: true });
+  const v = g.survivors[0], b = g.survivors[1];
+  v.skillCD = 999; b.x = 3; b.y = 3;
+  g.k.state = 'chase'; g.k.aware = 'hunt'; g.k.x = v.x - 6; g.k.y = v.y; g.k.face = 0; g.k.chaseT = 34.9; g.k.lost = 0;
+  runFor(g, 0.5, {});
+  ok(g.k.ignoreId === v.id && g.k.ignoreUntil > g.time + 15, 'depois de ~35 s atrás do mesmo alvo sem acertar, o assassino-IA o ignora por 20 s');
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');

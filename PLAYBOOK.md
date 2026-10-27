@@ -37,9 +37,10 @@ Princípios herdados do protótipo anterior:
 | 12.1 | **Playtest 2** | Feedback do assassino no mapa grande: minimapa, visão maior, bots mais lentos, stealth menos lento, árvores sem "grudar", **armários** para se esconder, assassino-jogador nasce perto. |
 | 12.2 | **Playtest 2b** | Botões claros (tecla em cada botão, legenda da ação, dica do skill check), tela COMO JOGAR, marcador "você" no minimapa deixa de ser vermelho, correção da saída do armário, armário redesenhado. |
 | 12.3 | **Edição Luz (HD)** | Variante opcional (`python3 tools/build-single.py saida.html --hd` ou `?hd` na URL): caminho 1 da 10.10 (mesma grade de 16 px, mais luz). A versão padrão não muda. |
+| 12.4 | **Playtest 3** | Visão só pela lanterna (raio ambiente 3) + telhados nas cabanas, som por distância, armário/veículo sempre desenhados, mapa que muda a cada partida (portão, praça, estacionamento, telefone, lago a leste/oeste, cais, carro, boat), ESPAÇO pula, SHIFT corre, assassino-IA desiste de loops. |
 | 5 | **A sala (lobby)** | Tela inicial *Dead Pixel* (Jogar / Personagens / Loja), sala com 4 vagas e assassino apagado, personagem principal, loja protótipo, fichas, histórico. |
 
-Marcos de qualidade: **243 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
+Marcos de qualidade: **258 checagens automáticas** em `tests/sim.js` (mapa, pallet, janelas, geradores, percepção, tropeço, IA, equipe, fuzz).
 
 ## 3. Arquitetura (resumo)
 
@@ -467,7 +468,7 @@ Meta de duração: **8–12 min** por partida (sem interferência do assassino a
 | Bots com sentidos humanos, exploração, rotas | ✅ (sem trapaças de visão; exceção declarada do assassino-IA) |
 | Tempos maiores (fusível 45 s, peças 35/40 s, polícia 150 s) | ✅ |
 | Dificuldade, telemetria, lobby com modos | ✅ |
-| Testes automáticos | ✅ 243 checagens, ~30 s |
+| Testes automáticos | ✅ 258 checagens, ~30 s |
 | Matar o assassino | ⛔ fora da v0.1 (protótipo à parte) |
 
 **Como jogar uma partida típica (bots + você, sobrevivente):** abra o mapa (M), vá às cabanas, segure E nos geradores (acerte os skill checks com Espaço), pegue o rádio se vir um (Q liga), se achar peças leve-as ao carro (estacionamento) ou ao barco (cais). Com 5 geradores a energia liga: ligue no telefone, resista ~2,5 min e corra para o portão quando a polícia abrir.
@@ -516,6 +517,32 @@ Pedido: uma versão **sem mexer na atual**, para ver o estilo da imagem de refer
 - **Chão com mais textura:** manchas grandes de musgo/terra/sombra e pequenas rachaduras/gravetos (gerados uma vez, no mapa estático).
 - Nada disso altera regras, colisão, IA ou testes. Custo: uma camada de luz e uma de granulado por quadro.
 - Ajuste feito durante o desenvolvimento: a primeira correção de cor azulava demais o piso de madeira e deixava tudo cinza; ficou mais neutra (multiplicação 228/230/242 e granulado a 11%).
+
+### 11.10 Playtest 3 — visão, som, mapa decorável, pular com ESPAÇO
+
+**Feedback e respostas**
+| Queixa/ideia | Mudança |
+|---|---|
+| Armário "não aparece" | **Bug meu:** o armário só era desenhado se o ponto central estivesse "visível", mas o centro é um bloco sólido (mesmo problema do gerador). Agora é sempre desenhado (a névoa decide o que se vê). O carro tinha o mesmo defeito. |
+| Ouvia tudo, de qualquer lugar | `pan(x, y)` só calculava estéreo. Agora o **volume cai com a distância** (cheio até 5 tiles, 41% a 14, ~6% a 24, nada depois de 30; `HEAR_NEAR/HEAR_FAR`) e sons muito distantes nem tocam. |
+| Lanterna "para nada" (vê as costas) | O raio ambiente era 6 (omnidirecional). Agora **3** (sobrevivente) e 3,5 (assassino); o cone faz o trabalho. Além disso, **telhado**: de fora, o *interior* das cabanas fica coberto por telhas (paredes, portas e janelas continuam à vista, para o pallet da porta ser legível); entrando, o telhado some com um fade. Vale para os dois papéis. |
+| Mapa "decorável" | O terreno já era sorteado, mas os marcos eram fixos. Agora **mudam a cada partida:** portão (posição na borda norte), praça, estrada, estacionamento (posição/tamanho), telefone (lado e altura), lago (leste ou oeste, tamanho e altura), cais (direção), vaga do carro, posição do barco, nascimento do assassino, 24 pontos de âncora para cabanas (com desvio de ±4). Testado: em 16 sementes há 12 portões, 16 telefones e 16 praças diferentes, e os dois lados de lago. |
+| Ruído na tela (granulado) | Removido da edição HD (só ficou a luz). |
+| Pular janela só de chegar perto | **ESPAÇO pula** janela aberta/quebrada ou pallet caído (parado de frente também funciona; vale 0,3 s antes de chegar). Chegar perto não pula mais sozinho; aparece "ESPAÇO: PULAR" e o botão PALLET vira PULAR. Janela **fechada**: andando, só mostra "SEGURE E: ABRIR"; **correndo contra ela, quebra** e atravessa (se corta), como antes. Bots continuam pulando sozinhos. |
+| SHIFT para correr | No teclado o padrão agora é **andar (mais lento e quieto)** e **SHIFT corre**; no toque, arrastar pouco anda e muito corre. O assassino continua com SHIFT = espreitar. |
+| "Loopei o assassino na saída por 1 min e fugi" | Loop de pallet/janela infinito era uma brecha do assassino-IA. Agora, depois de 35 s correndo atrás do mesmo alvo sem acertar, ele **desiste dele por 20 s** (volta à patrulha) e só o retoma se chegar a menos de 3 tiles. (Loops continuam válidos, mas não eternos.) |
+
+**Medidas após a visão menor:** assassino-IA vs "jogador-bot": 3/16 fugas, partida média 218 s (antes 4/16 e 292 s): o assassino-IA ficou um pouco mais forte porque os bots notam o perigo mais tarde. Equipe de bots sem assassino: 474–1036 s (antes 318–471 s, porque exploram com vista menor). A calibrar com gente.
+
+**Impasses:** 62) o assassino de teste ("justo") travava num laço de chutar gerador enquanto um sobrevivente consertava a 3 tiles (artefato do robô de teste, não do jogo); 63) a regra de espaço "pular ou derrubar": só marca `jump` se não houver pallet derrubável (`findDroppable`), para o mesmo botão não fazer as duas coisas.
+
+### 10.11 Textura/skins detalhadas (a imagem refeita pelo GPT) — para discussão, nada implementado
+A imagem mostra o **nosso próprio screenshot repintado**: terra com pedras e gravetos, grama em tufos, árvores com tronco e raízes, personagem com volume e luz de lanterna granulada. Isso **não é "só aplicar"**: nosso jogo desenha tudo por código com 16×16 px; aquele nível de detalhe vem de **arte pronta** (pintada ou gerada). Caminho prático proposto:
+1. Eu exporto um **molde**: uma folha PNG ampliada (4×) com todos os sprites atuais em grade rotulada (personagem em 4 direções × quadros de andar/pular/ferido, assassino, árvores, pedras, chão, paredes, janela, pallet, gerador, telefone, armário, carro, barco, peças, etc.).
+2. Você manda esse molde ao GPT (ou a um artista) pedindo para **repintar mantendo a grade e a pose** (fundo transparente, mesma ordem).
+3. Eu importo a folha repintada (carregador de atlas com fallback para o desenho por código) e o jogo passa a usar essas imagens, **sem mudar nenhuma regra**.
+- **Cuidados:** consistência de estilo entre folhas, bordas limpas/transparência, tiles de chão que "emendam", tamanho (sprites maiores que 16 px exigem escolher a escala: 32 px dobra a resolução do mapa estático e pede divisão em blocos para o celular), e o limite do artefato (16 MB; PNG embutido).
+- **Perguntas:** (a) topa o fluxo molde → GPT → importação? (b) escala: manter 16 px repintado ou subir para 32 px? (c) começamos por personagens e árvores/chão (maior ganho) e deixamos prédios/veículos para depois?
 
 ### 10.10 Referência de estilo: "de quantos bits é isso?" (para discussão, nada implementado)
 

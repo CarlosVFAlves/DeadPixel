@@ -389,10 +389,10 @@
     }
   }
   // posição e rumo do veículo (parado ou em movimento durante a saída)
-  function vehPos(v) {
+  function vehPos(v, game) {
     if (v.state !== 'leaving') return { x: v.cx, y: v.cy, ang: v.kind === 'boat' ? 0 : -Math.PI / 2, alpha: 1 };
     if (v.kind === 'boat') return { x: v.cx + v.anim * 3.4, y: v.cy + Math.sin(v.anim * 2) * 0.15, ang: 0, alpha: v.anim > 5 ? Math.max(0, 1 - (v.anim - 5) / 1.5) : 1 };
-    const pts = [[v.cx, v.cy], [v.cx, 6.2], [71.5, 6.2], [71.5, -5]];
+    const pk = game.map.parking || { y: 5 }, gx = game.door.cx, py = pk.y + 1.6, pts = [[v.cx, v.cy], [v.cx, py], [gx, py], [gx, -5]];
     let d = Math.max(0, v.anim - 0.5) * 4.6;
     for (let i = 0; i < pts.length - 1; i++) {
       const dx = pts[i + 1][0] - pts[i][0], dy = pts[i + 1][1] - pts[i][1], L = Math.hypot(dx, dy);
@@ -402,7 +402,7 @@
     return { x: v.cx, y: v.cy, ang: -Math.PI / 2, alpha: 1 };
   }
   function drawVehicle(ctx, v, game, tm) {
-    const P = vehPos(v), cxp = Math.round(P.x * TS), cyp = Math.round(P.y * TS);
+    const P = vehPos(v, game), cxp = Math.round(P.x * TS), cyp = Math.round(P.y * TS);
     const working = game.survivors.some((s) => s.acting && s.acting.obj === v);
     const on = v.state === 'started' || v.state === 'leaving';
     ctx.save(); ctx.globalAlpha = P.alpha;
@@ -447,7 +447,7 @@
   }
   // viatura da polícia: chega pelo portão e estaciona no estacionamento enquanto a janela está aberta
   function drawPolice(ctx, ph, game, tm) {
-    const el = game.cfg.ROUTES.policeWindow - ph.win, y = el < 2.6 ? -3 + 12.2 * Math.min(1, el / 2.6) : 9.2, x = 66.2;
+    const pk = game.map.parking || { y: 5, h: 12 }, ty0 = pk.y + 4.2, el = game.cfg.ROUTES.policeWindow - ph.win, y = el < 2.6 ? -3 + (ty0 + 3) * Math.min(1, el / 2.6) : ty0, x = game.door.cx - 4.8;
     const cx = Math.round(x * TS), cy = Math.round(y * TS), flash = Math.floor(tm * 5) % 2;
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI);
     px(ctx, 'rgba(0,0,0,.38)', -13, -20, 28, 46);
@@ -683,6 +683,39 @@
   }
 
   // ---------- névoa de guerra: raio ambiente + cone da lanterna, com linha de vista; o que já foi visto fica "na memória" ----------
+  // ---------- telhados: de fora, o interior das cabanas fica coberto (paredes, portas e janelas continuam visíveis) ----------
+  function roofCanvas(c) {
+    const w = (c.w - 2) * TS, h = (c.h - 2) * TS, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    for (let y = 0; y < h; y += 4) {
+      const off = ((y / 4) & 1) ? 0 : 5;
+      for (let x = -off; x < w; x += 10) {
+        const hv = hash(x + c.x * 7, y + c.y * 13, 5);
+        g.fillStyle = hv < 0.33 ? '#2b2431' : hv < 0.66 ? '#322a39' : '#29222e'; g.fillRect(x, y, 10, 4);
+        g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x, y + 3, 10, 1); g.fillRect(x + 9, y, 1, 4);
+        if (hv > 0.9) { g.fillStyle = 'rgba(255,255,255,.05)'; g.fillRect(x + 2, y, 5, 1); }
+      }
+    }
+    g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(0, h / 2 - 1, w, 1);           // cumeeira
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, 0, w, 2); g.fillRect(0, h - 2, w, 2); g.fillRect(0, 0, 2, h); g.fillRect(w - 2, 0, 2, h);
+    return cv;
+  }
+  function drawRoofs(ctx, game, dt) {
+    const cabs = game.map.cabins;
+    if (!cabs || !cabs.length) return;
+    if (!R.roof) R.roof = {};
+    const pl = game.pl;
+    for (const c of cabs) {
+      const st = R.roof[c.id] || (R.roof[c.id] = { a: 1, cv: roofCanvas(c) });
+      const inside = pl.x >= c.x && pl.x < c.x + c.w && pl.y >= c.y && pl.y < c.y + c.h;
+      st.a += ((inside ? 0 : 1) - st.a) * Math.min(1, dt * 9);
+      if (st.a < 0.02) continue;
+      ctx.globalAlpha = st.a;
+      ctx.drawImage(st.cv, (c.x + 1) * TS, (c.y + 1) * TS);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // ---------- edição "HD" (luz): só liga com DP.style.hd; não altera nenhuma regra ----------
   const HD = () => !!(DP.style && DP.style.hd);
   function noiseTile() {
@@ -719,14 +752,10 @@
     L.globalAlpha = 1;
     ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(R.lightCv, 0, 0); ctx.globalCompositeOperation = 'source-over';
   }
-  // correção de cor (sombras azuladas) + granulado de filme: por cima de tudo, antes do HUD
+  // correção de cor (sombras azuladas): por cima de tudo, antes do HUD
   function hdGrade(ctx, W, H, tm) {
     ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = 'rgb(228,230,242)'; ctx.fillRect(0, 0, W, H);
-    ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = 0.11;
-    const n = noiseTile(), seed = Math.floor(tm * 18);
-    const ox = (seed * 37) % 96, oy = (seed * 59) % 96;
-    for (let y = -oy; y < H; y += 96) for (let x = -ox; x < W; x += 96) ctx.drawImage(n, x, y);
-    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    ctx.globalCompositeOperation = 'source-over';       // (sem granulado: o ruído na tela incomodava)
   }
 
   function drawFog(ctx, game, W, H, cx, cy) {
@@ -821,15 +850,17 @@
     const list = [];
     for (const p of game.pallets) if (p.state === 'up') list.push({ y: p.cy, f: () => drawPalletUp(ctx, p, game.nearList.some((n) => n.pal === p) ? tm : 0) });
     for (const o of game.gens) list.push({ y: o.cy, f: () => drawGen(ctx, o, game, tm) });
-    for (const l of game.lockers) if (full || vis(l.cx, l.cy)) list.push({ y: l.cy + 0.4, f: () => drawLocker(ctx, l, game, tm) });
+    for (const l of game.lockers) list.push({ y: l.cy + 0.4, f: () => drawLocker(ctx, l, game, tm) });
     if (game.phone) list.push({ y: game.phone.cy, f: () => drawPhone(ctx, game.phone, game, tm) });
-    if (game.phone && game.phone.state === 'here') list.push({ y: 10, f: () => drawPolice(ctx, game.phone, game, tm) });
+    if (game.phone && game.phone.state === 'here') list.push({ y: ((game.map.parking || { y: 5 }).y + 5), f: () => drawPolice(ctx, game.phone, game, tm) });
     for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
     for (const v of game.survivors) if (!v.dead && !v.escaped && !v.hidden && (v === pl || vis(v.x, v.y))) { list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) }); if (v.item) list.push({ y: v.y + 0.02, f: () => drawCarry(ctx, v) }); }
-    for (const v of game.vehicles) if (v.state !== 'gone' && (full || vis(v.cx, v.cy) || v.state === 'leaving')) list.push({ y: v.state === 'leaving' ? vehPos(v).y + 1 : v.cy + 0.9, f: () => drawVehicle(ctx, v, game, tm) });
+    for (const v of game.vehicles) if (v.state !== 'gone') list.push({ y: v.state === 'leaving' ? vehPos(v, game).y + 1 : v.cy + 0.9, f: () => drawVehicle(ctx, v, game, tm) });
     if (game.k === pl || full || game.canSeeKiller(pl)) list.push({ y: game.k.y, f: () => { ctx.globalAlpha = game.k.stealth ? 0.55 : 1; drawKiller(ctx, game.k, game, tm); ctx.globalAlpha = 1; } });
     list.sort((a, b) => a.y - b.y);
     for (const o of list) o.f();
+    if (!full) drawRoofs(ctx, game, Math.min(0.1, tm - (R.lastTm === undefined ? tm : R.lastTm)));
+    R.lastTm = tm;
 
     // partículas
     for (const f of game.fx) {
@@ -843,6 +874,7 @@
     if (!game.over) {
       const bob = Math.round(Math.sin(tm * 6));
       if (game.near && game.role === 'survivor') text(ctx, 'ESPAÇO', game.near.cx * TS, game.near.cy * TS - 16 + bob, '#ffd23f', { align: 'c' });
+      else if (game.vaultHint && game.role === 'survivor') text(ctx, DP.ui && DP.ui.keys ? 'ESPAÇO: PULAR' : 'PULAR', game.vaultHint.cx * TS, game.vaultHint.cy * TS - 18 + bob, '#7dffa0', { align: 'c' });
       const it = game.pInteract;
       if (it && !(game.role === 'survivor' && game.s.acting)) {
         const label = { gen: 'SEGURE E', item: 'SEGURE E: PEGAR', door: 'SEGURE E: ABRIR PORTA', window: 'SEGURE E: ABRIR', break: 'E: QUEBRAR', smash: 'E: QUEBRAR JANELA', kick: 'E: CHUTAR',
@@ -1051,7 +1083,7 @@
     }
     for (const v of game.vehicles) {                                            // carro e barco: lugares públicos
       if (v.state === 'gone') continue;
-      const P = vehPos(v);
+      const P = vehPos(v, game);
       px(ctx, '#000', X(P.x) - 3, Y(P.y) - 3, 6, 6); px(ctx, v.kind === 'car' ? '#c9a0ff' : '#4aa3e8', X(P.x) - 2, Y(P.y) - 2, 4, 4);
       if (v.order.length) px(ctx, '#fff', X(P.x) - 2, Y(P.y) + 3, Math.max(1, Math.round(4 * v.order.length / v.need.length)), 1);
     }
@@ -1181,7 +1213,7 @@
     ctx.restore();
   }
 
-  function reset() { R.staticCv = null; R.seen = null; R.mapCv = null; }
+  function reset() { R.staticCv = null; R.seen = null; R.mapCv = null; R.roof = null; }
 
   DP.render = { uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawMini, miniRect, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -27,8 +27,10 @@
     return p;
   }
 
+  const vmul = () => (DP.audio && DP.audio.vol !== undefined ? DP.audio.vol : 1);
   function tone(freq, dur, type, vol, slideTo, pan, delay) {
     if (!ctx || muted) return;
+    vol *= vmul();
     const t0 = ctx.currentTime + (delay || 0);
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type || 'sine';
@@ -43,6 +45,7 @@
 
   function noise(dur, vol, freq, type, q, pan, delay, freqTo) {
     if (!ctx || muted) return;
+    vol *= vmul();
     const t0 = ctx.currentTime + (delay || 0);
     const s = ctx.createBufferSource(); s.buffer = noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = type || 'lowpass';
