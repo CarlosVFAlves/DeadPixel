@@ -223,10 +223,10 @@
       const v = s.vault; kind = v.kind; p = Math.min(1, v.t / v.dur);
       const dl = Math.hypot(v.x1 - v.x0, v.y1 - v.y0) || 1; vx = (v.x1 - v.x0) / dl; vy = (v.y1 - v.y0) / dl;
       const arc = Math.sin(p * Math.PI);
-      if (kind === 'walk') { lift = arc * 2.5; lean = arc * 2.5; tuck = p > 0.3 && p < 0.7; }
-      else if (kind === 'crash') { lift = arc * 6.5; lean = arc * 3; tuck = true; armsUp = true; }
-      else if (kind === 'run') { lift = arc * 6; lean = arc * 1.5; tuck = p > 0.25 && p < 0.75; }
-      else { lift = arc * 5; tuck = p > 0.3 && p < 0.7; }
+      if (kind === 'walk') { lift = arc * 2.5; lean = arc * 2.5; }      // devagar: senta no parapeito e passa uma perna de cada vez
+      else if (kind === 'crash') { lift = arc * 6; lean = arc * 4; }       // se joga: corpo esticado, braços à frente
+      else if (kind === 'run') { lift = arc * 5.5; lean = arc * 3.5; }
+      else { lift = arc * 5; lean = arc * 2; }
     }
     if (s.tripT > 0 && !s.vault) { tuck = true; lean = 2; vx = Math.cos(s.face); vy = Math.sin(s.face); }
     if (s.invuln > 0 && !s.vault && Math.floor(tm * 20) % 2) return;
@@ -242,8 +242,24 @@
     // linhas de velocidade atrás de quem corre/atravessa
     if (kind === 'run' || kind === 'crash') for (let i = 0; i < 3; i++) px(ctx, 'rgba(255,255,255,.35)', x0 - Math.round(vx * (6 + i * 3)) - 1, yb - 6 - i * 2 - Math.round(vy * (4 + i * 3)), 2, 1);
     // pernas
-    const legC = '#26334d', lh = tuck ? 2 : 4;
-    if (d === 'L' || d === 'R') {
+    const legC = '#26334d', legD = '#1b2438', shoeC = '#e9e6f0', lh = tuck ? 2 : 4;
+    const dirx = vx > 0.3 ? 1 : vx < -0.3 ? -1 : 0, diry = vy > 0.3 ? 1 : vy < -0.3 ? -1 : 0, dive = !!kind && kind !== 'walk';
+    if (kind === 'walk') {
+      // passando devagar: primeiro uma perna estica por cima do parapeito, depois a outra a segue
+      const first = p < 0.5;
+      if (dirx) {
+        const lx0 = dirx > 0 ? x0 : x0 - 4;
+        if (first) { px(ctx, legC, lx0, yb - 7, 4, 2); px(ctx, shoeC, dirx > 0 ? x0 + 4 : x0 - 5, yb - 8, 1, 3); px(ctx, legD, x0 - 1 - dirx, yb - 4, 2, 4); }
+        else { px(ctx, legC, x0 + (dirx > 0 ? 1 : -3), yb - 4, 2, 4); px(ctx, shoeC, x0 + (dirx > 0 ? 2 : -3), yb - 1, 1, 1); px(ctx, legD, dirx > 0 ? x0 - 3 : x0 - 1, yb - 6, 4, 2); }
+      } else if (diry) {
+        if (first) { px(ctx, legC, x0 + 1, yb - 8, 2, 3); px(ctx, shoeC, x0 + 1, yb - 5 + (diry > 0 ? 1 : -3), 2, 1); px(ctx, legD, x0 - 3, yb - 4, 2, 4); }
+        else { px(ctx, legC, x0 + 1, yb - 4, 2, 4); px(ctx, legD, x0 - 3, yb - 7, 2, 3); }
+      }
+    } else if (dive) {
+      // se jogando: pernas esticadas para trás
+      if (dirx) { px(ctx, legC, dirx > 0 ? x0 - 6 : x0 + 1, yb - 8, 5, 2); px(ctx, legD, dirx > 0 ? x0 - 7 : x0 + 2, yb - 6, 5, 2); px(ctx, shoeC, dirx > 0 ? x0 - 8 : x0 + 6, yb - 7, 1, 2); }
+      else { px(ctx, legC, x0 - 3, yb - 3, 2, 3); px(ctx, legC, x0 + 1, yb - 3, 2, 3); }
+    } else if (d === 'L' || d === 'R') {
       const a = s.moving && !tuck ? (step ? 1 : -1) : 0;
       px(ctx, legC, x0 - 1 + a, yb - lh, 2, lh); px(ctx, '#1b2438', x0 - 1 - a, yb - lh, 2, lh);
     } else {
@@ -256,7 +272,14 @@
     if (hurt) { px(ctx, '#b02a2a', x - 2, yy - 8 - bob, 2, 1); px(ctx, '#b02a2a', x + 1, yy - 6 - bob, 1, 2); px(ctx, '#7a1a1a', x - 3, yy - 6 - bob, 1, 1); }
     // braços
     const armSwing = s.moving && !s.vault ? (step ? 1 : -1) : 0;
-    if (armsUp) { px(ctx, JD[id], x - 5, yy - 17, 2, 6); px(ctx, JD[id], x + 3, yy - 17, 2, 6); px(ctx, '#e0b48a', x - 5, yy - 18, 2, 1); px(ctx, '#e0b48a', x + 3, yy - 18, 2, 1); }
+    if (dive) {
+      // braços esticados à frente, na direção do pulo
+      const skin = '#e0b48a';
+      if (dirx) { const ax0 = dirx > 0 ? x + 2 : x - 7; px(ctx, JD[id], ax0, yy - 11 - bob, 5, 2); px(ctx, JD[id], ax0, yy - 8 - bob, 5, 2); px(ctx, skin, dirx > 0 ? ax0 + 5 : ax0 - 1, yy - 11 - bob, 1, 2); px(ctx, skin, dirx > 0 ? ax0 + 5 : ax0 - 1, yy - 8 - bob, 1, 2); }
+      else if (diry < 0) { px(ctx, JD[id], x - 4, yy - 17, 2, 7); px(ctx, JD[id], x + 2, yy - 17, 2, 7); px(ctx, skin, x - 4, yy - 18, 2, 1); px(ctx, skin, x + 2, yy - 18, 2, 1); }
+      else { px(ctx, JD[id], x - 5, yy - 9, 2, 6); px(ctx, JD[id], x + 3, yy - 9, 2, 6); px(ctx, skin, x - 5, yy - 3, 2, 1); px(ctx, skin, x + 3, yy - 3, 2, 1); }
+    }
+    else if (armsUp) { px(ctx, JD[id], x - 5, yy - 17, 2, 6); px(ctx, JD[id], x + 3, yy - 17, 2, 6); px(ctx, '#e0b48a', x - 5, yy - 18, 2, 1); px(ctx, '#e0b48a', x + 3, yy - 18, 2, 1); }
     else if (d === 'L' || d === 'R') px(ctx, JD[id], x - 1, yy - 9 - bob + armSwing, 2, 4);
     else { px(ctx, JD[id], x - 5, yy - 9 - bob + armSwing, 1, 4); px(ctx, JD[id], x + 4, yy - 9 - bob - armSwing, 1, 4); }
     if (kind === 'walk' && p < 0.55) { px(ctx, '#e0b48a', x0 + Math.round(vx * 6) - 1, yb - 5 + Math.round(vy * 3), 2, 2); }   // mãos no parapeito
@@ -295,7 +318,16 @@
     px(ctx, 'rgba(0,0,0,.45)', x - 6, y - 1, 12, 3);
     // pernas
     const a = k.moving ? (step ? 1 : -1) : 0;
-    if (d === 'L' || d === 'R') { px(ctx, '#17171d', x - 2 + a, y - 5, 3, 5); px(ctx, '#0f0f14', x - 2 - a, y - 5, 3, 5); }
+    if (k.state === 'kvault' && k.vault) {
+      // passando pela janela: uma perna de cada vez por cima do parapeito
+      const vp = Math.min(1, k.t / k.vault.dur), first = vp < 0.5, dx = k.vault.dx > 0.3 ? 1 : k.vault.dx < -0.3 ? -1 : 0;
+      if (dx) {
+        const lx0 = dx > 0 ? x - 1 : x - 7;
+        if (first) { px(ctx, '#17171d', lx0, y - 9, 8, 3); px(ctx, '#0f0f14', x - 3 - dx, y - 5, 3, 5); }
+        else { px(ctx, '#17171d', x + (dx > 0 ? 1 : -4), y - 5, 3, 5); px(ctx, '#0f0f14', dx > 0 ? x - 6 : x - 1, y - 8, 7, 3); }
+      } else if (first) { px(ctx, '#17171d', x + 1, y - 10, 3, 5); px(ctx, '#0f0f14', x - 4, y - 5, 3, 5); }
+      else { px(ctx, '#17171d', x + 1, y - 5, 3, 5); px(ctx, '#0f0f14', x - 4, y - 9, 3, 4); }
+    } else if (d === 'L' || d === 'R') { px(ctx, '#17171d', x - 2 + a, y - 5, 3, 5); px(ctx, '#0f0f14', x - 2 - a, y - 5, 3, 5); }
     else { px(ctx, '#17171d', x - 4, y - 5 - (a > 0 ? 1 : 0), 3, 5); px(ctx, '#17171d', x + 1, y - 5 - (a < 0 ? 1 : 0), 3, 5); }
     // casaco
     const coat = stun ? '#3d3b4a' : '#2b2a38';
@@ -471,7 +503,7 @@
     const X = l.tx * TS, Y = l.ty * TS;
     const opening = game.k.state === 'break' && game.k.pal === l;
     const open = opening || l.t < 0.25;
-    const shake = l.occ && Math.hypot(game.k.x - l.cx, game.k.y - l.cy) < 7 && Math.floor(tm * 9) % 7 === 0 ? (Math.floor(tm * 20) % 2 ? 1 : -1) : 0;
+    const shake = 0;      // (o armário não balança: balançar entregaria quem está dentro; só a respiração baixinha, de muito perto)
     const TOP = '#9aa8bd', FR = '#6a788e', FRD = '#46526a', EDGE = '#1d222b', LOUV = '#2b3446';
     px(ctx, 'rgba(0,0,0,.45)', X + 1, Y + 12, 15, 4);
     const bx = X + 1 + shake;
@@ -947,9 +979,9 @@
       const vs = game.vehicles.map((v) => (v.kind === 'car' ? 'CARRO ' : 'BARCO ') + (v.state === 'gone' || v.state === 'leaving' ? 'SAIU' : v.state === 'started' ? 'LIGADO' : v.state === 'ready' ? 'PRONTO' : v.order.length + '/' + v.need.length));
       text(ctx, vs.join(W < 260 ? ' ' : '  '), 4, ly, '#cfd3e0'); ly += 10;
     }
-    if (!ka && s.chaseT > 2) {                                                 // cansaço da perseguição: barra que enche; no vermelho o tropeço é questão de tempo
-      const f = Math.min(1, s.chaseT / (game.cfg.CHASE_SAFE + 12)), col = s.chaseT < game.cfg.CHASE_SAFE ? '#7dffa0' : s.chaseT < game.cfg.CHASE_SAFE + 6 ? '#ffd23f' : '#ff4d4d';
-      text(ctx, 'CANSAÇO', 4, ly, col); px(ctx, '#2a2a33', 50, ly + 1, 30, 4); px(ctx, col, 51, ly + 2, Math.round(28 * f), 2); ly += 10;
+    if (!ka && s.fear > 0.12) {                                                 // medo: barra que enche com a proximidade do assassino; no vermelho, correr faz tropeçar
+      const f = s.fear, col = f < 0.4 ? '#7dffa0' : f < 0.7 ? '#ffd23f' : '#ff4d4d';
+      text(ctx, 'MEDO', 4, ly, col); px(ctx, '#2a2a33', 32, ly + 1, 30, 4); px(ctx, col, 33, ly + 2, Math.round(28 * f), 2); ly += 10;
     }
     if (!ka && s.item && s.item.part) { text(ctx, 'LEVANDO: ' + game.partName(s.item), 4, ly + (s.tool ? 10 : 0), '#9bd3f0'); }
     if (!ka && s.tool) {                                                       // rádio: 3 faixas de proximidade + pilha
@@ -1007,8 +1039,47 @@
     if (!(ka && (game.k.state === 'stumble' || game.k.state === 'stun' || game.time < 12)) && gd && game.time % 6 < 3 && !game.over) {
       DP.font.wrap(ph ? (ka ? 'ENERGIA LIGADA! PROTEJA O TELEFONE' : 'ENERGIA LIGADA! LIGUE PARA A POLÍCIA') : ka ? 'PORTA LIBERADA! IMPEÇA A FUGA' : 'PORTA LIBERADA! CORRA PARA A SAÍDA', Math.floor((W - 8) / 6)).forEach((l, i) =>
         text(ctx, l, W / 2, msgY(game, W, H) + i * 9, '#7dffa0', { align: 'c' }));
-    } else if (!ka && game.k.hesitate) {
+    } else if (!ka && game.k.hesitate && game.canSeeKiller(game.pl) && game.dist < 12) {      // só quando dá para ver o assassino hesitar
       text(ctx, 'ELE HESITA...', W / 2, msgY(game, W, H), '#ff9d5c', { align: 'c' });
+    }
+    drawCallChat(ctx, game, W, H, tm);
+  }
+
+  // ---------- chat da ligação para a polícia ----------
+  // geometria compartilhada com main.js (botões das respostas)
+  function chatLayout(game, W, H) {
+    const c = game.call;
+    if (!c || game.role !== 'survivor' || game.time - c.last > (c.done ? 7 : 4.5)) return null;
+    const wide = W >= 280, pw = wide ? Math.min(200, W - 130) : W - 8, x = 4, y = 0, cols = Math.floor((pw - 10) / 6);
+    const rows = [];
+    for (const ln of c.lines.slice(-5)) {
+      const label = ln.who === 'att' ? 'ATENDENTE: ' : ln.who === 'you' ? 'VOCÊ: ' : '';
+      const full = label + ln.text, shown = Math.min(full.length, Math.floor((game.time - ln.t) * 45) + label.length);
+      const wr = DP.font.wrap(full, cols), col = ln.who === 'att' ? '#9bd3f0' : ln.who === 'you' ? '#7dffa0' : '#8a8a99';
+      let rem = shown;
+      for (const w of wr) { if (rem <= 0) break; rows.push({ t: w.slice(0, rem), col }); rem -= w.length + 1; }
+    }
+    const vis = rows.slice(-4);
+    let cy = y + 14 + vis.length * 9 + 4;
+    const btns = [];
+    if (c.choices) c.choices.forEach((t, i) => {
+      const wr = DP.font.wrap((i + 1) + ' ' + t, cols - 2), h = wr.length * 9 + 5;
+      btns.push({ id: 'chat' + i, x: x + 4, y: cy, w: pw - 8, h, lines: wr }); cy += h + 3;
+    });
+    const h = cy - y + 2, oy = wide ? H - h - 6 : H - h - 70;      // canto de baixo: no PC à esquerda dos botões; no celular acima deles
+    for (const b of btns) b.y += oy;
+    return { x, y: oy, w: pw, h, rows: vis, btns };
+  }
+  function drawCallChat(ctx, game, W, H, tm) {
+    const L = chatLayout(game, W, H); if (!L) return;
+    ctx.fillStyle = 'rgba(8,8,14,.94)'; ctx.fillRect(L.x, L.y, L.w, L.h);
+    ctx.fillStyle = '#7ad0ff'; ctx.fillRect(L.x, L.y, L.w, 1);
+    text(ctx, 'LIGAÇÃO: 190', L.x + 4, L.y + 3, '#7ad0ff');
+    L.rows.forEach((r, i) => text(ctx, r.t, L.x + 4, L.y + 14 + i * 9, r.col));
+    for (const b of L.btns) {
+      ctx.fillStyle = 'rgba(125,255,160,.1)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = '#7dffa0'; ctx.lineWidth = 1; ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+      b.lines.forEach((l, i) => text(ctx, l, b.x + 3, b.y + 3 + i * 9, '#e9e6f0'));
     }
   }
 
@@ -1222,5 +1293,5 @@
 
   // peças internas expostas só para a ferramenta que exporta as folhas-molde de textura (tools/export-sheets.js)
   const internals = { buildStatic, drawLocker, drawGen, drawPhone, drawVehicle, drawPolice, drawPalletUp, drawPalletFlat, drawBroken, drawWindow, drawItem, roofCanvas, hash, TS };
-  DP.render = { internals, uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawMini, miniRect, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
+  DP.render = { chatLayout, internals, uiSurvivor, uiKiller, drawWorld, drawHUD, drawMap, drawMini, miniRect, drawSkill, drawButton, drawJoystick, drawOver, overlay, reset, text };
 })(typeof window !== 'undefined' ? window : globalThis);

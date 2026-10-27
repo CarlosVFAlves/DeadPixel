@@ -62,7 +62,7 @@ Abra `index.html` no navegador (ou `python3 -m http.server` e acesse pelo celula
 
 Dentro do jogo: menu → **COMO JOGAR** (ou tecla `H`; também no menu de pausa). Os botões na tela mostram a tecla correspondente quando você usa teclado, e o botão AGIR escreve a ação do momento. **Skill check:** `Espaço` (ou `E`) no PC, toque na tela no celular.
 
-**Correr, andar e pular (teclado):** `Shift` corre; solto, só anda (mais lento e silencioso). **`Espaço` pula** janela aberta ou pallet caído quando você está perto (chegar perto não pula mais sozinho) e derruba o pallet quando o assassino está do outro lado. Janela **fechada**: andando, segure `E` para abrir; **correndo contra ela, você a quebra** e atravessa (se corta). No celular: arrastar pouco anda, arrastar muito corre, e o botão vira PULAR quando há o que pular.
+**Correr, andar e pular (teclado):** `Shift` corre; solto, só anda (mais lento e silencioso). **`Espaço` pula** janela aberta ou pallet caído quando você está perto (chegar perto não pula mais sozinho) e derruba o pallet quando o assassino está do outro lado. Janela **fechada**: andando, segure `E` para abrir; **correndo (Shift) e apertando `Espaço` contra ela, você a quebra** e atravessa (se corta; com a última vida, 1% de chance de ser fatal). No celular: arrastar pouco anda, arrastar muito corre, e o botão vira PULAR quando há o que pular.
 
 | Celular | Teclado | Ação |
 |---|---|---|
@@ -87,7 +87,7 @@ Modos: **JOGAR** (2 acertos e cai; nada volta) e **TREINO** (ninguém morre; pal
 | **Fechada**, segurar **AGIR** (E) ~0,8 s | **abre**, em silêncio (a folha desliza) |
 | **Aberta**, **correndo** | **pula** (0,45 s, arco rápido) |
 | **Aberta**, **andando** (Shift, ou joystick leve) | passa **tranquilamente** (1 s, apoia as mãos no parapeito). Não corta |
-| **Fechada**, **correndo** contra ela | **atravessa quebrando**: chuva de cacos, **se corta (−1 vida, nunca mata)** e o grito **denuncia a posição** |
+| **Fechada**, **correndo + ESPAÇO** contra ela | **atravessa quebrando**: chuva de cacos, **se corta (−1 vida, nunca mata)** e o grito **denuncia a posição** |
 | **Quebrada** (por alguém) | vidro no chão: quem passar **se corta** de novo |
 | **Assassino** (AGIR, ~1 s) | **quebra** a janela, fechada ou aberta, para os sobreviventes se cortarem. Ele só **passa por janela aberta/quebrada** (0,85 s, mais devagar que eles); fechada o barra |
 
@@ -114,6 +114,9 @@ No treino as janelas e os pallets voltam sozinhos depois de ~12 s.
 - Setas laranja/vermelhas na borda da tela apontam **barulhos fora de vista**: gerador sendo consertado, skill check errado, gerador pronto.
 - A zona amarela/vermelha no chão mostra onde um pallet cairia se o sobrevivente derrubasse agora.
 - A IA do sobrevivente: **sente** você (batimento) a ~11 tiles e **vê** com linha de visão; foge de quem se aproxima; corre até um pallet que esteja no seu caminho, passa para o outro lado e **derruba na hora certa** (prevendo onde você estará, com tempo de reação humano); pula pallets caídos; foge para o portão quando está aberto.
+
+## Medo (sobrevivente) e passos
+Quanto mais perto o assassino (e vendo você), mais **MEDO** (barra no HUD). Com medo, **correr** faz tropeçar (chance cresce com o quadrado do medo; andar nunca tropeça; depois de tropeçar, 4 s sem outro; derrubar pallet ou pular janela dá coragem). Passos soam por piso e distância; o assassino, mais pesado e de mais longe. O assassino-IA **aprende** com botes errados (antecipa a mira e acompanha o desvio). Quem se esconde no armário respira baixinho.
 
 ## Tropeçar
 

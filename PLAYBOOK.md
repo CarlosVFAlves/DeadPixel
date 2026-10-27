@@ -566,6 +566,30 @@ A imagem mostra o **nosso próprio screenshot repintado**: terra com pedras e gr
   3. **Sprites prontos (PNG)** de um artista/pacote: a melhor qualidade, mas quebra a regra "tudo gerado por código" (os arquivos viram dados embutidos no artefato).
 - **Perguntas para decidir:** qual caminho? A regra "tudo por código" pode ser relaxada? A ambientação continua o acampamento ou muda (hospital, como na imagem)? Skins só trocam paleta ou são sprites novos?
 
+## 11b. Playtest 4 — sons, medo, janelas, IA que aprende, chat da polícia
+
+**Regra de trabalho pedida:** quando algo "bugou", primeiro perguntar como/onde antes de corrigir (as perguntas e respostas deste lote estão abaixo).
+
+| Relato | Esclarecimento | Mudança |
+|---|---|---|
+| Sons de andar e do assassino tentando acertar | — | **Passos** por distância andada (corrida a cada 1,3 tile, andar 0,95, assassino 1,5 e mais grave), timbre por piso (grama, terra, areia, madeira, cascalho); corrida se ouve de 17 tiles, andar de 8, assassino de 20 (espreita, 7); os próprios passos soam baixinho. Golpe: `windup` (respiração + rosnado), `lunge` (chicote do ar + lâmina), novo `whiff` ao errar. |
+| Tela pisca quando o killer acerta alguém | "eu sobrevivente, killer acertou um BOT" | Piscada/tremor/trava só para quem vive o momento (quem leva o golpe, assassino atordoado, quem derrubou o pallet). Tremor do pallet só perto. |
+| Janela quebrou sem apertar ESPAÇO | PC, correndo (SHIFT) contra a fechada | Agora quebrar e atravessar exige **correr (SHIFT) + ESPAÇO**; só correr contra ela não faz nada (bots seguem automáticos). |
+| "ELE HESITA..." o tempo todo | "acho que é quando passa perto de um pallet" | O texto aparecia sempre que o assassino hesitava em qualquer lugar do mapa (vazava informação). Agora só quando dá para vê-lo e a menos de 12 tiles. |
+| Corri e não tropecei | "o killer estava longe/sem ver" | Era o desenho (cansaço só valia com ele perto). Substituído por **MEDO** (ver abaixo), por pedido. |
+| Armários balançando entregam | — | Armário não balança mais; quem está dentro **respira baixinho** (som a menos de 3,6 tiles). |
+| "O mapa não é aleatório, a saída é sempre no mesmo lugar" | portão norte e polícia/telefone | Verdade: só o x do portão mudava, sempre na borda norte. **Pendente** (tarefa: variar o lado/borda). |
+| Carro nunca encontrado | "achei sem querer; é muito grande, mas isso é bacana" | Mantido; a ideia de pistas fica para estudar. |
+| Assassino sumiu/não matou ninguém; parado olhando pela janela | "o assassino não me achava" | **Bug achado e corrigido:** vendo o alvo através da janela de vidro, a IA andava em linha reta contra a parede e ficava parada. Agora, se o corredor não está livre, usa o caminho (pula janela quebrada/aberta, quebra a fechada, contorna). Teste: 9/9 cenários alcançam o alvo. |
+| Janela voltou sozinha | era treino | Normal: no TREINO pallets/janelas respawnam. |
+| "A IA não poderia aprender?" (olé) | — | **Assassino-IA aprende:** cada bote errado soma `learn` (+0,22; cai 0,02/s; −0,35 ao acertar): antecipa a mira pela velocidade do alvo e o bote acompanha o desvio. Contra quem desvia sempre na hora exata: 3% de acerto sem aprender, ~30% aprendendo (e quem muda o padrão volta a escapar). |
+| Cansaço → **medo** | "quanto mais próximo, mais medo, mais tropeço" | `s.fear` 0–1 sobe com a proximidade (1,2 a 9 tiles, com linha de vista, assassino ativo) e cai devagar; correr com medo tropeça com chance/s = 0,13 × medo²; andar não tropeça; depois do tropeço 4 s sem novo; derrubar pallet/pular janela dá 2,5 s de coragem e acalma. Barra **MEDO** no HUD. Medido: colado (2 tiles) tropeça em ~11 s, a 4 tiles ~14 s, a 7 tiles ~42 s, a 12 tiles nunca. |
+| 1% de morrer pulando janela quebrada | — | Com a última vida, cada corte no vidro tem 1% de chance (`GLASS_DEATH`) de ser fatal ("O VIDRO FOI FATAL..."); com mais vidas o corte só tira uma. |
+| Animação de pular | — | Devagar: passa uma perna de cada vez por cima do parapeito (também o assassino, `kvault`). Correndo/atravessando: se joga com os braços à frente e pernas esticadas atrás. |
+| Chat com a atendente da polícia | — | Ao segurar o telefone aparece a ligação: falas aleatórias (5 etapas por progresso), 3 respostas sorteadas (teclas 1/2/3 ou toque), é só ambientação; ao completar, "viatura a caminho, ~150 s". |
+
+**Pendências pedidas no mesmo lote (ver tarefas):** corpos/estados ferido→caído→morto; variar o portão; kit médico, inventário, baús, armadilhas, assassino começando no barracão; multiplayer.
+
 ## 12. Forja de personagens — ENGAVETADA
 
 **Decisão (dono do projeto):** "ficou péssimo os modelos que você fez; tire todos até conseguirmos fazer um personagem minimamente bonito, e depois sigamos o modelo". Os sprites gerados, a tela construtora, as folhas exportadas (`assets/forja*`) e os testes foram **removidos do jogo**; voltou o desenho clássico por código (estado de 810218a). O código do experimento ficou em `experimental/forja/` (não é carregado pelo jogo).

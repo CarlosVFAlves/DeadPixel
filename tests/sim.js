@@ -452,8 +452,10 @@ console.log('janelas');
   const g = scene(false); g.k.state = 'intro'; g.k.t = -999;
   const w = g.windows.find((q) => q.tx === 11 && q.ty === 11);
   g.s.x = w.cx; g.s.y = w.cy - 0.85; g.s.hp = 2;
-  runFor(g, 0.1, { ax: 0, ay: 1 });
-  ok(g.s.vault && g.s.vault.kind === 'crash', 'correndo contra a janela fechada: atravessa quebrando');
+  runFor(g, 0.4, { ax: 0, ay: 1 });
+  ok(!g.s.vault && w.state === 'closed', 'correndo contra a janela fechada SEM apertar ESPAÇO: não quebra');
+  runFor(g, 0.1, { ax: 0, ay: 1, jump: true });
+  ok(g.s.vault && g.s.vault.kind === 'crash', 'SHIFT+ESPAÇO contra a janela fechada: atravessa quebrando');
   runFor(g, 0.6, {});
   ok(w.state === 'broken' && g.s.hp === 1 && g.stats.cuts === 1 && g.s.y > w.cy + 0.5, 'janela quebrada, sobrevivente cortado (vida 2→1)');
   ok(g.pings.length >= 1, 'o barulho denuncia a posição');
@@ -1252,8 +1254,8 @@ console.log('pular com espaço');
   g2.s.x = w2.cx; g2.s.y = w2.cy - 0.85;
   runFor(g2, 0.4, { ax: 0, ay: 1, walk: true });
   ok(!g2.s.vault && w2.state === 'closed' && g2.interact && g2.interact.type === 'window', 'andando contra a janela fechada: nada acontece, só aparece "abrir"');
-  runFor(g2, 0.1, { ax: 0, ay: 1 });
-  ok(g2.s.vault && g2.s.vault.kind === 'crash', 'correndo contra a janela fechada: quebra e atravessa');
+  runFor(g2, 0.1, { ax: 0, ay: 1, jump: true });
+  ok(g2.s.vault && g2.s.vault.kind === 'crash', 'correndo + ESPAÇO contra a janela fechada: quebra e atravessa');
   // pallet de pé na zona: ESPAÇO derruba, não pula
   const g3 = scene(false); g3.k.t = -999;
   const p = g3.pallets.find((q) => q.orient === 'v' && q.tx === 5);
@@ -1289,36 +1291,148 @@ console.log('som e variedade');
 }
 
 {
-  // cansaço da perseguição (anti-loop): correr com o assassino colado faz o sobrevivente tropeçar cada vez mais provável
-  const firstTrip = [], walkTrips = [];
-  for (let seed = 1; seed <= 12; seed++) {
+  // passos e golpe errado
+  const mk = (seed) => { const heard = []; const g = DP.createGameAny({ map: 'camp', rng: seeded(seed), bots: 0, training: true, sfx: (n, p, v, x) => heard.push({ n, v, x }) }); return { g, heard }; };
+  // correndo: passos regulares e mais rápidos que andando; os próprios passos soam baixo
+  let { g, heard } = mk(81); g.k.state = 'intro'; g.k.t = -999; const h = g.survivors[0];
+  for (let i = 0; i < 60 * 3; i++) g.update(1 / 60, { ax: 1, ay: 0 });
+  const runSteps = heard.filter((e) => e.n === 'step');
+  ok(runSteps.length >= 5 && runSteps.length <= 14, `correndo 3 s: ${runSteps.length} passos`);
+  ok(runSteps.every((e) => e.v <= 0.35 + 1e-9), 'os próprios passos soam baixinho');
+  ok(runSteps.every((e) => e.x && ['grass', 'dirt', 'sand', 'wood', 'gravel'].includes(e.x.surf)), 'cada passo diz o tipo de chão');
+  ({ g, heard } = mk(81)); g.k.state = 'intro'; g.k.t = -999;
+  for (let i = 0; i < 60 * 3; i++) g.update(1 / 60, { ax: 1, ay: 0, walk: true });
+  const walkSteps = heard.filter((e) => e.n === 'step').length;
+  ok(walkSteps >= 3 && walkSteps < runSteps.length, `andando 3 s: ${walkSteps} passos (menos que correndo)`);
+  ({ g, heard } = mk(81)); g.k.state = 'intro'; g.k.t = -999;
+  for (let i = 0; i < 120; i++) g.update(1 / 60, {});
+  ok(heard.filter((e) => e.n === 'step').length === 0, 'parado não faz barulho de passo');
+  // passos do assassino a poucos tiles são ouvidos, e distantes demais não
+  ({ g, heard } = mk(82)); const kk = g.k;
+  g.survivors[0].x = 40.5; g.survivors[0].y = 40.5; kk.state = 'chase'; kk.x = 46.5; kk.y = 40.5;
+  for (let i = 0; i < 60; i++) { g.update(1 / 60, {}); kk.x = 46.5 + (i % 2) * 0.1; }
+  void kk;
+  // golpe errado: som de ar cortado ao fim do bote
+  ({ g, heard } = mk(83)); g.k.state = 'intro'; g.k.t = -999;
+  g.k.state = 'lunge'; g.k.t = 0; g.k.hitDone = false; g.k.ldx = 1; g.k.ldy = 0; g.k.x = 20.5; g.k.y = 20.5; g.survivors[0].x = 20.5; g.survivors[0].y = 26.5;
+  for (let i = 0; i < 40; i++) g.update(1 / 60, {});
+  ok(heard.some((e) => e.n === 'whiff'), 'errar o bote toca o som de ar cortado');
+}
+
+{
+  // chat da ligação para a polícia
+  const g = DP.createGameAny({ map: 'camp', rng: seeded(91), bots: 0, training: true });
+  g.k.state = 'intro'; g.k.t = -999;
+  const ph = g.phone; ph.state = 'ready'; const s = g.survivors[0]; s.x = ph.cx; s.y = ph.cy + 1.0; s.face = -Math.PI / 2; s.skillCD = 999;
+  let asked = 0, answered = 0;
+  for (let i = 0; i < 60 * 40; i++) { g.update(1 / 60, { act: true, actPress: i === 0 }); if (g.call && g.call.choices && i % 60 === 30) { answered += g.chatReply(0) ? 1 : 0; } }
+  const att = g.call.lines.filter((l) => l.who === 'att'), you = g.call.lines.filter((l) => l.who === 'you');
+  ok(ph.state === 'coming' && att.length >= 5 && you.length >= 4 && answered >= 4, `ligar para a polícia abre o chat: ${att.length} falas da atendente, ${you.length} respostas`);
+  ok(/VIATURA A CAMINHO/.test(att[att.length - 1].text) && g.call.done, 'a atendente fecha dizendo que a viatura está a caminho');
+  const g2 = DP.createGameAny({ map: 'camp', rng: seeded(91), bots: 0, training: true });
+  ok(g2.call === null && !g2.chatReply(0), 'sem ligação, sem chat');
+}
+{
+  // a tela só pisca/treme para quem vive o golpe
+  const mk = () => { const g = DP.createGameAny({ map: 'camp', rng: seeded(92), bots: 1, training: true }); g.k.t = -999; g.k.state = 'intro'; return g; };
+  let g = mk(); const bot = g.survivors[1], me = g.survivors[0];
+  me.x = 20.5; me.y = 20.5; bot.x = 60.5; bot.y = 60.5; g.k.x = 59.5; g.k.y = 60.5; g.k.state = 'lunge'; g.k.t = 0; g.k.ldx = 1; g.k.ldy = 0; g.k.hitDone = false; bot.invuln = 0;
+  for (let i = 0; i < 20; i++) g.update(1 / 60, {});
+  ok(g.stats.hits >= 1 && g.flash === 0, 'golpe em um bot não pisca a tela de quem joga de sobrevivente');
+  g = mk(); const me2 = g.survivors[0]; me2.x = 60.5; me2.y = 60.5; g.k.x = 59.5; g.k.y = 60.5; g.k.state = 'lunge'; g.k.t = 0; g.k.ldx = 1; g.k.ldy = 0; g.k.hitDone = false; me2.invuln = 0;
+  for (let i = 0; i < 20 && g.stats.hits < 1; i++) g.update(1 / 60, {});
+  ok(g.stats.hits >= 1 && g.flash > 0, 'golpe em mim pisca a tela');
+}
+{
+  // armário: respiração baixinha de quem está escondido, só de muito perto
+  const heard = []; const g = DP.createGameAny({ map: 'camp', rng: seeded(93), bots: 0, training: true, sfx: (n, p, v) => heard.push({ n, v }) });
+  const l = g.lockers[0], me = g.survivors[0]; l.occ = me; me.hidden = l; me.x = l.cx; me.y = l.cy; g.k.state = 'chase'; g.k.x = l.cx + 20; g.k.y = l.cy; g.k.t = 0;
+  for (let i = 0; i < 60 * 5; i++) { g.k.x = l.cx + 20; g.k.y = l.cy; g.update(1 / 60, {}); }
+  ok(!heard.some((e) => e.n === 'breath'), 'assassino longe: não se ouve respiração');
+  for (let i = 0; i < 60 * 5; i++) { g.k.x = l.cx + 2.2; g.k.y = l.cy; g.update(1 / 60, {}); }
+  const br = heard.filter((e) => e.n === 'breath');
+  ok(br.length >= 2 && br.every((e) => e.v < 0.5), `assassino a 2 tiles: ${br.length} respirações, baixinhas (vol ≤ ${Math.max(...br.map((e) => e.v)).toFixed(2)})`);
+}
+
+{
+  // MEDO (anti-loop): quanto mais perto o assassino, mais o sobrevivente tropeça ao correr
+  const tripAt = (dist, seed, secs, walk) => {
     const g = DP.createGame({ rng: seeded(seed * 13), bots: 0, training: true });
     const k = g.k; g.s.skillCD = 999;
-    let t1 = -1;
-    for (let i = 0; i < 60 * 45; i++) {
-      g.s.x = 26.5; g.s.y = 5.5; k.x = 22.5; k.y = 5.5; k.state = 'recover'; k.dur = 99; k.t = 0; g.s.vault = null;
-      g.update(1 / 60, { ax: 1, ay: 0 });
-      if (t1 < 0 && g.stats.trips) { t1 = g.time; break; }
+    for (let i = 0; i < 60 * secs; i++) {
+      g.s.x = 26.5; g.s.y = 5.5; k.x = 26.5 - dist; k.y = 5.5; k.state = 'recover'; k.dur = 99; k.t = 0; g.s.vault = null;
+      g.update(1 / 60, { ax: 1, ay: 0, walk: !!walk });
+      if (g.stats.trips) return g.time;
     }
-    firstTrip.push(t1);
-    const w = DP.createGame({ rng: seeded(seed * 13), bots: 0, training: true }); w.s.skillCD = 999;
-    for (let i = 0; i < 60 * 40; i++) { w.s.x = 26.5; w.s.y = 5.5; w.k.x = 22.5; w.k.y = 5.5; w.k.state = 'recover'; w.k.dur = 99; w.k.t = 0; w.update(1 / 60, { ax: 1, ay: 0, walk: true }); }
-    walkTrips.push(w.stats.trips || 0);
-  }
-  const ok1 = firstTrip.every((t) => t < 0 || t > 9), n = firstTrip.filter((t) => t > 0).length, avg = firstTrip.filter((t) => t > 0).reduce((a, b) => a + b, 0) / Math.max(1, n);
-  ok(ok1 && n >= 11, `nunca tropeça antes de ${DP.CFG.CHASE_SAFE} s de perseguição e quase sempre antes de 45 s (${n}/12, em média aos ${avg.toFixed(0)} s)`);
-  ok(avg > 12 && avg < 30, 'o tropeço vem depois de uns 15–25 s de corrida: dá tempo de usar pallet/janela, mas não de rodar para sempre');
-  ok(walkTrips.every((x) => x === 0), 'andando (sem correr) o cansaço não acumula');
-  // alívio: pallet derrubado e janela pulada reduzem o cansaço; tropeçar deixa lento
+    return -1;
+  };
+  const avg = (d) => { const a = []; for (let seed = 1; seed <= 12; seed++) a.push(tripAt(d, seed, 80)); const hit = a.filter((t) => t > 0); return { n: hit.length, m: hit.reduce((x, y) => x + y, 0) / Math.max(1, hit.length) }; };
+  const a2 = avg(2), a4 = avg(4), a7 = avg(7);
+  ok(a2.m < a4.m && a4.m < a7.m || a7.n < 12, `quanto mais perto, mais cedo tropeça (2 tiles ${a2.m.toFixed(0)} s, 4 tiles ${a4.m.toFixed(0)} s, 7 tiles ${a7.n ? a7.m.toFixed(0) + ' s' : 'nunca'})`);
+  ok(a2.n === 12 && a2.m > 3 && a2.m < 20, `colado no assassino tropeça em ${a2.m.toFixed(0)} s em média (${a2.n}/12)`);
+  const far = []; for (let seed = 1; seed <= 12; seed++) far.push(tripAt(12, seed, 40));
+  ok(far.every((t) => t < 0), 'longe (12 tiles) o medo não causa tropeço');
+  const wk = []; for (let seed = 1; seed <= 12; seed++) wk.push(tripAt(2, seed, 40, true));
+  ok(wk.every((t) => t < 0), 'andando (sem correr) não tropeça, por mais perto que esteja');
+  // coragem: pallet derrubado dá alguns segundos sem tropeço; tropeçar deixa lento
   const g = DP.createGame({ rng: seeded(5), bots: 0, training: true });
   g.s.skillCD = 999; const p = g.pallets.find((q) => q.orient === 'v' && q.tx === 5);
-  g.s.x = p.cx - 0.9; g.s.y = p.cy; g.k.x = p.cx + 2.2; g.k.y = p.cy; g.k.state = 'chase'; g.s.chaseT = 14;
+  g.s.x = p.cx - 0.9; g.s.y = p.cy; g.k.x = p.cx + 2.2; g.k.y = p.cy; g.k.state = 'chase'; g.s.fear = 0.9;
   g.tryDrop();
-  ok(g.s.chaseT <= 14 - g.cfg.CHASE_PALLET + 0.01, 'derrubar o pallet alivia o cansaço');
+  ok(g.s.calm >= g.cfg.FEAR_RELIEF - 0.01 && g.s.fear < 0.5, 'derrubar o pallet dá coragem (zera o risco por uns segundos e acalma o medo)');
   g.s.tripT = 1; g.s.x = 26.5; g.s.y = 5.5; g.k.x = 2; g.k.y = 2; g.k.state = 'recover'; g.k.dur = 99;
   const x0 = g.s.x; g.update(1 / 60, { ax: 1, ay: 0 }); const dTrip = g.s.x - x0;
   g.s.tripT = 0; const x1 = g.s.x; g.update(1 / 60, { ax: 1, ay: 0 }); const dRun = g.s.x - x1;
   ok(dTrip < dRun * 0.6 && dTrip > 0, 'tropeçado, o sobrevivente anda à metade da velocidade');
+  // vidro: com a última vida, 1% de chance de morrer a cada corte (nunca antes)
+  let deaths = 0, N = 1500;
+  for (let i = 0; i < N; i++) {
+    const gg = DP.createGameAny({ map: 'camp', rng: seeded(500 + i), bots: 0 }); gg.k.state = 'intro'; gg.k.t = -999;
+    gg.s.hp = 1; const w = gg.windows[0]; gg.s.x = w.cx; gg.s.y = w.cy - 0.85; gg.s.vault = { kind: 'run', t: 0.3, dur: 0.45, x0: gg.s.x, y0: gg.s.y, x1: gg.s.x, y1: gg.s.y + 1.5, win: w, did: false, dx: 0, dy: 1 }; w.state = 'broken';
+    gg.update(1 / 60, {}); gg.update(1 / 60, {}); gg.update(1 / 60, {});
+    if (gg.s.dead) deaths++;
+  }
+  ok(deaths >= 3 && deaths <= 40, `última vida: ${deaths}/${N} cortes no vidro foram fatais (~1%)`);
+  const gh = DP.createGameAny({ map: 'camp', rng: seeded(3), bots: 0 }); gh.k.state = 'intro'; gh.k.t = -999;
+  gh.s.hp = 2; const wh = gh.windows[0]; gh.s.x = wh.cx; gh.s.y = wh.cy - 0.85; gh.s.vault = { kind: 'run', t: 0.3, dur: 0.45, x0: gh.s.x, y0: gh.s.y, x1: gh.s.x, y1: gh.s.y + 1.5, win: wh, did: false, dx: 0, dy: 1 }; wh.state = 'broken';
+  for (let i = 0; i < 5; i++) gh.update(1 / 60, {});
+  ok(!gh.s.dead && gh.s.hp === 1, 'com 2 vidas o corte tira uma e não mata');
+}
+
+{
+  // assassino-IA não fica parado olhando pela janela: vai atrás (pula a janela quebrada/aberta ou quebra a fechada)
+  let stuck = 0, tot = 0;
+  for (const state of ['broken', 'open', 'closed']) for (const seed of [1, 2, 3]) {
+    const g = DP.createGameAny({ map: 'camp', rng: seeded(seed), bots: 0 });
+    const w = g.windows.find((q) => q.state === 'closed'); w.state = state; w.t = 99;
+    const m = g.map; let side = null;
+    for (const sg of [1, -1]) { const x = w.cx + w.nx * sg * 1.5, y = w.cy + w.ny * sg * 1.5; if (m.indoor[(y | 0) * m.W + (x | 0)]) side = sg; }
+    if (side === null) continue;
+    const s = g.s; s.x = w.cx + w.nx * side * 1.5; s.y = w.cy + w.ny * side * 1.5; s.skillCD = 999;
+    g.k.x = w.cx - w.nx * side * 3; g.k.y = w.cy - w.ny * side * 3; g.k.state = 'chase'; g.k.aware = 'hunt'; g.k.target = s; g.k.t = 0;
+    let got = false; for (let i = 0; i < 60 * 12 && !got; i++) { g.update(1 / 60, {}); if (s.hp < g.hpMax || s.dead) got = true; }
+    tot++; if (!got) stuck++;
+  }
+  ok(tot >= 6 && stuck === 0, `assassino-IA alcança quem está atrás da janela (${tot - stuck}/${tot} cenários, janela quebrada/aberta/fechada)`);
+}
+{
+  // a IA aprende: depois de errar botes seguidos, antecipa a mira e acompanha o desvio
+  const dodge = (learn, seed) => {
+    const g = DP.createGame({ map: 'camp', rng: seeded(seed), bots: 0, role: 'survivor' }); g.cfg.LEARN = learn; g.cfg.HP_CAMP = 99; g.cfg.FEAR_TRIP = 0;
+    const s = g.s; s.hp = 99; s.skillCD = 999; g.hpMax = 99; const pl = g.map.plaza;
+    s.x = pl.x; s.y = pl.y; g.k.x = pl.x - 6; g.k.y = pl.y; g.k.state = 'chase'; g.k.aware = 'hunt'; g.k.target = s;
+    let sgn = 1, dd = 0, vx = 0, vy = 0;
+    for (let i = 0; i < 60 * 60; i++) {
+      const k = g.k; let ax = 0, ay = 0;
+      if (k.state === 'windup' && dd <= 0) { dd = 0.35; const dx = s.x - k.x, dy = s.y - k.y, l = Math.hypot(dx, dy) || 1; sgn = -sgn; vx = -dy / l * sgn; vy = dx / l * sgn; }
+      if (dd > 0) { dd -= 1 / 60; ax = vx; ay = vy; }
+      g.update(1 / 60, { ax, ay });
+      if (Math.hypot(s.x - pl.x, s.y - pl.y) > 9) { s.x = pl.x; s.y = pl.y; k.x = pl.x - 3; k.y = pl.y; }
+    }
+    return g.stats.hits / Math.max(1, g.stats.lunges);
+  };
+  let a0 = 0, a1 = 0; for (let seed = 1; seed <= 4; seed++) { a0 += dodge(0, seed); a1 += dodge(1, seed); }
+  ok(a1 > a0 * 5 && a1 / 4 > 0.15, `quem desvia sempre na hora do bote: sem aprendizado ${(a0 / 4 * 100).toFixed(0)}% de acerto, com aprendizado ${(a1 / 4 * 100).toFixed(0)}%`);
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');

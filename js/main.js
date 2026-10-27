@@ -88,6 +88,8 @@
         if (game && game.s.tool) { const r3 = Math.round(r * 0.62); list.push({ id: 'radio', label: 'RÁDIO', key: 'Q', round: true, x: W - 2 * r - 8 - 2 * r2 - 6 - 2 * r3 - 5, y: H - 2 * r3 - 10, w: 2 * r3, h: 2 * r3, active: !!game.s.tool.on, hot: '#9bd3f0' }); }
         if (game && game.s.skill && !game.s.hidden) list.push({ id: 'skill', ghost: true, x: Math.round(W / 2) - 30, y: Math.round(H / 2) - 46 - 30, w: 60, h: 60 });     // toque no círculo do skill check
       }
+      const cl = game && DP.render.chatLayout(game, W, H);
+      if (cl) for (const b of cl.btns) list.push({ id: b.id, ghost: true, x: b.x, y: b.y, w: b.w, h: b.h });
       list.push({ id: 'pause', label: 'II', x: W - 22, y: 24, w: 18, h: 13, color: '#cfcfd8' });
       const mr = game && DP.render.miniRect(game, W, H);
       if (mr && !showMap) list.push({ id: 'map', ghost: true, x: mr.x, y: mr.y, w: mr.w, h: mr.h });
@@ -132,6 +134,7 @@
       case 'map': showMap = !showMap; break;
       case 'vision': if (game && game.training) game.fullVision = !game.fullVision; break;
       case 'start': curMap = lobbyMode === 2 ? 'arena' : 'camp'; start(lobbyMode > 0); break;
+      case 'chat0': case 'chat1': case 'chat2': if (game) game.chatReply(+id.slice(4)); break;
       case 'drop': dropQueued = true; break;
       case 'act': actQueued = true; break;
       case 'radio': radioQueued = true; break;
@@ -147,7 +150,7 @@
   function start(tr) {
     training = tr; newBest = false; showMap = false;
     DP.render.reset();
-    game = DP.createGame({ training: tr, map: curMap, role, difficulty, sfx: (n, p, v) => { const f = DP.audio.sfx[n]; if (f) { DP.audio.vol = v === undefined ? 1 : v; f(p); DP.audio.vol = 1; } } });
+    game = DP.createGame({ training: tr, map: curMap, role, difficulty, sfx: (n, p, v, x) => { const f = DP.audio.sfx[n]; if (f) { DP.audio.vol = v === undefined ? 1 : v; f(p, x); DP.audio.vol = 1; } } });
     state = 'play';
     joy.id = null; joy.active = false; joy.dx = joy.dy = 0;
     beatT = 0;
@@ -210,6 +213,7 @@
       if (code === 'KeyP' || code === 'Escape') state = 'pause';
       if (code === 'KeyV' && game && game.training) game.fullVision = !game.fullVision;
       if (code === 'KeyQ') radioQueued = true;
+      if ((code === 'Digit1' || code === 'Digit2' || code === 'Digit3') && game && game.chatReply) game.chatReply(+code.slice(5) - 1);
     } else if (state === 'pause') {
       if (code === 'KeyP' || code === 'Escape' || code === 'Enter') state = 'play';
     } else if (state === 'menu') {

@@ -76,8 +76,28 @@
     miss(pan) { noise(0.18, 0.28, 900, 'bandpass', 1.5, pan, 0.05); },
     // pallet de pé sendo puxado (rangido de madeira)
     creak(pan) { tone(160, 0.18, 'sawtooth', 0.12, 110, pan); noise(0.12, 0.25, 600, 'bandpass', 4, pan); },
-    windup(pan) { tone(110, 0.18, 'sawtooth', 0.14, 220, pan); },
-    lunge(pan) { noise(0.22, 0.5, 600, 'bandpass', 1.2, pan, 0, 3000); },
+    // killer: respiração + rosnado subindo ao erguer a arma
+    windup(pan) { noise(0.16, 0.35, 500, 'bandpass', 1.5, pan, 0, 1400); tone(95, 0.2, 'sawtooth', 0.16, 190, pan); },
+    // o bote: chicotada do ar + lâmina cortando
+    lunge(pan) {
+      noise(0.3, 0.75, 500, 'bandpass', 1.1, pan, 0, 3600);
+      tone(1500, 0.22, 'triangle', 0.16, 420, pan);
+      tone(110, 0.22, 'sawtooth', 0.14, 70, pan);
+    },
+    // errou: o ar cortado esvaindo e o corpo freando
+    whiff(pan) { noise(0.24, 0.32, 2600, 'bandpass', 1.3, pan, 0.02, 420); tone(105, 0.14, 'sine', 0.3, 60, pan, 0.05); noise(0.1, 0.18, 700, 'lowpass', 0.8, pan, 0.08); },
+    // respiração abafada de quem está escondido (inspira e solta): baixa, só se ouve de muito perto
+    breath(pan) { noise(0.5, 0.16, 700, 'bandpass', 0.9, pan, 0, 420); noise(0.6, 0.12, 500, 'bandpass', 0.8, pan, 0.55, 300); },
+    // passos: x = { surf, heavy, alt } (alt alterna pé esquerdo/direito: pequena variação de tom)
+    step(pan, x) {
+      x = x || {}; const surf = x.surf || 'grass', hv = !!x.heavy, v = 0.9 + Math.random() * 0.2, f = (x.alt ? 1 : 0.88) * v;
+      if (hv) tone(78 * f, 0.13, 'sine', 0.5, 42 * f, pan);
+      if (surf === 'grass') noise(0.09, hv ? 0.4 : 0.26, 520 * f, 'lowpass', 0.8, pan);
+      else if (surf === 'dirt') { noise(0.07, hv ? 0.5 : 0.32, 900 * f, 'lowpass', 0.9, pan); if (!hv) tone(120 * f, 0.06, 'sine', 0.12, 70, pan); }
+      else if (surf === 'sand') noise(0.13, hv ? 0.3 : 0.2, 2300 * f, 'bandpass', 0.8, pan, 0, 1200);
+      else if (surf === 'gravel') { for (let i = 0; i < 3; i++) noise(0.04, hv ? 0.4 : 0.26, (2600 + Math.random() * 1400) * f, 'bandpass', 2.5, pan, i * 0.028); }
+      else { tone((hv ? 120 : 190) * f, 0.075, 'sine', hv ? 0.5 : 0.3, (hv ? 70 : 110) * f, pan); noise(0.05, hv ? 0.4 : 0.25, 750 * f, 'bandpass', 3, pan); }   // madeira: toc oco
+    },
     hit(pan) {
       tone(80, 0.25, 'sine', 0.9, 40, pan);
       noise(0.16, 0.8, 1800, 'lowpass', 0.8, pan);
