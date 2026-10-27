@@ -28,9 +28,13 @@
     const cx = Math.round(W / 2);
     const L = { buttons: [], box: {} };
     if (state === 'menu') {
-      const bw = Math.min(170, W - 24), mpOn = !!DP.MP_ON, y0 = Math.round(H * (mpOn ? 0.42 : 0.5)), st = mpOn ? 19 : 21, bh = mpOn ? 16 : 17;
+      const bw = Math.min(170, W - 24), mpOn = !!DP.MP_ON, n = mpOn ? 5 : 4;
+      let y0 = Math.round(H * (mpOn ? 0.42 : 0.5)), st = mpOn ? 19 : 21, bh = mpOn ? 16 : 17, jh = 19, js = 22;
+      // tela baixa (celular deitado): compacta os botões e sobe a pilha para nada sair da tela nem cobrir o rodapé (fichas/histórico)
+      const subY = Math.round(H * 0.07) + 7 * (W >= 300 ? 3 : 2) + 5, limit = H - 24, need = () => js + (n - 2) * st + bh;
+      if (y0 + need() > limit) { bh = 14; st = 17; jh = 16; js = 19; y0 = Math.max(subY + 10, limit - need()); }
       let yy = y0;
-      L.buttons.push({ id: 'go_lobby', label: 'JOGAR', x: cx - bw / 2, y: yy, w: bw, h: 19, color: '#ffd23f' }); yy += 22;
+      L.buttons.push({ id: 'go_lobby', label: 'JOGAR', x: cx - bw / 2, y: yy, w: bw, h: jh, color: '#ffd23f' }); yy += js;
       if (mpOn) { L.buttons.push({ id: 'go_mp', label: 'MULTIJOGADOR', x: cx - bw / 2, y: yy, w: bw, h: bh, color: '#ff9d5c' }); yy += st; }
       L.buttons.push({ id: 'go_help', label: 'COMO JOGAR', x: cx - bw / 2, y: yy, w: bw, h: bh, color: '#ffffff' }); yy += st;
       L.buttons.push({ id: 'go_chars', label: 'PERSONAGENS', x: cx - bw / 2, y: yy, w: bw, h: bh, color: '#7dffa0' }); yy += st;
@@ -67,6 +71,7 @@
     } else if (state === 'mp') {
       const bw = Math.min(190, W - 2 * M), bx = cx - bw / 2, games = (ui && ui.mp && ui.mp.games) || [], ok = ui && ui.mp && ui.mp.ok, p2p = !!(ui && ui.mp && ui.mp.p2p);
       L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 22, w: Math.min(70, W - 2 * M), h: 17, color: '#8a8a99' });
+      L.buttons.push({ id: 'mp_name', label: '', x: bx, y: 25, w: bw, h: 14, color: '#7dffa0' });
       if (p2p) {
         L.buttons.push({ id: 'p2p_host', label: 'CRIAR POR CÓDIGO', x: bx, y: H - 62, w: bw, h: 17, color: '#7ad0ff' });
         L.buttons.push({ id: 'p2p_join', label: 'ENTRAR COM CÓDIGO', x: bx, y: H - 42, w: bw, h: 17, color: '#7ad0ff' });
@@ -77,11 +82,15 @@
         if (hasPerm) L.buttons.push({ id: 'mp_perm', label: 'PERMISSÕES', x: rx + hw + 4, y: H - 22, w: hw, h: 17, color: '#7ad0ff' });
       }
       if (ok) {
-        L.buttons.push({ id: 'mp_create', label: 'CRIAR SALA', x: bx, y: 34, w: bw, h: 18, color: '#ffd23f' });
-        games.slice(0, Math.max(1, Math.min(4, Math.floor((H - 34 - 18 - 14 - 30 - 22 - (p2p ? 44 : 0)) / 20)))).forEach((gm, i) => L.buttons.push({ id: 'mp_join' + i, label: '', x: bx, y: 70 + i * 20, w: bw, h: 17, color: '#7dffa0' }));
+        L.buttons.push({ id: 'mp_create', label: 'CRIAR SALA', x: bx, y: 43, w: bw, h: 18, color: '#ffd23f' });
+        games.slice(0, Math.max(1, Math.min(4, Math.floor((H - 43 - 18 - 14 - 30 - 22 - (p2p ? 44 : 0)) / 20)))).forEach((gm, i) => L.buttons.push({ id: 'mp_join' + i, label: '', x: bx, y: 79 + i * 20, w: bw, h: 17, color: '#7dffa0' }));
       }
     } else if (state === 'mplobby') {
-      const bw = Math.min(210, W - 2 * M), bx = cx - bw / 2, lb = (ui && ui.mp && ui.mp.lobby) || { slots: [] }, rh = H < 200 ? 15 : 17, y0 = 36;
+      const bw = Math.min(210, W - 2 * M), bx = cx - bw / 2, lb = (ui && ui.mp && ui.mp.lobby) || { slots: [] }, y0 = H < 200 ? 28 : 36;
+      // a ajuda ocupa N linhas: as vagas encolhem até tudo caber acima dos botões de baixo
+      const hl = DP.font.wrap(lobbyHint(lb), Math.floor((W - 16) / 6)).length, avail = H - 22 - 5 - y0 - hl * 9 - 6;
+      const rh = Math.max(11, Math.min(H < 200 ? 15 : 17, Math.floor(avail / 5) - 2));
+      L.hintY = y0 + 5 * (rh + 2) + 3;
       for (let i = 0; i < 5; i++) L.buttons.push({ id: 'mp_slot' + i, label: '', x: bx, y: y0 + i * (rh + 2), w: bw, h: rh, color: '#7ad0ff', ghost: true });
       const by = H - 22, half = Math.floor((W - 2 * M - 4) / 2), sw = lb.isHost ? Math.min(60, half) : half;
       L.buttons.push({ id: 'mp_leave', label: 'SAIR', x: M, y: by, w: sw, h: 17, color: '#8a8a99' });
@@ -98,7 +107,8 @@
       L.wide = W >= 280;
       L.buttons.push({ id: 'back', label: 'VOLTAR', x: M, y: H - 24, w: L.wide ? 70 : W - 2 * M, h: 18, color: '#8a8a99' });
     } else if (state === 'shop') {
-      const wide = W >= 280, gap = 4, top = 26, cols = wide ? 3 : 2, ch = wide ? 58 : 62;
+      const wide = W >= 280, gap = 4, top = 26, cols = wide ? 3 : 2, rows = Math.ceil(6 / cols);
+      const ch = Math.max(36, Math.min(wide ? 58 : 62, Math.floor((H - 24 - 4 - top - gap * (rows - 1)) / rows)));       // tela baixa: os cartões encolhem para não ficar embaixo do VOLTAR
       const cw = Math.floor((W - 2 * M - (cols - 1) * gap) / cols);
       L.cards = [];
       for (let i = 0; i < 6; i++) {
@@ -139,8 +149,10 @@
     // prévia: o personagem principal e o assassino apagado, à espreita
     const ps = H >= 300 ? 3 : H >= 230 ? 2 : 1;
     const feet = Math.min(Math.round(H * 0.5) - 10, subY + 14 + 22 * ps);
-    R().uiKiller(ctx, cx + 34 * ps / 1.4, feet - 2, ps, { state: 'recover', alpha: 0.28, tm, face: Math.PI });
-    R().uiSurvivor(ctx, cx - 18 * ps / 1.4, feet, ps, { id: 0, moving: true, walk: tm * 8, face: 0, tm, human: false });
+    if (feet + 4 <= layout('menu', W, H, ui).buttons[0].y) {                                                   // sem espaço (tela baixa): a prévia some
+      R().uiKiller(ctx, cx + 34 * ps / 1.4, feet - 2, ps, { state: 'recover', alpha: 0.28, tm, face: Math.PI });
+      R().uiSurvivor(ctx, cx - 18 * ps / 1.4, feet, ps, { id: 0, moving: true, walk: tm * 8, face: 0, tm, human: false });
+    }
     text(ctx, 'V' + DP.VERSION, W - M, 4, '#6f6f7c', { align: 'r' });                                        // versão do jogo
     // rodapé: fichas e histórico
     coin(ctx, M, H - 14);
@@ -262,6 +274,10 @@
   }
 
   // ---------- multijogador ----------
+  function lobbyHint(lb) {
+    if (!lb.isHost) return 'TOQUE NUMA VAGA LIVRE PARA ESCOLHER SEU LUGAR. O ANFITRIÃO INICIA.';
+    return lb.p2p ? 'CONVIDAR GERA UM CÓDIGO POR AMIGO. VAGAS SEM PESSOA VIRAM BOTS.' : 'TOQUE NUMA VAGA PARA MUDAR DE LUGAR. VAGAS SEM PESSOA VIRAM BOTS. QUEM CHEGAR DEPOIS ENTRA PELO MENU > MULTIJOGADOR.';
+  }
   function drawMp(ctx, W, H, tm, ui, L) {
     bg(ctx, W, H, tm);
     title(ctx, W, 'MULTIJOGADOR', W < 280 ? 'ATÉ 5 JOGADORES' : '1 ASSASSINO + ATÉ 4 SOBREVIVENTES');
@@ -273,15 +289,15 @@
         : why === 'NEGADA' ? 'A PERMISSÃO DA SALA FOI NEGADA. TOQUE EM PERMISSÕES PARA LIBERAR.'
         : why === 'INDISPONIVEL' ? 'ESTE ACESSO NÃO TEM A SALA DO CLAUDE (VISITANTE DE LINK PÚBLICO OU OUTRA ORGANIZAÇÃO).'
         : 'A SALA DO CLAUDE NÃO RESPONDEU PARA ESTE ACESSO.';
-      let y = 36;
+      let y = 46;
       DP.font.wrap(txt + (mp.p2p ? ' USE A CONEXÃO POR CÓDIGO ABAIXO: UM CRIA E MANDA UM CÓDIGO, O OUTRO RESPONDE.' : ''), cols).forEach((l) => { text(ctx, l, 8, y, '#ff9d5c'); y += 9; });
       DP.font.wrap('DIAGNÓSTICO: ' + (why || '-') + ' | PERMISSÃO: ' + (d.hasPerm ? (d.perm || '?') : 'SEM PAINEL') + (d.err ? ' | ' + d.err : '') + (d.permErr ? ' | ' + d.permErr : ''), cols).forEach((l) => { text(ctx, l, 8, y + 4, '#6f6f7c'); y += 9; });
       if (mp.err) text(ctx, mp.err, Math.round(W / 2), H - 100, '#ff9d5c', { align: 'c' });
       return;
     }
-    text(ctx, 'SALAS ABERTAS', 8, 58, '#8a8a99');
+    text(ctx, 'SALAS ABERTAS', 8, 67, '#8a8a99');
     const games = mp.games || [];
-    if (!games.length) DP.font.wrap('NENHUMA AINDA. CRIE UMA E MANDE A PESSOA ABRIR O JOGO E TOCAR EM MULTIJOGADOR.', cols).forEach((l, i) => text(ctx, l, 8, 70 + i * 9, '#6f6f7c'));
+    if (!games.length) DP.font.wrap('NENHUMA AINDA. CRIE UMA E MANDE A PESSOA ABRIR O JOGO E TOCAR EM MULTIJOGADOR.', cols).forEach((l, i) => text(ctx, l, 8, 79 + i * 9, '#6f6f7c'));
     L.buttons.forEach((b) => { if (b.id.indexOf('mp_join') === 0) { const gm = games[+b.id.slice(7)]; if (gm) text(ctx, gm.code + '  ' + gm.host + '  ' + gm.players + '/5', b.x + b.w / 2, b.y + 5, '#7dffa0', { align: 'c' }); } });
     if (mp.err) text(ctx, mp.err, Math.round(W / 2), mp.p2p ? H - 76 : H - 34, '#ff9d5c', { align: 'c' });
   }
@@ -297,8 +313,7 @@
       text(ctx, labels[i], b.x + 4, b.y + (b.h - 7) / 2, i === 0 ? '#ff5c5c' : '#cfd3e0');
       text(ctx, who ? (mine ? 'VOCÊ (' + who + ')' : who) : 'BOT', b.x + b.w - 4, b.y + (b.h - 7) / 2, mine ? '#7dffa0' : who ? '#7ad0ff' : '#5d5d69', { align: 'r' });
     });
-    const ly = 36 + 5 * (L.buttons[0] ? L.buttons[0].h + 2 : 19) + 3;
-    DP.font.wrap(lb.isHost ? (lb.p2p ? 'TOQUE EM CONVIDAR PARA GERAR UM CÓDIGO PARA CADA AMIGO. ' : '') + 'TOQUE NUMA VAGA PARA MUDAR DE LUGAR. VAGAS SEM PESSOA VIRAM BOTS.' + (lb.p2p ? '' : ' QUEM CHEGAR DEPOIS ENTRA PELO MENU > MULTIJOGADOR.') : 'TOQUE NUMA VAGA LIVRE PARA ESCOLHER SEU LUGAR. O ANFITRIÃO INICIA.', Math.floor((W - 16) / 6)).forEach((l, i) => text(ctx, l, 8, ly + i * 9, '#6f6f7c'));
+    DP.font.wrap(lobbyHint(lb), Math.floor((W - 16) / 6)).forEach((l, i) => text(ctx, l, 8, L.hintY + i * 9, '#6f6f7c'));
     if (ui.mp && ui.mp.err) text(ctx, ui.mp.err, Math.round(W / 2), H - 34, '#ff9d5c', { align: 'c' });
   }
 
@@ -382,6 +397,7 @@
       return long.length * 6 + 8 <= b.w ? long : mid.length * 6 + 8 <= b.w ? mid : short;
     }
     if (b.id.indexOf('mp_join') === 0) return '';
+    if (b.id === 'mp_name') { const nm = (ui.mp && ui.mp.name) || '(SEM NOME)', long = 'NOME: ' + nm + ' - TOQUE PARA MUDAR'; return long.length * 6 + 8 <= b.w ? long : 'NOME: ' + nm; }
     if (b.id === 'help_next') { const n = DP.lobby.helpCount || 3; return 'PÁGINA ' + (((ui.helpPage || 0) % n) + 1) + '/' + n; }
     if (b.id === 'diff_toggle') { const n = { easy: 'FÁCIL', normal: 'NORMAL', hard: 'DIFÍCIL' }[ui.difficulty]; return b.w < 100 ? 'DIF: ' + n : 'DIFICULDADE: ' + n; }
     return b.label;

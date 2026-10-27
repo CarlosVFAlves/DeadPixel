@@ -11,7 +11,7 @@ const file = process.argv[2] || path.join(__dirname, '..', 'index.html');
     const pg = pages[i], id = ids[i];
     pg.on('pageerror', (e) => errs.push('p' + i + ': ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')));
     await pg.exposeFunction('__presence', (patch) => { const o = state[id]; for (const k of Object.keys(patch)) { if (patch[k] === null) delete o[k]; else o[k] = patch[k]; } });
-    await pg.addInitScript((me) => { window.__me = me; window.__peers = []; window.claude = { use: async (n) => (n === 'room' ? { peers: () => window.__peers, presence: (p) => window.__presence(JSON.parse(JSON.stringify(p))), onPeers: () => () => {} } : null) }; }, id);
+    await pg.addInitScript((me) => { window.__me = me; window.__peers = []; try { localStorage.setItem('dp_name', me === 'pessoaAAAA1' ? 'Anfitriao' : 'Beto'); } catch (e) {} window.claude = { use: async (n) => (n === 'room' ? { peers: () => window.__peers, presence: (p) => window.__presence(JSON.parse(JSON.stringify(p))), onPeers: () => () => {} } : null) }; }, id);
     await pg.goto('file://' + path.resolve(file)); await pg.waitForTimeout(300);
   }
   const timer = setInterval(() => { pages.forEach((pg, i) => pg.evaluate((v) => { window.__peers = v; }, JSON.parse(JSON.stringify(view(ids[i])))).catch(() => {})); }, 25);

@@ -10,6 +10,8 @@
   // ---------- util ----------
   function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function mkCode() { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; let s = ''; for (let i = 0; i < 4; i++) s += A[Math.floor(Math.random() * A.length)]; return s; }
+  // nomes: só maiúsculas/números/espaço/. _ - (a fonte do jogo não tem minúsculas), até 10 letras, sem acento
+  const cleanName = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9 ._-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 10);
   const nameOf = (peer) => 'J' + String(peer || '').slice(-3).toUpperCase();
   const slotIdx = (key) => SLOTS.indexOf(key);
 
@@ -65,7 +67,7 @@
   function Host(room0, name, opts) {
     const room = safe(room0);
     opts = opts || {};
-    const self = { code: opts.code || mkCode(), name: name || 'ANFITRIÃO', st: 'lobby', slots: [null, null, null, null, null], seed: 0, diff: opts.diff || 'normal', hostSlot: 1, over: false };
+    const self = { code: opts.code || mkCode(), name: cleanName(name) || 'ANFITRIÃO', st: 'lobby', slots: [null, null, null, null, null], seed: 0, diff: opts.diff || 'normal', hostSlot: 1, over: false };
     const me = () => room.me();
     const guestsOf = () => room.peers().filter((p) => !p.isMe && p.presence && p.presence.c === self.code && p.presence.r === 'g' && p.presence.v === VER);
     let lastSn = 0, lastLobby = 0, lastEvSent = 0, inputs = {}, game = null, hostSlotKey = 0, t0 = 0, clock = 0, names = {};
@@ -78,7 +80,7 @@
       self.slots[slotIdx(self.hostSlotKey)] = mine;
       names = {}; names[mine] = self.name;
       for (const p of gs.slice().sort((a, b) => (a.peer < b.peer ? -1 : 1))) {
-        names[p.peer] = p.presence.n || nameOf(p.peer);
+        names[p.peer] = cleanName(p.presence.n) || nameOf(p.peer);
         let have = self.slots.indexOf(p.peer);
         const want = p.presence.want === undefined ? -1 : slotIdx(p.presence.want);
         if (have >= 0 && (want < 0 || want === have)) continue;
@@ -87,6 +89,9 @@
         const free = [1, 2, 3, 4, 0].find((i) => !self.slots[i]);
         if (free !== undefined) self.slots[free] = p.peer;
       }
+      // nomes repetidos ganham um número (o anfitrião tem prioridade; depois, pela ordem de chegada)
+      const seen = {};
+      for (const id of Object.keys(names)) { const base = names[id]; seen[base] = (seen[base] || 0) + 1; if (seen[base] > 1) names[id] = base.slice(0, 8) + ' ' + seen[base]; }
     }
     function lobbyPresence() { return { v: VER, c: self.code, r: 'h', n: self.name, hs: [self.st, self.seed, self.diff, self.slots.map((s) => s || 0), self.slots.map((s) => (s ? names[s] || nameOf(s) : 0))] }; }
     function push() { room.presence(lobbyPresence()); }
@@ -102,7 +107,7 @@
       const humans = [], mine = me();
       for (let i = 1; i < 5; i++) if (self.slots[i]) humans.push(i - 1);
       const kh = !!self.slots[0], hostKey = SLOTS[self.slots.indexOf(mine)];
-      const o = Object.assign({ map: 'camp', rng: mulberry(self.seed), survivors: 4, humans, killerHuman: kh, role: hostKey === 'k' ? 'killer' : 'survivor', me: hostKey === 'k' ? 0 : hostKey, difficulty: self.diff }, extra || {});
+      const o = Object.assign({ map: 'camp', rng: mulberry(self.seed), survivors: 4, humans, killerHuman: kh, names: self.slots.map((x) => (x ? names[x] || nameOf(x) : null)), role: hostKey === 'k' ? 'killer' : 'survivor', me: hostKey === 'k' ? 0 : hostKey, difficulty: self.diff }, extra || {});
       game = createGame(o); game.record = true; self.game = game;
       for (const key of SLOTS) { const pid = self.slots[slotIdx(key)]; if (pid && pid !== mine) inputs[pid] = { key, last: [0, 0, 0, 0, 0, 0, 0], inp: {}, seq: 0, ts: clock }; }
       self.st = 'play'; self.hostKey = hostKey; lastSn = 0; push();
@@ -158,7 +163,7 @@
   // ---------- convidado ----------
   function Guest(room0, code, name) {
     const room = safe(room0);
-    const self = { code, name: name || nameOf(room.me()), want: undefined, st: 'lobby', slotKey: null, info: null, lastEv: 0, snapT: -1, ack: 0, seq: 0, pending: [], inSt: { seq: 0, c: { drop: 0, act: 0, press: 0, radio: 0, use: 0, slot: 0, reply: 0 }, vSlot: 0, vReply: 0 }, game: null, lastIn: null, sentAt: 0, clock: 0, hostGone: 0 };
+    const self = { code, name: cleanName(name) || nameOf(room.me()), want: undefined, st: 'lobby', slotKey: null, info: null, lastEv: 0, snapT: -1, ack: 0, seq: 0, pending: [], inSt: { seq: 0, c: { drop: 0, act: 0, press: 0, radio: 0, use: 0, slot: 0, reply: 0 }, vSlot: 0, vReply: 0 }, game: null, lastIn: null, sentAt: 0, clock: 0, hostGone: 0 };
     const hostPeer = () => room.peers().find((p) => !p.isMe && p.presence && p.presence.c === code && p.presence.r === 'h' && p.presence.v === VER) || null;
     function mine() { return { v: VER, c: code, r: 'g', n: self.name, want: self.want }; }
     self.join = () => room.presence(mine());
@@ -179,7 +184,7 @@
       if (key === null) return null;                                   // sem vaga: não dá para jogar
       const humans = []; for (let i = 1; i < 5; i++) if (hi.slots[i]) humans.push(i - 1);
       self.slotKey = key;
-      self.game = createGame(Object.assign({ map: 'camp', rng: mulberry(hi.seed), survivors: 4, humans, killerHuman: !!hi.slots[0], role: key === 'k' ? 'killer' : 'survivor', me: key === 'k' ? 0 : key, difficulty: hi.diff, replica: true }, extra || {}));
+      self.game = createGame(Object.assign({ map: 'camp', rng: mulberry(hi.seed), survivors: 4, humans, killerHuman: !!hi.slots[0], names: hi.names.map((x) => x || null), role: key === 'k' ? 'killer' : 'survivor', me: key === 'k' ? 0 : key, difficulty: hi.diff, replica: true }, extra || {}));
       return self.game;
     };
     // quadro do convidado: manda os controles, anda na frente e aplica o que chegou do anfitrião
@@ -268,5 +273,5 @@
     return bus;
   }
 
-  DP.net = { VER, SLOTS, Host, Guest, listGames, MockBus, mulberry, packInput, unpackInput, packEv, unpackEv, nameOf, mkCode };
+  DP.net = { cleanName, VER, SLOTS, Host, Guest, listGames, MockBus, mulberry, packInput, unpackInput, packEv, unpackEv, nameOf, mkCode };
 })(typeof window !== 'undefined' ? window : globalThis);

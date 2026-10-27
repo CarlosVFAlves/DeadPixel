@@ -20,10 +20,53 @@
     cv.width = W * TS; cv.height = H * TS;
     const c = cv.getContext('2d');
 
+    // ---- chão ao ar livre: campo de ruído por pixel (sem "grade" de ladrilhos), bordas que se misturam e detalhes por cima ----
+    const isFl = (i) => t[i] === 0 || t[i] === 3 || (t[i] === 6 && !game.map.bare) || t[i] === 7 || t[i] === 8 || t[i] === 9 || t[i] === 10;
+    const kindAt = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= H) return -1; const i = y * W + x; if (indoor[i] || !isFl(i) || t[i] === 7) return -1; const g = ground ? ground[i] : 0; return g === 3 ? -1 : g; };
+    const treeAt = (x, y) => x >= 0 && y >= 0 && x < W && y < H && t[y * W + x] === 6;
+    const treeNear = (x, y) => { let n = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && treeAt(x + dx, y + dy)) n++; return n; };
+    const RAMPS = {
+      0: ['#121b15', '#17221a', '#1b281f', '#202f25', '#26372b', '#2d4031'],
+      dry: ['#181f17', '#1d251a', '#232c1e', '#293323', '#303a28', '#38432d'],
+      dark: ['#0f1812', '#131e17', '#17231b', '#1b2920', '#203027', '#26382d'],
+      1: ['#241d15', '#2b231a', '#33291f', '#3a2f25', '#41352a', '#4a3d30'],
+      2: ['#4a4430', '#514b35', '#58523a', '#5e573d', '#675f43', '#6d6548'],
+      4: ['#26282c', '#2c2e33', '#33353a', '#3b3d42', '#44464c', '#4e5057']
+    };
+    const toRgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    for (const k of Object.keys(RAMPS)) RAMPS[k] = RAMPS[k].map(toRgb);
+    const vnoise = (x, y, sc, sd) => {
+      const fx = x / sc, fy = y / sc, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+      const a = hash(ix, iy, sd), b = hash(ix + 1, iy, sd), cc = hash(ix, iy + 1, sd), d = hash(ix + 1, iy + 1, sd);
+      return a + (b - a) * sx + (cc - a) * sy + (a - b - cc + d) * sx * sy;
+    };
+    const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    {
+      const img = c.createImageData(W * TS, H * TS), d32 = img.data, SW = W * TS;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const kind = kindAt(x, y); if (kind < 0) continue;
+        const tn = treeNear(x, y), nb = [kindAt(x, y - 1), kindAt(x + 1, y), kindAt(x, y + 1), kindAt(x - 1, y)];
+        for (let ly = 0; ly < TS; ly++) for (let lx = 0; lx < TS; lx++) {
+          const gx = x * TS + lx, gy = y * TS + ly;
+          let kk = kind;
+          // borda: perto do vizinho de outro tipo de chão, parte dos pixels já é do vizinho
+          const dist = [ly, TS - 1 - lx, TS - 1 - ly, lx];
+          for (let q = 0; q < 4; q++) if (nb[q] >= 0 && nb[q] !== kind && dist[q] < 4 && hash(gx, gy, 200 + q) < 0.55 - dist[q] * 0.15) { kk = nb[q]; break; }
+          const n = (kk === 4 ? 0.3 : 0.5) * vnoise(gx, gy, kk === 4 ? 9 : 22, 1) + 0.3 * vnoise(gx, gy, 7, 2) + 0.2 * hash(gx, gy, 3) - tn * 0.035;
+          const lv = Math.max(0, Math.min(5, Math.floor((n + (BAYER[(gy & 3) * 4 + (gx & 3)] / 16 - 0.5) * 0.1) * 7.2 - 0.9)));
+          let ramp = RAMPS[kk];
+          if (kk === 0) { const rg = vnoise(gx, gy, 46, 5) + (hash(gx, gy, 6) - 0.5) * 0.07; ramp = rg > 0.66 ? RAMPS.dry : rg < 0.3 ? RAMPS.dark : RAMPS[0]; }
+          const col = ramp[lv], o = (gy * SW + gx) * 4;
+          d32[o] = col[0]; d32[o + 1] = col[1]; d32[o + 2] = col[2]; d32[o + 3] = 255;
+        }
+      }
+      c.putImageData(img, 0, 0);
+    }
+    const BLADE = ['#2b4630', '#355838', '#243d29'], FLOWER = ['#a8a596', '#b8993f', '#7a70b0', '#a8607a'];
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS, r = hash(x, y);
-        const fl = t[i] === 0 || t[i] === 3 || (t[i] === 6 && !game.map.bare) || t[i] === 7 || t[i] === 8 || t[i] === 9 || t[i] === 10;
+        const fl = isFl(i);
         const gk = ground ? ground[i] : 0;
         if (indoor[i] && fl) {
           // piso de tábuas
@@ -37,17 +80,31 @@
           for (let l = 0; l < TS; l += 5) px(c, 'rgba(0,0,0,.35)', X, Y + l, TS, 1);
           px(c, 'rgba(0,0,0,.3)', X + ((hash(x, y, 5) * 12) | 0) + 2, Y + ((hash(x, y, 6) * 3) | 0) * 5 + 1, 1, 4);
           px(c, 'rgba(255,255,255,.05)', X, Y, TS, 1);
-        } else if (fl) {
-          const base = gk === 1 ? ['#3a2f25', '#3e3329', '#2a2219', '#4a3d30']
-            : gk === 2 ? ['#59523a', '#5e573d', '#4a4430', '#6d6548']
-            : gk === 4 ? ['#3b3d42', '#3f4146', '#2c2e33', '#4e5057']
-            : ['#1f2a22', '#222e25', '#18211b', '#2b3a2d'];
-          px(c, r < 0.5 ? base[0] : base[1], X, Y, TS, TS);
-          for (let n = 0; n < 5; n++) {
-            const rx = (hash(x, y, n + 10) * 15) | 0, ry = (hash(x, y, n + 20) * 15) | 0;
-            px(c, hash(x, y, n + 30) < 0.5 ? base[3] : base[2], X + rx, Y + ry, hash(x, y, n) < 0.3 ? 2 : 1, 1);
+        } else if (fl && t[i] !== 7) {
+          const tn = treeNear(x, y), rx = (n) => (hash(x, y, n) * 14 + 1) | 0;
+          if (gk === 0) {
+            // tufos de capim: mais numerosos em manchas (ruído grande), inclinados, em 2–3 tons
+            const dens = vnoise(x * TS, y * TS, 70, 9);
+            const nt = (dens > 0.68 ? 2 : dens > 0.5 ? 1 : 0) + (r > 0.94 ? 1 : 0);
+            for (let n = 0; n < nt; n++) {
+              const bx = X + rx(130 + n), by = Y + 4 + ((hash(x, y, 140 + n) * 10) | 0), hh = 2 + ((hash(x, y, 150 + n) * 3) | 0), lean = hash(x, y, 160 + n) < 0.5 ? -1 : 1;
+              const cc = BLADE[(hash(x, y, 170 + n) * 3) | 0];
+              px(c, cc, bx, by - hh + 1, 1, hh); px(c, cc, bx + 2, by - hh + 2, 1, hh - 1); px(c, BLADE[1], bx + lean, by - hh, 1, 1); px(c, BLADE[2], bx + 1, by - hh + 1, 1, hh - 1);
+            }
+            const fr = hash(x, y, 180);
+            if (fr < 0.014 + (dens > 0.5 ? 0.02 : 0)) { const fx = X + rx(181), fy = Y + 4 + ((hash(x, y, 182) * 9) | 0); px(c, '#2c4a30', fx, fy + 1, 1, 2); px(c, FLOWER[(hash(x, y, 183) * 4) | 0], fx, fy, 1, 1); }
+            else if (fr < 0.07 + tn * 0.025) { const lx = X + rx(184), ly = Y + rx(185); px(c, hash(x, y, 186) < 0.5 ? '#4a3d2a' : '#5c4a2c', lx, ly, 2, 1); if (hash(x, y, 187) < 0.4) px(c, '#3a2f20', lx + 1, ly + 1, 1, 1); }   // folhas secas
+            else if (fr < 0.1) { const pxx = X + rx(188), pyy = Y + rx(189); px(c, '#4e5057', pxx, pyy, 2, 1); px(c, '#6a6d75', pxx, pyy - 1, 1, 1); }                                                      // pedrinha
+            if (tn >= 2 && hash(x, y, 190) < 0.5) { px(c, '#2f5a3a', X + rx(191), Y + rx(192), 2, 1); px(c, '#264a30', X + rx(193), Y + rx(194), 1, 1); }                                      // musgo sob a mata
+          } else if (gk === 1) {
+            for (let n = 0; n < 2; n++) if (hash(x, y, 200 + n) < 0.45) { const qx = X + rx(210 + n), qy = Y + rx(220 + n); px(c, '#52443a', qx, qy, 2, 1); px(c, '#201912', qx, qy + 1, 2, 1); }
+            if (r > 0.88) px(c, '#201912', X + rx(230), Y + rx(231), 3, 1);                                            // sulco/rachadura
+          } else if (gk === 2) {
+            if (r > 0.6) px(c, '#6d6548', X + rx(240) - 1, Y + rx(241), 3, 1);                                         // marca de vento
+            if (r < 0.12) px(c, '#3e3924', X + rx(242), Y + rx(243), 2, 1);
+          } else if (gk === 4) {
+            for (let n = 0; n < 3; n++) if (hash(x, y, 250 + n) < 0.5) { const qx = X + rx(260 + n), qy = Y + rx(270 + n); px(c, '#585b63', qx, qy, 2, 1); px(c, '#1c1d21', qx, qy + 1, 2, 1); }
           }
-          if (gk === 0 && r > 0.93) { px(c, '#3d5a3a', X + 5, Y + 9, 1, 3); px(c, '#3d5a3a', X + 7, Y + 8, 1, 4); px(c, '#3d5a3a', X + 9, Y + 10, 1, 2); }
         }
       }
     }
@@ -84,31 +141,80 @@
         if (y + 1 < H && t[i + W] !== 7) px(c, '#10222f', X, Y + TS - 1, TS, 1);
       }
     }
-    // árvores: copas redondas ou pinheiros, com a copa transbordando um pouco para os vizinhos (mata fechada, sem "grade")
+    // arbustos: enfeite baixo no capim (não bloqueia nada), em moitas conforme um ruído grande
     const disc = (cx, cy, rr, col) => {
       for (let dy = -rr; dy <= rr; dy++) { const hw = Math.floor(Math.sqrt(rr * rr - dy * dy) + 0.4); px(c, col, cx - hw, cy + dy, hw * 2 + 1, 1); }
     };
+    if (!game.map.bare) {
+      const clear = (x, y) => { const k = x < 0 || y < 0 || x >= W || y >= H ? 1 : t[y * W + x]; return k === 0 || k === 6; };
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x;
+        if (t[i] !== 0 || indoor[i] || (ground && ground[i] !== 0)) continue;
+        if (!clear(x - 1, y) || !clear(x + 1, y) || !clear(x, y - 1) || !clear(x, y + 1)) continue;
+        const moita = vnoise(x * 5, y * 5, 14, 11), chance = moita > 0.6 ? 0.2 : moita > 0.45 ? 0.05 : 0.008;
+        if (hash(x, y, 300) >= chance) continue;
+        const X = x * TS + 2 + ((hash(x, y, 301) * 5) | 0), Y = y * TS + 5 + ((hash(x, y, 302) * 4) | 0), kind = hash(x, y, 303);
+        if (kind < 0.18) {                                // samambaia: folhas finas abertas em leque
+          px(c, 'rgba(0,0,0,.25)', X + 1, Y + 7, 8, 1);
+          for (let f = -3; f <= 3; f++) { const h = 6 - Math.abs(f) * 1.1; for (let q = 0; q < h; q++) px(c, q > h - 2 ? '#3f7a45' : f < 0 ? '#2a5a31' : '#235028', X + 5 + Math.round(f * (0.5 + q * 0.28)), Y + 6 - q, 1, 1); }
+        } else {
+          const berry = kind > 0.8, pal = hash(x, y, 304) < 0.5 ? ['#0f2a16', '#173a1f', '#235029', '#376f3a'] : ['#122a14', '#1c3d1d', '#2c5527', '#4a7a35'];
+          px(c, 'rgba(0,0,0,.32)', X, Y + 6, 11, 2); px(c, 'rgba(0,0,0,.18)', X + 1, Y + 8, 9, 1);
+          disc(X + 3, Y + 4, 3, pal[0]); disc(X + 7, Y + 3, 3, pal[0]); disc(X + 5, Y + 2, 2, pal[0]); px(c, pal[0], X, Y + 4, 11, 3);
+          disc(X + 3, Y + 3, 2, pal[1]); disc(X + 7, Y + 2, 2, pal[1]); px(c, pal[1], X + 2, Y + 4, 7, 2);
+          for (let n = 0; n < 5; n++) px(c, pal[2], X + 1 + ((hash(x, y, 310 + n) * 8) | 0), Y + 1 + ((hash(x, y, 320 + n) * 3) | 0), 2, 1);
+          for (let n = 0; n < 3; n++) px(c, pal[3], X + 2 + ((hash(x, y, 330 + n) * 6) | 0), Y + ((hash(x, y, 340 + n) * 3) | 0) + 1, 1, 1);
+          if (berry) for (let n = 0; n < 4; n++) px(c, n % 2 ? '#b0384a' : '#c4505c', X + 2 + ((hash(x, y, 350 + n) * 7) | 0), Y + 2 + ((hash(x, y, 360 + n) * 3) | 0), 1, 1);
+        }
+      }
+    }
+    // árvores: copas redondas, pinheiros ou troncos secos; a copa transborda um pouco para os vizinhos (mata fechada, sem "grade")
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x, X = x * TS, Y = y * TS;
         if (t[i] !== 6) continue;
-        const r = hash(x, y, 60), r2 = hash(x, y, 61), r3 = hash(x, y, 62);
-        const pal = r < 0.34 ? ['#0c2214', '#133019', '#1b4423', '#2a5e33'] : r < 0.68 ? ['#0e281a', '#173a22', '#215230', '#33703f'] : ['#0a1f12', '#112c19', '#18391f', '#255129'];
-        const ox = Math.round((r2 - 0.5) * 4), oy = Math.round((r3 - 0.5) * 3);
-        px(c, 'rgba(0,0,0,.38)', X + 2 + ox, Y + 11, 13, 4);
-        px(c, '#2c1d12', X + 6 + ox, Y + 8, 4, 7); px(c, '#4a3320', X + 7 + ox, Y + 8, 1, 7);
-        if (r2 < 0.3) {                                   // pinheiro: três camadas de triângulo
-          for (let L = 0; L < 3; L++) {
-            const by = Y + 10 - L * 5 + oy, hw = 7 - L * 2;
-            for (let dy = 0; dy < 6; dy++) { const w = Math.round(hw * (dy + 1) / 6); px(c, L % 2 ? pal[1] : pal[0], X + 8 + ox - w, by - 5 + dy, w * 2 + 1, 1); }
-            px(c, pal[2], X + 8 + ox - Math.round(hw / 2), by - 2, 2, 1);
+        const r = hash(x, y, 60), r2 = hash(x, y, 61), r3 = hash(x, y, 62), r4 = hash(x, y, 63);
+        const pal = r < 0.25 ? ['#0c2214', '#133019', '#1b4423', '#2f6a38']
+          : r < 0.5 ? ['#0e281a', '#173a22', '#215230', '#397a46']
+          : r < 0.75 ? ['#0a1f12', '#112c19', '#18391f', '#2a5a2f']
+          : ['#13261a', '#1c3720', '#2a4c26', '#4a7430'];                                  // verde-oliva: quebra a monotonia
+        const ox = Math.round((r2 - 0.5) * 4), oy = Math.round((r3 - 0.5) * 3), cxm = X + 8 + ox;
+        const dead = r2 > 0.965;
+        // sombra no chão (mais larga para o lado oposto à luz)
+        px(c, 'rgba(0,0,0,.30)', X + 3 + ox, Y + 12, 12, 3); px(c, 'rgba(0,0,0,.18)', X + 2 + ox, Y + 13, 14, 2);
+        // tronco com raízes e casca
+        px(c, '#2c1d12', X + 6 + ox, Y + 7, 4, 8); px(c, '#4a3320', X + 7 + ox, Y + 7, 1, 8); px(c, '#1c120b', X + 9 + ox, Y + 8, 1, 7);
+        px(c, '#2c1d12', X + 5 + ox, Y + 14, 6, 1); px(c, '#1c120b', X + 5 + ox, Y + 15, 1, 1); px(c, '#1c120b', X + 10 + ox, Y + 15, 1, 1);
+        if (r4 < 0.5) px(c, '#5a4128', X + 7 + ox, Y + 10, 1, 1);
+        if (dead) {                                        // tronco seco: galhos finos sem folha
+          const wood = '#3a2a1c', hi = '#5a4630';
+          px(c, wood, X + 7 + ox, Y + 1, 2, 7);
+          for (let q = 0; q < 4; q++) { px(c, wood, X + 6 + ox - q, Y + 4 - q, 1, 1); px(c, wood, X + 9 + ox + q, Y + 3 - q, 1, 1); }
+          px(c, wood, X + 3 + ox, Y + 5, 1, 2); px(c, wood, X + 13 + ox, Y + 2, 1, 2); px(c, wood, X + 5 + ox, Y + 6, 2, 1); px(c, hi, X + 7 + ox, Y + 2, 1, 5); px(c, hi, X + 5 + ox, Y + 3, 1, 1);
+          continue;
+        }
+        if (r2 < 0.3) {                                    // pinheiro: camadas de saias com borda irregular, luz na esquerda
+          const layers = r3 < 0.5 ? 4 : 3, step = layers === 4 ? 4 : 5, base = Y + 11 + oy, hw0 = layers === 4 ? 6 : 7;
+          for (let L = 0; L < layers; L++) {
+            const by = base - L * step, hw = Math.max(2, hw0 - L * (layers === 4 ? 1.4 : 2)), rows = step + 2;
+            for (let dy = 0; dy < rows; dy++) {
+              const w = Math.round(hw * (dy + 1) / rows) + (hash(x + L, y, 400 + dy) < 0.3 ? 1 : 0), yy = by - rows + 1 + dy;
+              px(c, pal[1], cxm - w, yy, w * 2 + 1, 1);
+              px(c, pal[2], cxm - w, yy, Math.min(w, 1 + (dy > 1 ? 1 : 0)), 1);                      // lado iluminado
+              px(c, pal[0], cxm + Math.max(0, w - 1), yy, Math.min(w + 1, 2), 1);                    // lado na sombra
+            }
+            px(c, pal[0], cxm - hw, by, hw * 2 + 1, 1);                                              // barra escura sob a saia
+            if (hash(x, y, 410 + L) < 0.7) px(c, pal[3], cxm - Math.round(hw / 2), by - 2, 1, 1);
           }
-        } else {                                          // copa redonda
-          const rr = 7 + (r3 < 0.5 ? 0 : 1);
-          disc(X + 8 + ox, Y + 5 + oy, rr, pal[0]);
-          disc(X + 7 + ox, Y + 4 + oy, rr - 2, pal[1]);
-          disc(X + 6 + ox, Y + 2 + oy, Math.max(2, rr - 5), pal[2]);
-          px(c, pal[3], X + 4 + ox, Y + 1 + oy, 2, 1); px(c, pal[3], X + 8 + ox, Y + 3 + oy, 1, 1);
+          px(c, pal[2], cxm, base - layers * step - 1, 1, 2);                                        // ponta
+        } else {                                           // copa redonda em tufos
+          const rr = 7 + (r3 < 0.5 ? 0 : 1), ccx = cxm, ccy = Y + 5 + oy;
+          disc(ccx, ccy, rr, pal[0]);
+          for (let n = 0; n < 4; n++) { const a = hash(x, y, 420 + n) * 6.283; disc(ccx + Math.round(Math.cos(a) * (rr - 1)), ccy + Math.round(Math.sin(a) * (rr - 1)), 2, pal[0]); }       // silhueta irregular
+          disc(ccx - 1, ccy - 1, rr - 2, pal[1]);
+          for (let n = 0; n < 4; n++) { const a = 3.1 + hash(x, y, 430 + n) * 2.6; disc(ccx + Math.round(Math.cos(a) * (rr - 4)), ccy + Math.round(Math.sin(a) * (rr - 4)), 2, pal[2]); }    // tufos de folhas iluminados (esquerda/cima)
+          for (let n = 0; n < 7; n++) { const dx = -5 + Math.floor(hash(x, y, 440 + n) * 8), dy = -6 + Math.floor(hash(x, y, 450 + n) * 7); if (dx * dx + dy * dy < (rr - 2) * (rr - 2)) px(c, pal[3], ccx + dx, ccy + dy, 1, 1); }
+          for (let n = 0; n < 5; n++) { const dx = -2 + Math.floor(hash(x, y, 460 + n) * 8), dy = 1 + Math.floor(hash(x, y, 470 + n) * 6); if (dx * dx + dy * dy < (rr - 1) * (rr - 1)) px(c, pal[0], ccx + dx, ccy + dy, 2, 1); }                       // folhas na sombra embaixo/direita
         }
       }
     }
@@ -323,6 +429,14 @@
   }
 
   const CFGT = 0.4;   // = CFG.TRIP_T
+  // nome sobre a cabeça de outra pessoa (multijogador)
+  function plate(ctx, game, slot, x, y, col) {
+    const nm = game.names && game.names[slot]; if (!nm) return;
+    ctx.globalAlpha = 0.9;
+    text(ctx, nm, Math.round(x) + 1, Math.round(y) + 1, '#000000', { align: 'c' });
+    text(ctx, nm, Math.round(x), Math.round(y), col, { align: 'c' });
+    ctx.globalAlpha = 1;
+  }
   function drawKiller(ctx, k, game, tm) {
     const d = dir4(k.face);
     const x = Math.round(k.x * TS), y = Math.round(k.y * TS) + 6;
@@ -981,11 +1095,11 @@
     if (game.phone) list.push({ y: game.phone.cy, f: () => drawPhone(ctx, game.phone, game, tm) });
     if (game.phone && game.phone.state === 'here') list.push({ y: ((game.map.parking || { y: 5, h: 12 }).y + (game.door.side === 'S' ? (game.map.parking || { h: 12 }).h - 5 : 5)), f: () => drawPolice(ctx, game.phone, game, tm) });
     for (const it of game.items) if (!it.holder && vis(it.x, it.y)) list.push({ y: it.y, f: () => drawItem(ctx, it, tm) });
-    for (const v of game.survivors) if (!v.dead && !v.escaped && !v.hidden && (v === pl || vis(v.x, v.y))) { list.push({ y: v.y, f: () => drawSurvivor(ctx, v, game, tm) }); if (v.item) list.push({ y: v.y + 0.02, f: () => drawCarry(ctx, v) }); }
+    for (const v of game.survivors) if (!v.dead && !v.escaped && !v.hidden && (v === pl || vis(v.x, v.y))) { list.push({ y: v.y, f: () => { drawSurvivor(ctx, v, game, tm); if (v.human && v !== pl) plate(ctx, game, v.id + 1, v.x * TS, v.y * TS - 21, JL[v.id % 4]); } }); if (v.item) list.push({ y: v.y + 0.02, f: () => drawCarry(ctx, v) }); }
     for (const v of game.survivors) if (v.heal && !v.dead && (v === pl || vis(v.x, v.y))) list.push({ y: v.y + 0.5, f: () => { const bx = Math.round(v.x * TS) - 7, by = Math.round(v.y * TS) - 26; px(ctx, '#000', bx - 1, by - 1, 16, 5); px(ctx, '#2a4a30', bx, by, 14, 3); px(ctx, '#7dffa0', bx, by, Math.round(14 * v.heal.t / game.cfg.HEAL_T), 3); px(ctx, '#d02a2a', Math.round(v.x * TS) - 1, by - 5, 2, 4); px(ctx, '#d02a2a', Math.round(v.x * TS) - 2, by - 4, 4, 2); } });
     for (const v of game.survivors) if (v.dead && !v.escaped && (full || vis(v.x, v.y))) list.push({ y: v.y - 0.02, f: () => drawCorpse(ctx, v, game, tm) });
     for (const v of game.vehicles) if (v.state !== 'gone') list.push({ y: v.state === 'leaving' ? vehPos(v, game).y + 1 : v.cy + 0.9, f: () => drawVehicle(ctx, v, game, tm) });
-    if (game.k === pl || full || game.canSeeKiller(pl)) list.push({ y: game.k.y, f: () => { ctx.globalAlpha = game.k.stealth ? 0.55 : 1; drawKiller(ctx, game.k, game, tm); ctx.globalAlpha = 1; } });
+    if (game.k === pl || full || game.canSeeKiller(pl)) list.push({ y: game.k.y, f: () => { ctx.globalAlpha = game.k.stealth ? 0.55 : 1; drawKiller(ctx, game.k, game, tm); ctx.globalAlpha = 1; if (game.killerHuman && game.k !== pl) plate(ctx, game, 0, game.k.x * TS, game.k.y * TS - 22, '#ff7a7a'); } });
     list.sort((a, b) => a.y - b.y);
     for (const o of list) o.f();
     if (!full) drawRoofs(ctx, game, Math.min(0.1, tm - (R.lastTm === undefined ? tm : R.lastTm)));

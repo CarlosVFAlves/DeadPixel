@@ -2286,11 +2286,12 @@
     };
     g.setLocal = (role2, id) => { g.pl = role2 === 'killer' ? k : g.survivors[id]; };
 
-    g.CFG = CFG;
+    g.names = opts.names || null;                                   // nomes por vaga (0 = assassino, 1–4 = sobreviventes) no multijogador
+  g.CFG = CFG;
     return g;
   }
 
-  DP.VERSION = '0.0.4';          // versão do jogo (aparece no menu); a cada entrega sobe: 0.0.2, 0.0.3...
+  DP.VERSION = '0.0.5';          // versão do jogo (aparece no menu); a cada entrega sobe: 0.0.2, 0.0.3...
   DP.createGame = createGame;
   DP.CFG = CFG;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -73,12 +73,12 @@
     const row1 = el('div', { className: 'row' }, [b1]);
     const ta2 = el('textarea', { placeholder: 'COLE AQUI A RESPOSTA DO AMIGO' });
     const go = el('button', { textContent: 'CONECTAR', disabled: true });
-    const status = el('p', { textContent: '' });
+    const status = el('p', { textContent: '' }), dg = el('p', { textContent: '' });
     const end = el('button', { className: 'gr', textContent: 'FECHAR', onclick: () => { close(); if (hooks.onClose) hooks.onClose(); } });
     inner.appendChild(info);
     inner.appendChild(el('label', { textContent: '1. MANDE ESTE CÓDIGO PARA O AMIGO' })); inner.appendChild(ta1); inner.appendChild(row1);
     inner.appendChild(el('label', { textContent: '2. COLE A RESPOSTA QUE ELE DEVOLVER' })); inner.appendChild(ta2);
-    inner.appendChild(el('div', { className: 'row' }, [go, end])); inner.appendChild(status);
+    inner.appendChild(el('div', { className: 'row' }, [go, end])); inner.appendChild(status); inner.appendChild(dg);
     inner.appendChild(el('p', { textContent: 'O CONVITE SERVE PARA UMA PESSOA. PARA OUTRO AMIGO, ABRA CONVIDAR DE NOVO. SE NÃO CONECTAR, A REDE DE UM DOS DOIS PODE BLOQUEAR CONEXÃO DIRETA (COMUM EM DADOS MÓVEIS).' }));
     const shr = shareOf(ta1); if (shr) row1.appendChild(shr);
     let inv = null, finished = false, t0 = 0;
@@ -95,6 +95,7 @@
       if (!finished) return;
       const s = p2p.state();
       if (s === 'open') { clearInterval(timer); timer = null; status.className = 'ok'; status.textContent = 'AMIGO CONECTADO!'; setTimeout(() => { close(); if (hooks.onClose) hooks.onClose(); }, 900); return; }
+      dg.textContent = p2p.diag();
       status.className = s === 'failed' ? 'hot' : ''; status.textContent = stateText(s) + (s === 'connecting' || s === 'new' ? ' ' + Math.floor((Date.now() - t0) / 1000) + 'S' : '');
       if (Date.now() - t0 > 25000 && s !== 'connected') { status.className = 'hot'; status.textContent += ' | DEMORANDO: A REDE PODE ESTAR BLOQUEANDO'; }
     }, 300);
@@ -110,10 +111,10 @@
     const ta2 = el('textarea', { readOnly: true, placeholder: 'A RESPOSTA APARECE AQUI' });
     const b2 = el('button', { textContent: 'COPIAR RESPOSTA', disabled: true });
     const row2 = el('div', { className: 'row' }, [b2]);
-    const status = el('p', { textContent: '' });
+    const status = el('p', { textContent: '' }), dg = el('p', { textContent: '' });
     inner.appendChild(el('label', { textContent: '1. COLE O CONVITE QUE VOCÊ RECEBEU' })); inner.appendChild(ta1);
     inner.appendChild(el('div', { className: 'row' }, [make, cancel]));
-    inner.appendChild(el('label', { textContent: '2. MANDE A RESPOSTA DE VOLTA PARA O ANFITRIÃO' })); inner.appendChild(ta2); inner.appendChild(row2); inner.appendChild(status);
+    inner.appendChild(el('label', { textContent: '2. MANDE A RESPOSTA DE VOLTA PARA O ANFITRIÃO' })); inner.appendChild(ta2); inner.appendChild(row2); inner.appendChild(status); inner.appendChild(dg);
     const shr = shareOf(ta2); if (shr) row2.appendChild(shr);
     let made = false, t0 = 0;
     make.onclick = async () => {
@@ -124,7 +125,7 @@
         made = true; t0 = Date.now(); ta2.value = ans; b2.disabled = false; b2.onclick = copyOf(ta2, b2); make.disabled = true;
         status.textContent = 'AGORA ESPERE O ANFITRIÃO COLAR A RESPOSTA...';
         timer = setInterval(() => {
-          const s = p2p.state();
+          const s = p2p.state(); dg.textContent = p2p.diag();
           status.className = s === 'failed' ? 'hot' : ''; status.textContent = 'AGUARDANDO O ANFITRIÃO CONECTAR: ' + stateText(s) + ' ' + Math.floor((Date.now() - t0) / 1000) + 'S';
           if (s === 'failed') { status.className = 'hot'; status.textContent = 'NÃO CONECTOU: A REDE PODE BLOQUEAR CONEXÃO DIRETA. TENTEM OUTRA REDE (WI-FI).'; }
         }, 300);
@@ -132,5 +133,19 @@
     };
   }
 
-  DP.p2pui = { invite, join, close, isOpen: () => !!box };
+  // ---------- nome do jogador ----------
+  function name(current, onSave, onCancel) {
+    const inner = shell('SEU NOME');
+    const ta = el('input', { type: 'text', value: current || '', maxLength: 10, placeholder: 'ATÉ 10 LETRAS', autocapitalize: 'characters', spellcheck: false });
+    ta.style.cssText = 'width:100%;box-sizing:border-box;background:#14141c;color:#7dffa0;border:2px solid #3b3b47;font:700 16px ui-monospace,Menlo,Consolas,monospace;padding:8px;text-transform:uppercase;-webkit-user-select:text;user-select:text;';
+    const ok = el('button', { textContent: 'SALVAR' }), no = el('button', { className: 'gr', textContent: 'CANCELAR' });
+    inner.appendChild(el('p', { textContent: 'É O NOME QUE OS OUTROS JOGADORES VEEM NA SALA E EM CIMA DA SUA CABEÇA. LETRAS, NÚMEROS, ESPAÇO, PONTO, TRAÇO.' }));
+    inner.appendChild(ta); inner.appendChild(el('div', { className: 'row' }, [ok, no]));
+    const save = () => { const v = DP.net ? DP.net.cleanName(ta.value) : ta.value.toUpperCase().slice(0, 10); close(); if (onSave) onSave(v); };
+    ok.onclick = save; no.onclick = () => { close(); if (onCancel) onCancel(); };
+    ta.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); else if (e.key === 'Escape') { close(); if (onCancel) onCancel(); } });
+    setTimeout(() => { try { ta.focus(); ta.select(); } catch (e) { /* sem foco */ } }, 50);
+  }
+
+  DP.p2pui = { invite, join, name, close, isOpen: () => !!box };
 })(typeof window !== 'undefined' ? window : globalThis);

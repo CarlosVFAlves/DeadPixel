@@ -27,6 +27,12 @@
   const MENU_STATES = ['menu', 'lobby', 'chars', 'shop', 'help', 'mp', 'mplobby'];
   // ---------- multijogador (sala do artefato) ----------
   DP.MP_ON = true;
+  let playerName = '';
+  try { playerName = (DP.net && DP.net.cleanName(localStorage.getItem('dp_name'))) || ''; } catch (e) {}
+  function askName(after) {
+    if (!DP.p2pui) { if (after) after(); return; }
+    DP.p2pui.name(playerName, (v) => { playerName = v; try { localStorage.setItem('dp_name', v); } catch (e) {} if (after) after(); }, () => { if (after) after(); });
+  }
   let mp = null, roomApi = null, roomState = null, mpErr = null, mpErrT = 0;       // roomState: null = conectando, true = pronto, false = indisponível aqui
   let roomBusy = false, roomDiag = {};
   // pede acesso à sala: lê a permissão (pede se ainda não foi decidida) e só então tenta usar a capacidade; guarda o motivo para mostrar na tela
@@ -64,7 +70,7 @@
     if (!p2pOk()) { mpMsg('ESTE NAVEGADOR NÃO TEM CONEXÃO DIRETA'); return; }
     leaveMp();
     const code = DP.net.mkCode(), p = DP.p2p.makeHost(code);
-    mp = { host: DP.net.Host(p.room, 'ANFITRIÃO', { code }), p2p: p };
+    mp = { host: DP.net.Host(p.room, playerName || 'ANFITRIÃO', { code }), p2p: p };
     mp.host.push(); state = 'mplobby'; p2pInvite();
   }
   function p2pInvite() { if (mp && mp.p2p && mp.host) DP.p2pui.invite(mp.p2p, {}); }
@@ -74,7 +80,7 @@
     const p = DP.p2p.makeGuest();
     p.onHello = (h) => {
       if (mp) return;
-      mp = { guest: DP.net.Guest(p.room, h.code), p2p: p };
+      mp = { guest: DP.net.Guest(p.room, h.code, playerName), p2p: p };
       mp.guest.join(); state = 'mplobby'; DP.p2pui.close();
     };
     DP.p2pui.join(p, { onCancel: () => { try { p.close(); } catch (e) {} } });
@@ -84,7 +90,7 @@
     state = 'play'; joy.id = null; joy.active = false; joy.dx = joy.dy = 0; beatT = 0; window.__dp.game = g;
   }
   function mpInfo() {
-    const o = { ok: roomState, games: [], lobby: null, err: mpErr, diag: roomDiag, p2p: p2pOk() };
+    const o = { ok: roomState, games: [], lobby: null, err: mpErr, diag: roomDiag, p2p: p2pOk(), name: playerName };
     if (roomState && roomApi) { try { o.games = DP.net.listGames(roomApi); } catch (e) {} }
     if (mp) { try { o.lobby = mp.host ? mp.host.info() : mp.guest.info(); if (o.lobby && mp.p2p) o.lobby.p2p = true; } catch (e) {} }
     return o;
@@ -187,10 +193,11 @@
     DP.audio.init();
     switch (id) {
       case 'go_lobby': state = 'lobby'; break;
-      case 'go_mp': state = 'mp'; if (roomState === false) roomState = null; ensureRoom(); break;
+      case 'go_mp': state = 'mp'; if (roomState === false) roomState = null; ensureRoom(); if (!playerName) askName(); break;
       case 'mp_retry': roomState = null; ensureRoom(true); break;
       case 'mp_perm': (async () => { try { const perm = await window.claude.use('permissions'); if (perm) { await perm.manage(); } } catch (e) { mpMsg('PAINEL DE PERMISSÕES INDISPONÍVEL'); } roomState = null; ensureRoom(true); })(); break;
-      case 'mp_create': if (roomState && DP.net) { mp = { host: DP.net.Host(roomApi, 'J' + String(roomApi.me()).slice(-3).toUpperCase()) }; mp.host.push(); state = 'mplobby'; } break;
+      case 'mp_create': if (roomState && DP.net) { mp = { host: DP.net.Host(roomApi, playerName || 'J' + String(roomApi.me()).slice(-3).toUpperCase()) }; mp.host.push(); state = 'mplobby'; } break;
+      case 'mp_name': askName(); break;
       case 'p2p_host': startP2pHost(); break;
       case 'p2p_join': startP2pJoin(); break;
       case 'mp_invite': p2pInvite(); break;
@@ -221,7 +228,7 @@
       case 'restart': if (mp) { leaveMp(); state = 'menu'; game = null; } else start(training); break;
       case 'menu': leaveMp(); state = 'menu'; game = null; break;
       default:
-        if (id.indexOf('mp_join') === 0 && roomState && DP.net) { const gm = DP.net.listGames(roomApi)[+id.slice(7)]; if (gm) { mp = { guest: DP.net.Guest(roomApi, gm.code) }; mp.guest.join(); state = 'mplobby'; } break; }
+        if (id.indexOf('mp_join') === 0 && roomState && DP.net) { const gm = DP.net.listGames(roomApi)[+id.slice(7)]; if (gm) { mp = { guest: DP.net.Guest(roomApi, gm.code, playerName) }; mp.guest.join(); state = 'mplobby'; } break; }
         if (id.indexOf('card') === 0) toast = { text: DP.lobby.SHOP[+id.slice(4)].name + ': COMPRAS EM BREVE', t: 2.2 };
     }
   }

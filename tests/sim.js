@@ -1609,6 +1609,18 @@ console.log('som e variedade');
   for (let i = 0; i < 120; i++) g3.update(1 / 60, null, { s: { 0: { ax: 1, ay: 0 } }, k: null });
   ok(g3.evq.some((e) => e.t === 's' && e.n === 'step' && e.x !== null), 'o anfitrião registra eventos sonoros com posição (passos)');
   ok(N.unpackEv(N.packEv(g3.evq.find((e) => e.t === 's' && e.ex))).ex.surf === g3.evq.find((e) => e.t === 's' && e.ex).ex.surf, 'eventos são empacotados e desempacotados sem perda');
+  // nomes: limpeza e nomes repetidos
+  ok(N.cleanName('  Ána  <b>Luíza_Maria!! ') === 'ANA BLUIZA', 'nome: sem acento, maiúsculo, só caracteres da fonte, até 10 letras: ' + N.cleanName('  Ána  <b>Luíza_Maria!! '));
+  {
+    const bus = N.MockBus({ delay: 0.02 }), rh = bus.add('hostAAAA1'), r1 = bus.add('guestBBBB2'), r2 = bus.add('guestCCCC3');
+    const H = N.Host(rh, 'Ana', { code: 'ZZZZ' }), G1 = N.Guest(r1, 'ZZZZ', 'ana'), G2 = N.Guest(r2, 'ZZZZ', 'Beto');
+    G1.join(); G2.join();
+    for (let i = 0; i < 40; i++) { bus.step(0.05); H.tick(0.05); G1.tick(0.05); G2.tick(0.05); }
+    const nm = H.info().slots.filter(Boolean).sort();
+    ok(nm.length === 3 && new Set(nm).size === 3 && nm.includes('ANA') && nm.includes('BETO'), 'dois jogadores com o mesmo nome ficam distintos na sala: ' + nm.join(','));
+    const g = H.start(DP.createGame, { sfx: () => {} });
+    ok(g.names && g.names.filter(Boolean).length === 3 && g.names.includes('BETO'), 'o jogo recebe os nomes por vaga');
+  }
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\ntudo certo');
